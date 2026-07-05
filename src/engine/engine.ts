@@ -128,7 +128,6 @@ export async function generate(
         : null;
 
     const ctx: RecipeContext = { params, assets, references: aesthetic, elements, rules, brand, contextMode, plate };
-    const prompt = recipe.buildPrompt(ctx);
     const assetImages = assets.flatMap(a =>
         a.photos.slice(0, Math.ceil(recipe.referenceBudget.assetPhotos / assets.length))
             .map(p => p.image.value)
@@ -138,6 +137,24 @@ export async function generate(
         ...(plate ? [plate.image.value] : []),
         ...aesthetic.map(r => r.image.value),
     ];
+
+    // IMAGE MANIFEST — the model must know which attached image plays which
+    // role, or it will copy the product from a mood anchor / style ref
+    // instead of the true product photos (the classic consistency killer).
+    const n = assetImages.length;
+    const anchorIdx = n + 1;
+    const plateIdx = anchorIdx + extraRefImages.length;
+    const aestheticStart = plateIdx + (plate ? 1 : 0);
+    const manifestLines = [
+        `Images 1-${n}: PRODUCT SOURCE OF TRUTH. Reconstruct the product EXACTLY and ONLY from these — silhouette, geometry, color, material, hardware. If any other attached image shows a similar product, IGNORE that rendering completely.`,
+        extraRefImages.length > 0 && `Image ${anchorIdx}${extraRefImages.length > 1 ? `-${anchorIdx + extraRefImages.length - 1}` : ''}: MOOD ANCHOR — an approved rough draft. Inherit its light, palette, atmosphere and composition energy ONLY. Its product rendering is APPROXIMATE and WRONG — never copy any object geometry from it.`,
+        plate && `Image ${plateIdx}: BACKDROP PLATE — reconstruct this exact backdrop with zero drift.`,
+        aesthetic.length > 0 && `Images ${aestheticStart}-${aestheticStart + aesthetic.length - 1}: AESTHETIC REFERENCES — style, light and material language only. NEVER copy their subjects or furniture.`,
+    ].filter(Boolean);
+    const prompt = `${recipe.buildPrompt(ctx)}
+
+### ATTACHED IMAGE ROLES (obey strictly) ###
+${manifestLines.join('\n')}`;
 
     // Concept half-life: touch lastUsedAt on every concept used.
     for (const el of elements) {
