@@ -34,7 +34,12 @@ export default function LibraryView() {
     const [refs, setRefs] = useState<Reference[]>([]);
     const [elements, setElements] = useState<Element[]>([]);
     const [filter, setFilter] = useState<ElementType | 'all'>('all');
+    /** busy = something is RUNNING (gates buttons). Cleared when settled. */
     const [busy, setBusy] = useState('');
+    /** notice = outcome message (✓/❌/…). Never gates anything. */
+    const [notice, setNotice] = useState('');
+    /** lightbox = full-size image viewer (click any image to open). */
+    const [lightbox, setLightbox] = useState<string | null>(null);
     const fileRef = useRef<HTMLInputElement>(null);
 
     // Fusion Lab state
@@ -72,12 +77,17 @@ export default function LibraryView() {
             }
         }
         setBusy('');
+        setNotice('✓ Uploaded & decomposed');
         refresh();
     };
 
     const runPending = async () => {
-        const { refs: n, elements: m } = await decomposeAllPending(setBusy);
-        setBusy(n === 0 ? 'Nothing pending.' : `Decomposed ${n} refs → ${m} elements.`);
+        setBusy('Decomposing…');
+        try {
+            const { refs: n, elements: m } = await decomposeAllPending(setBusy);
+            setNotice(n === 0 ? '✓ Nothing pending.' : `✓ Decomposed ${n} refs → ${m} elements.`);
+        } catch (err: any) { setNotice(`❌ ${err?.message || err}`); }
+        setBusy('');
         refresh();
     };
 
@@ -105,120 +115,119 @@ export default function LibraryView() {
             return n;
         });
 
-    const fuse = async () => {
+    /** Run an async action: busy while running, outcome goes to notice,
+     *  busy ALWAYS cleared — buttons can never stay locked. */
+    const run = async (label: string, fn: () => Promise<string | void>) => {
+        setBusy(label);
+        setNotice('');
+        try {
+            const msg = await fn();
+            if (msg) setNotice(msg);
+        } catch (err: any) {
+            setNotice(`❌ ${err?.message || err}`);
+        } finally {
+            setBusy('');
+            refresh();
+        }
+    };
+
+    const fuse = () => run('Fusing…', async () => {
         const picked = elements.filter(e => selected.has(e.id));
-        setBusy('Fusing…');
         setDraft(null);
-        try {
-            setDraft(await synthesizeReference(picked, level, fusionNote.trim() || undefined, setBusy));
-            setBusy('');
-        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
-    };
+        setDraft(await synthesizeReference(picked, level, fusionNote.trim() || undefined, setBusy));
+    });
 
-    const autoFuse = async () => {
-        setBusy('Curator picking combinations…');
+    const autoFuse = () => run('Curator picking combinations…', async () => {
         setCombos([]);
         setDraft(null);
-        try {
-            setCombos(await proposeCombos(fusionNote.trim() || undefined));
-            setBusy('');
-        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
-    };
+        setCombos(await proposeCombos(fusionNote.trim() || undefined));
+    });
 
-    /** Full auto: curator picks combos → one is chosen at random (weighted
-     *  toward tension-forward) → synthesized. Only Keep/Discard remains. */
-    const fullAuto = async () => {
-        setBusy('Curator picking…');
-        setCombos([]);
-        setDraft(null);
-        try {
-            const cs = await proposeCombos(fusionNote.trim() || undefined);
-            if (cs.length === 0) throw new Error('No viable combos.');
-            const pick = cs[Math.min(cs.length - 1, Math.floor(Math.random() * cs.length))];
-            setCombos(cs);
-            await runCombo(pick);
-        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
-    };
-
-    const runCombo = async (c: FusionCombo) => {
+    const doCombo = async (c: FusionCombo) => {
         const picked = elements.filter(e => c.elementIds.includes(e.id));
         setSelected(new Set(c.elementIds));
         setLevel(c.level);
-        setBusy(`Fusing “${c.title}”…`);
         setDraft(null);
-        try {
-            const note = [fusionNote.trim(), c.provocation].filter(Boolean).join(' · ');
-            setDraft(await synthesizeReference(picked, c.level, note || undefined, setBusy));
-            setBusy('');
-        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
+        setBusy(`Fusing “${c.title}”…`);
+        const note = [fusionNote.trim(), c.provocation].filter(Boolean).join(' · ');
+        setDraft(await synthesizeReference(picked, c.level, note || undefined, setBusy));
     };
 
-    const curate = async () => {
-        setBusy('Curating library…');
-        try {
-            const r = await curateLibrary();
-            setBusy(`🧹 Disabled ${r.disabled}, kept ${r.kept}. ${r.note}`);
-            refresh();
-        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
-    };
+    const runCombo = (c: FusionCombo) => run(`Fusing “${c.title}”…`, () => doCombo(c));
 
-    const redo = async (r: Reference) => {
-        setBusy(`Re-decomposing ${r.name}…`);
-        try {
-            const els = await redecomposeReference(r);
-            setBusy(`✓ ${r.name} → ${els.length} fresh concepts`);
-            refresh();
-        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
-    };
+    /** Full auto: curator picks combos → one is chosen at random → fused.
+     *  Only Keep/Discard remains. */
+    const fullAuto = () => run('Curator picking…', async () => {
+        setCombos([]);
+        setDraft(null);
+        const cs = await proposeCombos(fusionNote.trim() || undefined);
+        if (cs.length === 0) throw new Error('No viable combos.');
+        setCombos(cs);
+        await doCombo(cs[Math.min(cs.length - 1, Math.floor(Math.random() * cs.length))]);
+    });
 
-    const rebuild = async () => {
+    const curate = () => run('Curating library…', async () => {
+        const r = await curateLibrary();
+        return `🧹 Disabled ${r.disabled}, kept ${r.kept}. ${r.note}`;
+    });
+
+    const redo = (r: Reference) => run(`Re-decomposing ${r.name}…`, async () => {
+        const els = await redecomposeReference(r);
+        return `✓ ${r.name} → ${els.length} fresh concepts`;
+    });
+
+    const rebuild = () => {
         if (!window.confirm('Rebuild the whole concept library?\n\nAll current concepts are wiped and every reference is re-decomposed with dedupe + auto-curation. No selection needed.')) return;
-        try {
+        run('Rebuilding…', async () => {
             const r = await rebuildLibrary(setBusy);
-            setBusy(`♻️ Rebuilt: ${r.refs} refs → ${r.elements} concepts${r.curated > 0 ? ` (auto-curated ${r.curated})` : ''}`);
             setSelected(new Set());
-            refresh();
-        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
+            return `♻️ Rebuilt: ${r.refs} refs → ${r.elements} concepts${r.curated > 0 ? ` (auto-curated ${r.curated})` : ''}`;
+        });
     };
 
     const verdictElements = (d: FusionDraft) => elements.filter(e => d.elementIds.includes(e.id));
 
-    const keep = async () => {
+    const keep = () => {
         if (!draft) return;
-        setBusy('Saving…');
-        try {
-            const name = window.prompt('Name this reference:', `Fusion gen${draft.generation}`) ?? '';
+        const name = window.prompt('Name this reference:', `Fusion gen${draft.generation}`) ?? '';
+        run('Saving…', async () => {
             await keepFusion(draft, name, setBusy);
             recordFusionVerdict(draft, verdictElements(draft), draft.level, 'keep').catch(() => {});
             setDraft(null);
             setSelected(new Set());
-            setBusy('✓ In the library — decomposed into new concepts · verdict remembered');
-            refresh();
-        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
+            return '✓ In the library — decomposed into new concepts · verdict remembered';
+        });
     };
 
     const discard = () => {
         if (!draft) return;
         recordFusionVerdict(draft, verdictElements(draft), draft.level, 'discard').catch(() => {});
         setDraft(null);
-        setBusy('✓ Discarded · verdict remembered — the curator won’t repeat this combo');
+        setNotice('✓ Discarded · verdict remembered — the curator won’t repeat this combo');
         refresh();
     };
 
-    const isRunning = !!busy && !/^[✓❌🧹♻️]/.test(busy);
-
     return (
         <div style={{ maxWidth: 980, margin: '0 auto', padding: '22px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-            {busy && (
-                <div className={isRunning ? 'praxis-running' : undefined}
+            {(busy || notice) && (
+                <div className={busy ? 'praxis-running' : undefined}
                     style={{
                         position: 'sticky', top: 8, zIndex: 10, fontSize: 12.5, fontWeight: 600,
                         padding: '8px 14px', borderRadius: 10,
-                        background: busy.startsWith('❌') ? '#fef2f2' : isRunning ? '#fef3c7' : '#ecfdf5',
-                        color: busy.startsWith('❌') ? '#b91c1c' : isRunning ? '#92400e' : '#047857',
+                        background: busy ? '#fef3c7' : notice.startsWith('❌') ? '#fef2f2' : '#ecfdf5',
+                        color: busy ? '#92400e' : notice.startsWith('❌') ? '#b91c1c' : '#047857',
                         border: '1px solid rgba(0,0,0,0.06)',
                     }}>
-                    {isRunning ? `⏳ ${busy}` : busy}
+                    {busy ? `⏳ ${busy}` : notice}
+                </div>
+            )}
+            {lightbox && (
+                <div onClick={() => setLightbox(null)}
+                    style={{
+                        position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.82)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out',
+                    }}>
+                    <img src={lightbox} alt="" style={{ maxWidth: '92vw', maxHeight: '92vh', borderRadius: 12, boxShadow: '0 12px 60px rgba(0,0,0,0.5)' }} />
                 </div>
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -231,7 +240,8 @@ export default function LibraryView() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
                 {refs.map(r => (
                     <div key={r.id} style={{ ...S.card, padding: 0, overflow: 'hidden', position: 'relative' }}>
-                        <img src={r.image.value} alt={r.name} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' }} />
+                        <img src={r.image.value} alt={r.name} onClick={() => setLightbox(r.image.value)}
+                            style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block', cursor: 'zoom-in' }} />
                         <div style={{ padding: '5px 8px', fontSize: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
                             <span>{r.source === 'synthesized' ? `🧬g${r.generation ?? 1}` : r.source === 'promoted' ? '⭐' : r.decomposed ? '🧩' : '·'}</span>
@@ -284,7 +294,8 @@ export default function LibraryView() {
                 </div>
                 {draft && (
                     <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                        <img src={draft.image} alt="fusion draft" style={{ width: 260, borderRadius: 10 }} />
+                        <img src={draft.image} alt="fusion draft" onClick={() => setLightbox(draft.image)}
+                            style={{ width: 260, borderRadius: 10, cursor: 'zoom-in' }} />
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12 }}>
                             <span style={{ fontWeight: 700 }}>Generation {draft.generation}</span>
                             {draft.redline && (
