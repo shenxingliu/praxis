@@ -196,6 +196,8 @@ export interface GenerationParams {
     focus?: string;
     backdrop?: string;
     ratio: '1:1' | '16:9' | '4:3' | '3:4' | '9:16';
+    /** Output resolution tier (model-dependent; 4K only on pro). */
+    size?: '1K' | '2K' | '4K';
     note?: string;
     modelTier: 'auto' | 'pro' | 'flash';
 

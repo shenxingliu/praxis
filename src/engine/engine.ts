@@ -168,6 +168,7 @@ ${manifestLines.join('\n')}`;
         referenceImages: [...assetImages, ...refImages],
         model,
         aspectRatio: params.ratio,
+        imageSize: params.size,
     });
 
     // ---- Record ----

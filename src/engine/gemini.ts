@@ -113,18 +113,24 @@ export async function generateImage(opts: {
     referenceImages: string[]; // data URLs, most important first (max 14 for pro)
     model: string;
     aspectRatio: string;
+    /** '1K' | '2K' | '4K' — silently dropped if the model rejects it. */
+    imageSize?: string;
 }): Promise<{ image: string; model: string }> {
     const parts: Array<ImagePart | { text: string }> = [
         ...opts.referenceImages.slice(0, 14).map(toInlinePart),
         { text: opts.prompt },
     ];
-    const body = {
+    const makeBody = (withSize: boolean) => ({
         contents: [{ parts }],
         generationConfig: {
             responseModalities: ['TEXT', 'IMAGE'],
-            imageConfig: { aspectRatio: opts.aspectRatio },
+            imageConfig: {
+                aspectRatio: opts.aspectRatio,
+                ...(withSize && opts.imageSize ? { imageSize: opts.imageSize } : {}),
+            },
         },
-    };
+    });
+    let body = makeBody(true);
 
     const MAX_RETRIES = 2;
     let lastErr: unknown;
@@ -143,6 +149,11 @@ export async function generateImage(opts: {
         } catch (err: any) {
             lastErr = err;
             const msg = String(err?.message || err);
+            // Model doesn't support imageSize → drop it and retry immediately.
+            if (opts.imageSize && /imageSize|image_size|Unknown name|INVALID_ARGUMENT/i.test(msg) && JSON.stringify(body).includes('imageSize')) {
+                body = makeBody(false);
+                continue;
+            }
             const retriable = /429|quota|rate|unavailable|deadline|500|503/i.test(msg);
             if (!retriable || attempt === MAX_RETRIES) break;
             await new Promise(r => setTimeout(r, 3000 * Math.pow(2, attempt)));

@@ -8,6 +8,7 @@ import {
 import { recordSignal, maybeDistill } from '../learning/learning';
 import { attributeFeedback } from '../brain/soul';
 import { BudgetExceededError } from '../engine/engine';
+import { savePreset } from '../engine/presets';
 import { openLightbox } from './lightbox';
 import { S, chip } from './styles';
 
@@ -141,6 +142,18 @@ export default function StudioView() {
         if (prev.stage === 'plan') setResults([]);
     };
 
+    /** Edit plan params (ratio / size) before executing. */
+    const updatePlan = async (patch: Partial<import('../domain/types').GenerationParams>) => {
+        if (!job?.plan) return;
+        const j: PraxisJob = {
+            ...job,
+            plan: { ...job.plan, params: { ...job.plan.params, ...patch } },
+            updatedAt: Date.now(),
+        };
+        await storage.upsertJob(j);
+        setJob(j);
+    };
+
     const rate = async (r: GenerationResult, rating: 'like' | 'dislike') => {
         const reason = rating === 'dislike'
             ? window.prompt('What went wrong? (this teaches the studio — be specific)') ?? undefined
@@ -157,6 +170,18 @@ export default function StudioView() {
         a.download = `praxis-${r.id.slice(0, 6)}.png`;
         a.click();
         await recordSignal(r, 'export');
+    };
+
+    /** Freeze this result's whole setup as a Quick preset (product-free). */
+    const toPreset = async (r: GenerationResult) => {
+        if (!job?.plan) return;
+        const name = window.prompt('Preset name:',
+            job.concepts.find(c => c.id === job.chosenConceptId)?.title ?? 'My look')?.trim();
+        if (!name) return;
+        await savePreset(name, job.plan.params, job.plan.elementIds, r.image.value);
+        setError(null);
+        setBusy('');
+        window.alert(`✓ Preset "${name}" saved — use it in the Quick tab: pick products, draft, execute.`);
     };
 
     const stage = job?.stage ?? 'brief';
@@ -269,8 +294,16 @@ export default function StudioView() {
                         {job.plan.steps.map((s, i) => <li key={i}>{s}</li>)}
                     </ol>
                     <div style={{ fontSize: 11, color: '#71717a' }}>
-                        ratio {job.plan.params.ratio} · purpose {job.plan.params.purpose} · {job.plan.elementIds.length} elements ·
-                        note: “{job.plan.params.note}”
+                        purpose {job.plan.params.purpose} · {job.plan.elementIds.length} elements · note: “{job.plan.params.note}”
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={S.label}>RATIO</span>
+                        {(['1:1', '16:9', '4:3', '3:4', '9:16'] as const).map(r =>
+                            <button key={r} style={chip(job.plan!.params.ratio === r)} disabled={!!busy} onClick={() => updatePlan({ ratio: r })}>{r}</button>)}
+                        <span style={{ ...S.label, marginLeft: 8 }}>SIZE</span>
+                        {(['1K', '2K', '4K'] as const).map(s =>
+                            <button key={s} style={chip((job.plan!.params.size ?? '1K') === s)} disabled={!!busy} onClick={() => updatePlan({ size: s })}>{s}</button>)}
+                        <span style={{ fontSize: 10, color: '#a1a1aa' }}>4K needs the pro model; unsupported sizes fall back automatically</span>
                     </div>
                     {/* Moodboard — pick direction on visuals, cheap flash drafts */}
                     <div style={{ borderTop: '1px solid #f4f4f5', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -322,7 +355,10 @@ export default function StudioView() {
                                             <button onClick={() => rate(r, 'like')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, opacity: fb === 'like' ? 1 : 0.35 }}>👍</button>
                                             <button onClick={() => rate(r, 'dislike')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, opacity: fb === 'dislike' ? 1 : 0.35 }}>👎</button>
                                         </span>
-                                        <button style={S.btnGhost} onClick={() => download(r)}>⬇</button>
+                                        <span style={{ display: 'flex', gap: 6 }}>
+                                            <button style={S.btnGhost} title="Save this whole setup as a Quick preset — same look, swap products" onClick={() => toPreset(r)}>☆</button>
+                                            <button style={S.btnGhost} onClick={() => download(r)}>⬇</button>
+                                        </span>
                                     </div>
                                 </div>
                             );
