@@ -1,6 +1,6 @@
 import { Element, Reference } from '../domain/types';
 import { storage } from '../storage/local';
-import { getCurrentBrand, getCurrentBrandId } from '../domain/brand';
+import { getCurrentBrand, getCurrentBrandId, brandKey } from '../domain/brand';
 import { getBrandSoul, getFieldAttributions } from '../brain/soul';
 import { generateImage, generateJson, MODELS } from './gemini';
 import { decomposeReference } from './decompose';
@@ -40,6 +40,53 @@ const levelText = (e: Element, level: TransferLevel): string => {
 };
 
 // ---------------------------------------------------------------------------
+// Fusion memory — EVERY verdict (keep AND discard) is recorded and fed back
+// to the curator. Discards nudge the used concepts' weights down slightly;
+// keeps nudge up. This is the fitness function actually being written down.
+// ---------------------------------------------------------------------------
+
+export interface FusionVerdict {
+    verdict: 'keep' | 'discard';
+    concepts: string[];      // concept titles used
+    elementIds: string[];
+    level: TransferLevel;
+    generation: number;
+    createdAt: number;
+}
+
+export async function recordFusionVerdict(
+    draft: FusionDraft,
+    elements: Element[],
+    level: TransferLevel,
+    verdict: 'keep' | 'discard'
+): Promise<void> {
+    const v: FusionVerdict = {
+        verdict,
+        concepts: elements.map(e => e.concept),
+        elementIds: elements.map(e => e.id),
+        level,
+        generation: draft.generation,
+        createdAt: Date.now(),
+    };
+    const hist = (await storage.kvGet<FusionVerdict[]>(brandKey('fusionVerdicts'))) ?? [];
+    await storage.kvSet(brandKey('fusionVerdicts'), [...hist, v].slice(-100));
+
+    // Gentle weight nudge — half the strength of a real adoption signal,
+    // because a discard often blames the render, not the concepts.
+    const delta = verdict === 'keep' ? 0.05 : -0.05;
+    for (const el of elements) {
+        await storage.upsertElement({
+            ...el,
+            weight: Math.max(0.1, Math.round((el.weight + delta) * 100) / 100),
+        }).catch(() => {});
+    }
+}
+
+export async function getFusionVerdicts(): Promise<FusionVerdict[]> {
+    return (await storage.kvGet<FusionVerdict[]>(brandKey('fusionVerdicts'))) ?? [];
+}
+
+// ---------------------------------------------------------------------------
 // Auto-Fuse — the curator picks the combination, scored for PRODUCTIVE
 // TENSION (not similarity): concepts that rub against each other in ways
 // the brand would recognize as its own. Removes the manual-picking burden.
@@ -62,6 +109,17 @@ export async function proposeCombos(intent?: string): Promise<FusionCombo[]> {
     const recentDislikes = (await getFieldAttributions().catch(() => []))
         .slice(-3).map(a => a.reason);
 
+    // Fusion memory: the curator sees what you kept and what you threw away.
+    const verdicts = (await getFusionVerdicts().catch(() => [])).slice(-12);
+    const kept = verdicts.filter(v => v.verdict === 'keep');
+    const discarded = verdicts.filter(v => v.verdict === 'discard');
+    const memoryBlock = verdicts.length > 0 ? `
+### FUSION HISTORY (the owner's actual verdicts — learn from them) ###
+${kept.length > 0 ? `KEPT: ${kept.map(v => `[${v.level}] ${v.concepts.map(c => `“${c}”`).join('×')}`).join(' ; ')}` : ''}
+${discarded.length > 0 ? `DISCARDED: ${discarded.map(v => `[${v.level}] ${v.concepts.map(c => `“${c}”`).join('×')}`).join(' ; ')}` : ''}
+Favor the patterns behind KEPT combos; do not repeat DISCARDED combinations or close variants of them.
+` : '';
+
     const parsed = await generateJson<{ combos: Array<Record<string, unknown>> }>(
         `You are the CURATOR of a design studio's concept library, working for "${brand.name}" — ${brand.description}
 ${intent ? `\nThe owner's intent right now: ${intent}\n` : ''}
@@ -71,7 +129,7 @@ ${elements.map(e => `- id=${e.id} [${e.type}] (w${e.weight}) "${e.concept}"${e.w
 ### BRAND SOUL (locked = untouchable) ###
 ${(soul?.fields ?? []).filter(f => f.value.trim()).slice(0, 10).map(f => `${f.key}${f.locked ? ' [LOCKED]' : ''}: ${f.value.slice(0, 80)}`).join('\n') || '(none yet)'}
 ${recentDislikes.length > 0 ? `\n### RECENT COMPLAINTS (avoid these failure modes) ###\n${recentDislikes.map(r => `- ${r}`).join('\n')}` : ''}
-
+${memoryBlock}
 ### TASK ###
 Propose exactly 3 fusion combinations. Selection criteria, in order:
 1. PRODUCTIVE TENSION — concepts that resist each other interestingly. Never pick concepts because they are similar; similar + similar = wallpaper.
@@ -104,6 +162,8 @@ export interface FusionDraft {
     image: string; // data URL
     prompt: string;
     sourceRefIds: string[];
+    elementIds: string[];
+    level: TransferLevel;
     generation: number;
     redline?: { pass: boolean; note: string };
 }
@@ -174,7 +234,11 @@ Output JSON: { "pass": boolean (true if NO red-line is violated), "note": one se
         } catch { /* check is best-effort */ }
     }
 
-    return { image: out.image, prompt, sourceRefIds, generation, redline };
+    return {
+        image: out.image, prompt, sourceRefIds,
+        elementIds: elements.map(e => e.id), level,
+        generation, redline,
+    };
 }
 
 /** Keep a fusion draft: enters the library (low weight) and gets decomposed. */

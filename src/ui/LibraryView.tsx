@@ -8,7 +8,7 @@ import {
 } from '../engine/decompose';
 import {
     TransferLevel, LEVEL_LABEL, FusionDraft, FusionCombo,
-    synthesizeReference, keepFusion, proposeCombos,
+    synthesizeReference, keepFusion, proposeCombos, recordFusionVerdict,
 } from '../engine/fusion';
 import { S, chip } from './styles';
 
@@ -181,17 +181,28 @@ export default function LibraryView() {
         } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
     };
 
+    const verdictElements = (d: FusionDraft) => elements.filter(e => d.elementIds.includes(e.id));
+
     const keep = async () => {
         if (!draft) return;
         setBusy('Saving…');
         try {
             const name = window.prompt('Name this reference:', `Fusion gen${draft.generation}`) ?? '';
             await keepFusion(draft, name, setBusy);
+            recordFusionVerdict(draft, verdictElements(draft), draft.level, 'keep').catch(() => {});
             setDraft(null);
             setSelected(new Set());
-            setBusy('✓ In the library — already decomposed into new concepts');
+            setBusy('✓ In the library — decomposed into new concepts · verdict remembered');
             refresh();
         } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
+    };
+
+    const discard = () => {
+        if (!draft) return;
+        recordFusionVerdict(draft, verdictElements(draft), draft.level, 'discard').catch(() => {});
+        setDraft(null);
+        setBusy('✓ Discarded · verdict remembered — the curator won’t repeat this combo');
+        refresh();
     };
 
     const isRunning = !!busy && !/^[✓❌🧹♻️]/.test(busy);
@@ -283,8 +294,8 @@ export default function LibraryView() {
                             )}
                             <span style={{ display: 'flex', gap: 8 }}>
                                 <button style={S.btn} disabled={!!busy} onClick={keep}>Keep — into the library</button>
-                                <button style={S.btnGhost} disabled={!!busy} onClick={() => setDraft(null)}>Discard</button>
-                                <button style={S.btnGhost} disabled={!!busy} onClick={fuse}>Try again</button>
+                                <button style={S.btnGhost} disabled={!!busy} onClick={discard}>Discard</button>
+                                <button style={S.btnGhost} disabled={!!busy} onClick={() => { discard(); fuse(); }}>Try again</button>
                             </span>
                         </div>
                     </div>
