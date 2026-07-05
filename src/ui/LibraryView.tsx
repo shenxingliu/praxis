@@ -11,6 +11,7 @@ import {
     synthesizeReference, keepFusion, proposeCombos, recordFusionVerdict,
 } from '../engine/fusion';
 import { openLightbox } from './lightbox';
+import { DropZone, imageFiles } from './dropzone';
 import { S, chip } from './styles';
 
 /**
@@ -54,9 +55,10 @@ export default function LibraryView() {
     };
     useEffect(refresh, []);
 
-    const upload = async (files: FileList | null) => {
-        if (!files) return;
-        for (const f of Array.from(files)) {
+    const upload = async (input: FileList | File[] | null) => {
+        const files = imageFiles(input);
+        if (files.length === 0) return;
+        for (const f of files) {
             setBusy(`Uploading ${f.name}…`);
             const ref: Reference = {
                 id: crypto.randomUUID(),
@@ -220,18 +222,21 @@ export default function LibraryView() {
                     {busy ? `⏳ ${busy}` : notice}
                 </div>
             )}
+            <DropZone onFiles={upload} hint="Drop references — auto-decomposed" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={S.label}>REFERENCES · {refs.length}</span>
                 <button style={S.btn} onClick={() => fileRef.current?.click()}>＋ Upload references</button>
                 <button style={S.btnGhost} onClick={runPending}>Decompose pending</button>
-                <input ref={fileRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={e => upload(e.target.files)} />
+                <span style={{ fontSize: 10, color: '#a1a1aa' }}>or drag & drop images anywhere in this section</span>
+                <input ref={fileRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={e => { upload(e.target.files); e.currentTarget.value = ''; }} />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
+            {/* Pinterest-style masonry: natural aspect ratios, no cropping */}
+            <div style={{ columnWidth: 150, columnGap: 10 }}>
                 {refs.map(r => (
-                    <div key={r.id} style={{ ...S.card, padding: 0, overflow: 'hidden', position: 'relative' }}>
+                    <div key={r.id} style={{ ...S.card, padding: 0, overflow: 'hidden', position: 'relative', breakInside: 'avoid', marginBottom: 10 }}>
                         <img src={r.image.value} alt={r.name} onClick={() => openLightbox(r.image.value)}
-                            style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block', cursor: 'zoom-in' }} />
+                            style={{ width: '100%', display: 'block', cursor: 'zoom-in' }} />
                         <div style={{ padding: '5px 8px', fontSize: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
                             <span>{r.source === 'synthesized' ? `🧬g${r.generation ?? 1}` : r.source === 'promoted' ? '⭐' : r.decomposed ? '🧩' : '·'}</span>
@@ -242,8 +247,9 @@ export default function LibraryView() {
                             style={{ position: 'absolute', top: 4, left: 4, border: 'none', borderRadius: 6, background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 10, cursor: 'pointer', padding: '2px 6px' }}>🧩</button>
                     </div>
                 ))}
-                {refs.length === 0 && <p style={{ fontSize: 12, color: '#a1a1aa' }}>No references yet. Upload aesthetic references — each is decomposed into reusable elements.</p>}
+                {refs.length === 0 && <p style={{ fontSize: 12, color: '#a1a1aa' }}>No references yet. Upload or drag & drop aesthetic references — each is decomposed into reusable elements.</p>}
             </div>
+            </DropZone>
 
             {/* Fusion Lab */}
             <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 8, border: '1.5px dashed #a1a1aa' }}>
@@ -297,6 +303,12 @@ export default function LibraryView() {
                                 <button style={S.btn} disabled={!!busy} onClick={keep}>Keep — into the library</button>
                                 <button style={S.btnGhost} disabled={!!busy} onClick={discard}>Discard</button>
                                 <button style={S.btnGhost} disabled={!!busy} onClick={() => { discard(); fuse(); }}>Try again</button>
+                                <button style={S.btnGhost} title="Download" onClick={() => {
+                                    const a = document.createElement('a');
+                                    a.href = draft.image;
+                                    a.download = `praxis-fusion-gen${draft.generation}.png`;
+                                    a.click();
+                                }}>⬇</button>
                             </span>
                         </div>
                     </div>

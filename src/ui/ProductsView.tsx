@@ -4,6 +4,7 @@ import { storage } from '../storage/local';
 import { getCurrentBrandId } from '../domain/brand';
 import { INVENTORY_CHANGED_EVENT } from './events';
 import { openLightbox } from './lightbox';
+import { DropZone, imageFiles } from './dropzone';
 import { S } from './styles';
 
 /**
@@ -33,8 +34,9 @@ export default function ProductsView() {
 
     const announce = () => window.dispatchEvent(new CustomEvent(INVENTORY_CHANGED_EVENT));
 
-    const createProduct = async (files: FileList | null) => {
-        if (!files || files.length === 0) return;
+    const createProduct = async (input: FileList | File[] | null) => {
+        const files = imageFiles(input);
+        if (files.length === 0) return;
         const name = window.prompt('Product name:', files[0].name.replace(/\.[^.]+$/, ''))?.trim();
         if (!name) return;
         const category = window.prompt('Category (optional — e.g. Bed, Desk, Bottle):')?.trim() || undefined;
@@ -66,15 +68,14 @@ export default function ProductsView() {
         refresh();
     };
 
-    const addPhotos = async (files: FileList | null) => {
-        const target = addTarget;
-        setAddTarget(null);
-        if (!files || files.length === 0 || !target) return;
+    const addPhotosTo = async (target: Asset, input: FileList | File[] | null) => {
+        const files = imageFiles(input);
+        if (files.length === 0) return;
         setBusy(`Adding photos to ${target.name}…`);
         setNotice('');
         try {
             const extra = [];
-            for (const f of Array.from(files)) {
+            for (const f of files) {
                 extra.push({
                     id: crypto.randomUUID(),
                     image: { kind: 'data' as const, value: await fileToDataUrl(f) },
@@ -87,6 +88,12 @@ export default function ProductsView() {
         } catch (err: any) { setNotice(`❌ ${err?.message || err}`); }
         setBusy('');
         refresh();
+    };
+
+    const addPhotos = async (files: FileList | null) => {
+        const target = addTarget;
+        setAddTarget(null);
+        if (target) await addPhotosTo(target, files);
     };
 
     const removePhoto = async (a: Asset, photoId: string) => {
@@ -130,14 +137,16 @@ export default function ProductsView() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={S.label}>PRODUCTS · {assets.length}</span>
                 <button style={S.btn} disabled={!!busy} onClick={() => newRef.current?.click()}>＋ New product (upload photos)</button>
-                <span style={{ fontSize: 10, color: '#a1a1aa' }}>These photos are the source of truth — generation never deviates from them.</span>
+                <span style={{ fontSize: 10, color: '#a1a1aa' }}>Source of truth — or drag & drop photos: onto the page = new product, onto a card = add to that product.</span>
                 <input ref={newRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={e => { createProduct(e.target.files); e.target.value = ''; }} />
                 <input ref={addRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={e => { addPhotos(e.target.files); e.target.value = ''; }} />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+            <DropZone onFiles={createProduct} hint="Drop photos — creates a new product">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12, minHeight: 120 }}>
                 {assets.map(a => (
-                    <div key={a.id} style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <DropZone key={a.id} onFiles={fs => addPhotosTo(a, fs)} hint={`Add to ${a.name}`}>
+                    <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 8, height: '100%', boxSizing: 'border-box' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
                             <span style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
                             <span style={{ fontSize: 10, color: '#a1a1aa', flexShrink: 0 }}>{a.category || '—'} · {a.photos.length} 📷</span>
@@ -158,13 +167,15 @@ export default function ProductsView() {
                             <button style={{ ...S.btnGhost, color: '#b91c1c', marginLeft: 'auto' }} disabled={!!busy} onClick={() => remove(a)}>Delete</button>
                         </div>
                     </div>
+                    </DropZone>
                 ))}
                 {assets.length === 0 && (
                     <p style={{ fontSize: 12, color: '#a1a1aa' }}>
-                        No products yet. Upload product photos here, or import Greenington in System.
+                        No products yet. Upload or drag & drop product photos here, or import Greenington in System.
                     </p>
                 )}
             </div>
+            </DropZone>
         </div>
     );
 }

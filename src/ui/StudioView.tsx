@@ -10,6 +10,7 @@ import { attributeFeedback } from '../brain/soul';
 import { BudgetExceededError } from '../engine/engine';
 import { savePreset } from '../engine/presets';
 import { openLightbox } from './lightbox';
+import { DropZone } from './dropzone';
 import { S, chip } from './styles';
 
 /**
@@ -68,7 +69,7 @@ export default function StudioView() {
         setJob(await proposeWildcard(job));
     });
 
-    const reverseBrief = (files: FileList | null) => guard('Decoding the competitor…', async () => {
+    const reverseBrief = (files: FileList | File[] | null) => guard('Decoding the competitor…', async () => {
         const f = files?.[0];
         if (!f) return;
         const dataUrl = await new Promise<string>((res, rej) => {
@@ -214,6 +215,7 @@ export default function StudioView() {
 
             {/* Stage 1 — brief */}
             {!job && (
+                <DropZone onFiles={reverseBrief} hint="Drop a competitor's image — reverse brief">
                 <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <span style={S.label}>CLIENT BRIEF</span>
                     <textarea
@@ -253,6 +255,7 @@ export default function StudioView() {
                         </div>
                     )}
                 </div>
+                </DropZone>
             )}
 
             {/* Stage 2 — concepts */}
@@ -320,10 +323,21 @@ export default function StudioView() {
                                         style={{ padding: 2, borderRadius: 10, background: '#fff', border: job.plan!.moodAnchorResultId === d.id ? '2.5px solid #059669' : '1px solid #e4e4e7' }}>
                                         <img src={d.image.value} alt="" onClick={() => openLightbox(d.image.value)}
                                             style={{ width: 130, borderRadius: 8, display: 'block', cursor: 'zoom-in' }} />
-                                        <button onClick={() => anchor(d.id)} disabled={!!busy}
-                                            style={{ ...S.btnGhost, width: '100%', marginTop: 3, fontSize: 10 }}>
-                                            {job.plan!.moodAnchorResultId === d.id ? '✓ Anchored' : '⚓ Anchor'}
-                                        </button>
+                                        <div style={{ display: 'flex', gap: 3, marginTop: 3 }}>
+                                            <button onClick={() => anchor(d.id)} disabled={!!busy}
+                                                style={{ ...S.btnGhost, flex: 1, fontSize: 10 }}>
+                                                {job.plan!.moodAnchorResultId === d.id ? '✓ Anchored' : '⚓ Anchor'}
+                                            </button>
+                                            <button title="Save to Gallery" disabled={!!busy}
+                                                onClick={async () => { await recordSignal(d, 'save'); window.alert('✓ Saved to Gallery.'); }}
+                                                style={{ ...S.btnGhost, fontSize: 10 }}>★</button>
+                                            <button title="Download" onClick={() => {
+                                                const a = document.createElement('a');
+                                                a.href = d.image.value;
+                                                a.download = `praxis-mood-${d.id.slice(0, 6)}.png`;
+                                                a.click();
+                                            }} style={{ ...S.btnGhost, fontSize: 10 }}>⬇</button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>

@@ -104,9 +104,10 @@ export default function GalleryView() {
                 </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+            {/* Pinterest-style masonry: natural aspect ratios, no cropping */}
+            <div style={{ columnWidth: 230, columnGap: 10 }}>
                 {shown.map(r => (
-                    <div key={r.id} style={{ ...S.card, padding: 0, overflow: 'hidden' }}>
+                    <div key={r.id} style={{ ...S.card, padding: 0, overflow: 'hidden', breakInside: 'avoid', marginBottom: 10 }}>
                         <img src={r.image.value} alt="" onClick={() => openLightbox(r.image.value)}
                             style={{ width: '100%', display: 'block', cursor: 'zoom-in' }} />
                         <div style={{ padding: '6px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
