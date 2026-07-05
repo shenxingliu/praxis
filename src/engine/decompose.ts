@@ -36,6 +36,8 @@ interface RawConcept {
     concept: string;
     analysis: string;
     manifestation: string;
+    principle?: string;
+    worldview?: string;
 }
 
 export async function decomposeReference(ref: Reference): Promise<Element[]> {
@@ -50,15 +52,19 @@ Analyze through three lenses:
 - feeling: the emotional/atmospheric essence. What it feels like to inhabit this image. E.g. "the stillness after rain", "unhurried morning privacy".
 - communication: what the image ARGUES without words. The claim, the value assertion. E.g. "craft is a moral position", "luxury as restraint, not display".
 
-For each concept output:
+For each concept output the FULL ABSTRACTION LADDER:
 - lens: visual | feeling | communication
-- concept: the abstract idea, 2-6 words, transferable to any subject
+- concept: L3 — the abstract idea, 2-6 words, transferable to any subject
 - analysis: 1-2 sentences — why/how it works through this lens
-- manifestation: 1-2 sentences — how to CONCRETELY realize this concept in a new image (promptable: composition moves, light behavior, color logic)
+- manifestation: L1 percept — 1-2 sentences, how to CONCRETELY realize this concept (promptable: composition moves, light behavior, color logic)
+- principle: L2 — the formal principle at work, one sentence (e.g. "a single light source creates hierarchy")
+- worldview: L4 — the belief the image asserts, under 8 words (e.g. "truth needs shadow")
+
+Transferring at L1 is imitation; transferring at L3/L4 is creation — make every rung genuinely different in abstraction.
 
 Extract 2-3 concepts per lens (6-9 total). Only what is genuinely distinctive — skip generic observations.
 
-Output JSON: { "elements": [ { "lens", "concept", "analysis", "manifestation" } ] }`;
+Output JSON: { "elements": [ { "lens", "concept", "analysis", "manifestation", "principle", "worldview" } ] }`;
 
     const parsed = await generateJson<{ elements: RawConcept[] }>(prompt, [ref.image.value]);
     const now = Date.now();
@@ -71,6 +77,8 @@ Output JSON: { "elements": [ { "lens", "concept", "analysis", "manifestation" } 
             concept: e.concept.trim(),
             analysis: (e.analysis ?? '').trim(),
             description: e.manifestation.trim(),
+            principle: e.principle?.trim() || undefined,
+            worldview: e.worldview?.trim() || undefined,
             sourceRefId: ref.id,
             nsiKeys: NSI_OF_LENS[e.lens as ElementType] ?? [],
             weight: 1,

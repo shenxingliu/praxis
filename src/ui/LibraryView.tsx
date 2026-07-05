@@ -3,6 +3,9 @@ import { Element, ElementType, Reference } from '../domain/types';
 import { storage } from '../storage/local';
 import { getCurrentBrandId } from '../domain/brand';
 import { decomposeReference, decomposeAllPending } from '../engine/decompose';
+import {
+    TransferLevel, LEVEL_LABEL, FusionDraft, synthesizeReference, keepFusion,
+} from '../engine/fusion';
 import { S, chip } from './styles';
 
 /**
@@ -29,6 +32,12 @@ export default function LibraryView() {
     const [filter, setFilter] = useState<ElementType | 'all'>('all');
     const [busy, setBusy] = useState('');
     const fileRef = useRef<HTMLInputElement>(null);
+
+    // Fusion Lab state
+    const [selected, setSelected] = useState<Set<string>>(new Set());
+    const [level, setLevel] = useState<TransferLevel>('concept');
+    const [fusionNote, setFusionNote] = useState('');
+    const [draft, setDraft] = useState<FusionDraft | null>(null);
 
     const refresh = () => {
         storage.listReferences().then(setRefs);
@@ -84,6 +93,36 @@ export default function LibraryView() {
     const refById = (id: string) => refs.find(r => r.id === id);
     const shown = filter === 'all' ? elements : elements.filter(e => e.type === filter);
 
+    const toggleSelect = (id: string) =>
+        setSelected(prev => {
+            const n = new Set(prev);
+            n.has(id) ? n.delete(id) : n.add(id);
+            return n;
+        });
+
+    const fuse = async () => {
+        const picked = elements.filter(e => selected.has(e.id));
+        setBusy('Fusing…');
+        setDraft(null);
+        try {
+            setDraft(await synthesizeReference(picked, level, fusionNote.trim() || undefined, setBusy));
+            setBusy('');
+        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
+    };
+
+    const keep = async () => {
+        if (!draft) return;
+        setBusy('Saving…');
+        try {
+            const name = window.prompt('Name this reference:', `Fusion gen${draft.generation}`) ?? '';
+            await keepFusion(draft, name, setBusy);
+            setDraft(null);
+            setSelected(new Set());
+            setBusy('✓ In the library — already decomposed into new concepts');
+            refresh();
+        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
+    };
+
     return (
         <div style={{ maxWidth: 980, margin: '0 auto', padding: '22px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -100,13 +139,48 @@ export default function LibraryView() {
                         <img src={r.image.value} alt={r.name} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' }} />
                         <div style={{ padding: '5px 8px', fontSize: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
-                            <span>{r.source === 'promoted' ? '⭐' : r.decomposed ? '🧩' : '·'}</span>
+                            <span>{r.source === 'synthesized' ? `🧬g${r.generation ?? 1}` : r.source === 'promoted' ? '⭐' : r.decomposed ? '🧩' : '·'}</span>
                         </div>
                         <button onClick={() => removeRef(r)} title="Delete"
                             style={{ position: 'absolute', top: 4, right: 4, border: 'none', borderRadius: 6, background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 10, cursor: 'pointer', padding: '2px 6px' }}>✕</button>
                     </div>
                 ))}
                 {refs.length === 0 && <p style={{ fontSize: 12, color: '#a1a1aa' }}>No references yet. Upload aesthetic references — each is decomposed into reusable elements.</p>}
+            </div>
+
+            {/* Fusion Lab */}
+            <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 8, border: '1.5px dashed #a1a1aa' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={S.label}>🧪 FUSION LAB · {selected.size} concept{selected.size === 1 ? '' : 's'} selected</span>
+                    <select value={level} onChange={e => setLevel(e.target.value as TransferLevel)} style={{ ...S.input, width: 250 }}>
+                        {(Object.keys(LEVEL_LABEL) as TransferLevel[]).map(l => <option key={l} value={l}>{LEVEL_LABEL[l]}</option>)}
+                    </select>
+                    <input style={{ ...S.input, flex: 1, minWidth: 160 }} placeholder="Optional art direction…" value={fusionNote} onChange={e => setFusionNote(e.target.value)} />
+                    <button style={{ ...S.btn, opacity: selected.size >= 2 ? 1 : 0.4 }} disabled={selected.size < 2 || !!busy} onClick={fuse}>
+                        Fuse → new reference
+                    </button>
+                </div>
+                <div style={{ fontSize: 10, color: '#a1a1aa' }}>
+                    Select 2-4 concept cards below (☐), pick the transfer level — L1 imitates, L3/L4 creates — and breed a brand-new pure aesthetic reference (no product, flash-model cost).
+                </div>
+                {draft && (
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                        <img src={draft.image} alt="fusion draft" style={{ width: 260, borderRadius: 10 }} />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12 }}>
+                            <span style={{ fontWeight: 700 }}>Generation {draft.generation}</span>
+                            {draft.redline && (
+                                <span style={{ color: draft.redline.pass ? '#059669' : '#b91c1c' }}>
+                                    {draft.redline.pass ? '✓ passes brand red-lines' : '⚠ red-line risk'} — {draft.redline.note}
+                                </span>
+                            )}
+                            <span style={{ display: 'flex', gap: 8 }}>
+                                <button style={S.btn} disabled={!!busy} onClick={keep}>Keep — into the library</button>
+                                <button style={S.btnGhost} disabled={!!busy} onClick={() => setDraft(null)}>Discard</button>
+                                <button style={S.btnGhost} disabled={!!busy} onClick={fuse}>Try again</button>
+                            </span>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -122,8 +196,10 @@ export default function LibraryView() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
                 {shown.map(el => {
                     const src = refById(el.sourceRefId);
+                    const on = selected.has(el.id);
                     return (
-                        <div key={el.id} style={{ ...S.card, display: 'flex', gap: 10, opacity: el.enabled ? 1 : 0.45 }}>
+                        <div key={el.id} style={{ ...S.card, display: 'flex', gap: 10, opacity: el.enabled ? 1 : 0.45, border: on ? '1.5px solid #18181b' : undefined }}>
+                            <input type="checkbox" checked={on} onChange={() => toggleSelect(el.id)} style={{ alignSelf: 'flex-start', marginTop: 4, cursor: 'pointer' }} title="Select for Fusion Lab" />
                             {src && <img src={src.image.value} alt="" style={{ width: 54, height: 54, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />}
                             <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: '#71717a' }}>
@@ -132,8 +208,9 @@ export default function LibraryView() {
                                     {el.weight < 0.9 && <span style={{ color: '#b91c1c' }}> ▼ fading</span>}
                                     {!el.lastUsedAt && Date.now() - el.createdAt > 14 * 86400_000 && <span style={{ color: '#a1a1aa' }}> 😴 sleeping</span>}
                                 </div>
-                                <div style={{ fontSize: 12.5, fontWeight: 700, marginTop: 3 }}>{el.concept}</div>
+                                <div style={{ fontSize: 12.5, fontWeight: 700, marginTop: 3 }}>{el.concept}{el.worldview && <span style={{ fontWeight: 400, color: '#a1a1aa' }}> · “{el.worldview}”</span>}</div>
                                 {el.analysis && <div style={{ fontSize: 10.5, color: '#71717a', marginTop: 2, lineHeight: 1.45 }}>{el.analysis}</div>}
+                                {el.principle && <div style={{ fontSize: 10.5, color: '#57534e', marginTop: 2, lineHeight: 1.45 }}>⚙ {el.principle}</div>}
                                 <div style={{ fontSize: 11, marginTop: 3, lineHeight: 1.45 }}>↳ {el.description}</div>
                                 <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                                     <button style={S.btnGhost} onClick={() => toggleElement(el)}>{el.enabled ? 'Disable' : 'Enable'}</button>

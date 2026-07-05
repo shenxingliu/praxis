@@ -103,13 +103,15 @@ export interface Reference {
     image: ImageRef;
     tags: string[];
     /** 'upload' = user provided; 'promoted' = a liked Result promoted into
-     *  the reference pool (the strongest learning channel). */
-    source: 'upload' | 'promoted';
+     *  the reference pool; 'synthesized' = born in the Fusion Lab. */
+    source: 'upload' | 'promoted' | 'synthesized';
     /** Selection weight — bumped by likes, decayed by dislikes. */
     weight: number;
     createdAt: number;
     /** Set once the decomposition agent has extracted elements from it. */
     decomposed?: boolean;
+    /** Fusion generation: 0/undefined = original; N = bred from gen N-1. */
+    generation?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,12 +134,16 @@ export interface Element {
     brandId: string;
     /** The analytical lens this concept was extracted through. */
     type: ElementType;
-    /** The abstract, transferable idea — 2-6 words. */
+    /** L3 — the abstract, transferable idea, 2-6 words. */
     concept: string;
     /** Why/how it works, through this lens. */
     analysis: string;
-    /** Concrete promptable translation — how to realize the concept. */
+    /** L1 percept — concrete promptable manifestation of the concept. */
     description: string;
+    /** L2 — the formal principle at work ("single light source creates hierarchy"). */
+    principle?: string;
+    /** L4 — the worldview/belief the image asserts ("truth needs shadow"). */
+    worldview?: string;
     /** Source reference — lets generation attach the original pixels. */
     sourceRefId: string;
     /** N/S/I soul-field keys this element informs (e.g. 'sensation.atmosphere'). */
