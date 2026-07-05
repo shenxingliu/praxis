@@ -2,7 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { KnowledgeRule } from '../domain/types';
 import { storage } from '../storage/local';
 import { adoptionRate, distill } from '../learning/learning';
-import { S } from './styles';
+import {
+    BrandSoul, SoulField, SOUL_SCHEMA, getBrandSoul, saveBrandSoul, deriveBrandSoul,
+} from '../brain/soul';
+import { S, chip } from './styles';
 
 /**
  * Knowledge — the visible, editable experience base. Rules the system has
@@ -10,6 +13,7 @@ import { S } from './styles';
  * inspectability is what keeps the learning loop trustworthy.
  */
 export default function KnowledgeView() {
+    const [panel, setPanel] = useState<'rules' | 'soul'>('rules');
     const [rules, setRules] = useState<KnowledgeRule[]>([]);
     const [signals, setSignals] = useState(0);
     const [pending, setPending] = useState(0);
@@ -54,6 +58,14 @@ export default function KnowledgeView() {
 
     return (
         <div style={{ maxWidth: 860, margin: '0 auto', padding: '22px 28px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', gap: 6 }}>
+                <button style={chip(panel === 'rules')} onClick={() => setPanel('rules')}>Learned Rules</button>
+                <button style={chip(panel === 'soul')} onClick={() => setPanel('soul')}>Brand Soul</button>
+            </div>
+
+            {panel === 'soul' && <SoulPanel />}
+
+            {panel === 'rules' && <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                 <Metric label="Adoption rate (north star)" value={`${(adoption.rate * 100).toFixed(0)}%`} sub={`${adoption.adopted} adopted / ${adoption.total} generated`} />
                 <Metric label="Learned rules" value={String(rules.length)} sub={`${rules.filter(r => r.enabled).length} active`} />
@@ -95,9 +107,82 @@ export default function KnowledgeView() {
                     </div>
                 ))}
             </div>
+            </>}
         </div>
     );
 }
+
+/** Brand Soul — derive from evidence, review per field, lock red-lines. */
+const SoulPanel: React.FC = () => {
+    const [soul, setSoul] = useState<BrandSoul | null>(null);
+    const [busy, setBusy] = useState('');
+    const [dirty, setDirty] = useState(false);
+
+    useEffect(() => { getBrandSoul().then(setSoul); }, []);
+
+    const derive = async () => {
+        setBusy('Deriving from brand evidence + approved imagery… (10–30s)');
+        try {
+            setSoul(await deriveBrandSoul());
+            setDirty(true);
+            setBusy('');
+        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
+    };
+
+    const save = async () => {
+        if (!soul) return;
+        setBusy('Saving…');
+        try { await saveBrandSoul(soul); setDirty(false); setBusy('✓ Saved (previous version archived)'); }
+        catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
+    };
+
+    const update = (key: string, patch: Partial<SoulField>) => {
+        if (!soul) return;
+        setSoul({ ...soul, fields: soul.fields.map(f => f.key === key ? { ...f, ...patch } : f) });
+        setDirty(true);
+    };
+
+    const byAxis = (axis: SoulField['axis']) => (soul?.fields ?? []).filter(f => f.axis === axis);
+    const specOf = (key: string) => SOUL_SCHEMA.find(s => s.key === key);
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button style={S.btn} onClick={derive}>{soul ? 'Re-derive draft' : 'Derive brand soul'}</button>
+                {soul && <button style={{ ...S.btn, opacity: dirty ? 1 : 0.4 }} disabled={!dirty} onClick={save}>Save</button>}
+                <span style={{ fontSize: 11, color: '#71717a' }}>{busy}</span>
+            </div>
+            {!soul && <div style={{ ...S.card, fontSize: 12, color: '#a1a1aa' }}>
+                No soul yet. Derive it from the brand description, learned rules, feedback and approved imagery — then review, edit, and lock the red-lines.
+            </div>}
+            {soul && (['narrative', 'sensation', 'viewing'] as const).map(axis => (
+                <div key={axis}>
+                    <div style={{ ...S.label, margin: '6px 0' }}>{axis.toUpperCase()}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {byAxis(axis).map(f => (
+                            <div key={f.key} style={{ ...S.card, padding: '10px 14px', border: f.locked ? '1.5px solid #d97706' : undefined }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                    <span style={{ fontSize: 11, fontWeight: 700 }}>
+                                        {specOf(f.key)?.label ?? f.key} <span style={{ color: '#a1a1aa', fontWeight: 400 }}>· w{f.weight.toFixed(1)}</span>
+                                    </span>
+                                    <button style={S.btnGhost} onClick={() => update(f.key, { locked: !f.locked })}>
+                                        {f.locked ? '🔒 Locked' : '🔓 Lock'}
+                                    </button>
+                                </div>
+                                <textarea
+                                    style={{ ...S.input, width: '100%', boxSizing: 'border-box', minHeight: 40, resize: 'vertical', fontSize: 12 }}
+                                    value={f.value}
+                                    onChange={e => update(f.key, { value: e.target.value })}
+                                />
+                                {f.rationale && <div style={{ fontSize: 10, color: '#a1a1aa', marginTop: 3 }}>Basis: {f.rationale}</div>}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
 
 const Metric: React.FC<{ label: string; value: string; sub: string }> = ({ label, value, sub }) => (
     <div style={{ background: '#f4f4f5', borderRadius: 12, padding: '12px 16px' }}>

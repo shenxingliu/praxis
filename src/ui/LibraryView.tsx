@@ -1,0 +1,147 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { Element, ElementType, Reference } from '../domain/types';
+import { storage } from '../storage/local';
+import { getCurrentBrandId } from '../domain/brand';
+import { decomposeReference, decomposeAllPending } from '../engine/decompose';
+import { S, chip } from './styles';
+
+/**
+ * LIBRARY — collect → classify → decompose.
+ * Upload references; each is auto-decomposed into reusable elements.
+ * Elements are the studio's recombination vocabulary.
+ */
+
+const TYPE_LABEL: Record<ElementType, string> = {
+    light: '💡 Light', palette: '🎨 Palette', composition: '📐 Composition',
+    material: '🧱 Material', mood: '🌫 Mood', setting: '🏞 Setting',
+    prop: '🕯 Prop', style: '✒️ Style',
+};
+
+const fileToDataUrl = (f: File): Promise<string> =>
+    new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result));
+        r.onerror = rej;
+        r.readAsDataURL(f);
+    });
+
+export default function LibraryView() {
+    const [refs, setRefs] = useState<Reference[]>([]);
+    const [elements, setElements] = useState<Element[]>([]);
+    const [filter, setFilter] = useState<ElementType | 'all'>('all');
+    const [busy, setBusy] = useState('');
+    const fileRef = useRef<HTMLInputElement>(null);
+
+    const refresh = () => {
+        storage.listReferences().then(setRefs);
+        storage.listElements().then(setElements);
+    };
+    useEffect(refresh, []);
+
+    const upload = async (files: FileList | null) => {
+        if (!files) return;
+        for (const f of Array.from(files)) {
+            setBusy(`Uploading ${f.name}…`);
+            const ref: Reference = {
+                id: crypto.randomUUID(),
+                brandId: getCurrentBrandId(),
+                kind: 'style',
+                name: f.name.replace(/\.[^.]+$/, ''),
+                image: { kind: 'data', value: await fileToDataUrl(f) },
+                tags: [],
+                source: 'upload',
+                weight: 1,
+                createdAt: Date.now(),
+            };
+            await storage.upsertReference(ref);
+            setBusy(`Decomposing ${f.name}…`);
+            try { await decomposeReference(ref); } catch (err: any) {
+                console.warn('decompose failed:', err);
+            }
+        }
+        setBusy('');
+        refresh();
+    };
+
+    const runPending = async () => {
+        const { refs: n, elements: m } = await decomposeAllPending(setBusy);
+        setBusy(n === 0 ? 'Nothing pending.' : `Decomposed ${n} refs → ${m} elements.`);
+        refresh();
+    };
+
+    const toggleElement = async (el: Element) => {
+        await storage.upsertElement({ ...el, enabled: !el.enabled });
+        refresh();
+    };
+    const removeElement = async (el: Element) => {
+        await storage.deleteElement(el.id);
+        refresh();
+    };
+    const removeRef = async (r: Reference) => {
+        if (!window.confirm(`Delete reference "${r.name}" (its elements stay)?`)) return;
+        await storage.deleteReference(r.id);
+        refresh();
+    };
+
+    const refById = (id: string) => refs.find(r => r.id === id);
+    const shown = filter === 'all' ? elements : elements.filter(e => e.type === filter);
+
+    return (
+        <div style={{ maxWidth: 980, margin: '0 auto', padding: '22px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={S.label}>REFERENCES · {refs.length}</span>
+                <button style={S.btn} onClick={() => fileRef.current?.click()}>＋ Upload references</button>
+                <button style={S.btnGhost} onClick={runPending}>Decompose pending</button>
+                {busy && <span style={{ fontSize: 11, color: '#a1a1aa' }}>{busy}</span>}
+                <input ref={fileRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={e => upload(e.target.files)} />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
+                {refs.map(r => (
+                    <div key={r.id} style={{ ...S.card, padding: 0, overflow: 'hidden', position: 'relative' }}>
+                        <img src={r.image.value} alt={r.name} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' }} />
+                        <div style={{ padding: '5px 8px', fontSize: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+                            <span>{r.source === 'promoted' ? '⭐' : r.decomposed ? '🧩' : '·'}</span>
+                        </div>
+                        <button onClick={() => removeRef(r)} title="Delete"
+                            style={{ position: 'absolute', top: 4, right: 4, border: 'none', borderRadius: 6, background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 10, cursor: 'pointer', padding: '2px 6px' }}>✕</button>
+                    </div>
+                ))}
+                {refs.length === 0 && <p style={{ fontSize: 12, color: '#a1a1aa' }}>No references yet. Upload aesthetic references — each is decomposed into reusable elements.</p>}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={S.label}>ELEMENTS · {elements.length}</span>
+                <button style={chip(filter === 'all')} onClick={() => setFilter('all')}>All</button>
+                {(Object.keys(TYPE_LABEL) as ElementType[]).map(t => (
+                    <button key={t} style={chip(filter === t)} onClick={() => setFilter(t)}>
+                        {TYPE_LABEL[t]} {elements.filter(e => e.type === t).length || ''}
+                    </button>
+                ))}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
+                {shown.map(el => {
+                    const src = refById(el.sourceRefId);
+                    return (
+                        <div key={el.id} style={{ ...S.card, display: 'flex', gap: 10, opacity: el.enabled ? 1 : 0.45 }}>
+                            {src && <img src={src.image.value} alt="" style={{ width: 54, height: 54, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />}
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: '#71717a' }}>
+                                    {TYPE_LABEL[el.type]} · w{el.weight.toFixed(1)}
+                                </div>
+                                <div style={{ fontSize: 11.5, marginTop: 3, lineHeight: 1.45 }}>{el.description}</div>
+                                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                                    <button style={S.btnGhost} onClick={() => toggleElement(el)}>{el.enabled ? 'Disable' : 'Enable'}</button>
+                                    <button style={S.btnGhost} onClick={() => removeElement(el)}>Delete</button>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
+                {shown.length === 0 && <p style={{ fontSize: 12, color: '#a1a1aa' }}>No elements{filter !== 'all' ? ' of this type' : ''} yet.</p>}
+            </div>
+        </div>
+    );
+}

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { storage, isCloud, LocalProvider } from '../storage/local';
-import { BudgetConfig } from '../domain/types';
+import { SupabaseProvider } from '../storage/supabase';
+import { Asset, BudgetConfig, Reference } from '../domain/types';
 import { INVENTORY_CHANGED_EVENT } from './events';
 import { S } from './styles';
 
@@ -60,6 +61,28 @@ export default function SystemView() {
         await storage.setBudget(next);
     };
 
+    /** One-click Greenington import: the V1.3 app's legacy tables (same
+     *  Supabase project) already hold 2.0-shaped assets/references — read
+     *  them, stamp the active brandId, write into praxis_* tables. */
+    const importFromV13Cloud = async () => {
+        if (!isCloud || !(storage instanceof SupabaseProvider)) return;
+        setImportLog('Importing from Lumina V1.3 cloud…');
+        try {
+            const [assetRows, refRows] = await Promise.all([
+                storage.readLegacyTable<{ id: string; data: Asset }>('assets'),
+                storage.readLegacyTable<{ id: string; data: Reference }>('refs'),
+            ]);
+            const assets = assetRows.map(r => r.data).filter(a => a?.name && Array.isArray(a.photos));
+            const references = refRows.map(r => r.data).filter(r => r?.image?.value);
+            await storage.importBulk({ assets, references });
+            setImportLog(`✓ Imported ${assets.length} products + ${references.length} references from V1.3 cloud`);
+            window.dispatchEvent(new CustomEvent(INVENTORY_CHANGED_EVENT));
+        } catch (err: any) {
+            setImportLog(`❌ Import failed: ${err?.message || err}`);
+        }
+        refresh();
+    };
+
     const uploadLocalToCloud = async () => {
         if (!isCloud) return;
         setImportLog('Uploading local data to cloud…');
@@ -102,6 +125,11 @@ export default function SystemView() {
             </p>
 
             <h2 style={{ fontSize: 16, marginTop: 24 }}>Data</h2>
+            {isCloud && (
+                <button style={{ ...S.btn, marginRight: 8 }} onClick={importFromV13Cloud}>
+                    ⇩ Import Greenington from Lumina V1.3 cloud
+                </button>
+            )}
             {isCloud && (
                 <button style={{ ...S.btnGhost, marginRight: 8 }} onClick={uploadLocalToCloud}>
                     ☁ Upload local data → cloud (one-time)
