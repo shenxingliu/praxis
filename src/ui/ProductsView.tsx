@@ -3,6 +3,7 @@ import { Asset } from '../domain/types';
 import { storage } from '../storage/local';
 import { getCurrentBrandId } from '../domain/brand';
 import { INVENTORY_CHANGED_EVENT } from './events';
+import { openLightbox } from './lightbox';
 import { S } from './styles';
 
 /**
@@ -23,7 +24,6 @@ export default function ProductsView() {
     const [assets, setAssets] = useState<Asset[]>([]);
     const [busy, setBusy] = useState('');
     const [notice, setNotice] = useState('');
-    const [lightbox, setLightbox] = useState<string | null>(null);
     const newRef = useRef<HTMLInputElement>(null);
     const addRef = useRef<HTMLInputElement>(null);
     const [addTarget, setAddTarget] = useState<Asset | null>(null);
@@ -126,12 +126,6 @@ export default function ProductsView() {
                     {busy ? `⏳ ${busy}` : notice}
                 </div>
             )}
-            {lightbox && (
-                <div onClick={() => setLightbox(null)}
-                    style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }}>
-                    <img src={lightbox} alt="" style={{ maxWidth: '92vw', maxHeight: '92vh', borderRadius: 12, boxShadow: '0 12px 60px rgba(0,0,0,0.5)' }} />
-                </div>
-            )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={S.label}>PRODUCTS · {assets.length}</span>
@@ -151,7 +145,7 @@ export default function ProductsView() {
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
                             {a.photos.map(p => (
                                 <div key={p.id} style={{ position: 'relative' }}>
-                                    <img src={p.image.value} alt="" onClick={() => setLightbox(p.image.value)}
+                                    <img src={p.image.value} alt="" onClick={() => openLightbox(p.image.value)}
                                         style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 6, display: 'block', cursor: 'zoom-in' }} />
                                     <button onClick={() => removePhoto(a, p.id)} title="Remove photo"
                                         style={{ position: 'absolute', top: 2, right: 2, border: 'none', borderRadius: 5, background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 8, cursor: 'pointer', padding: '1px 4px' }}>✕</button>

@@ -8,6 +8,7 @@ import {
 import { recordSignal, maybeDistill } from '../learning/learning';
 import { attributeFeedback } from '../brain/soul';
 import { BudgetExceededError } from '../engine/engine';
+import { openLightbox } from './lightbox';
 import { S, chip } from './styles';
 
 /**
@@ -174,7 +175,9 @@ export default function StudioView() {
                                 <button key={a.id} onClick={() => setSelectedAssets(prev => {
                                     const n = new Set(prev); n.has(a.id) ? n.delete(a.id) : n.add(a.id); return n;
                                 })} style={{ ...chip(on), display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    {a.photos[0] && <img src={a.photos[0].image.value} alt="" style={{ width: 22, height: 22, borderRadius: 4, objectFit: 'cover' }} />}
+                                    {a.photos[0] && <img src={a.photos[0].image.value} alt=""
+                                        onClick={e => { e.stopPropagation(); openLightbox(a.photos[0].image.value); }}
+                                        style={{ width: 22, height: 22, borderRadius: 4, objectFit: 'cover', cursor: 'zoom-in' }} />}
                                     {a.name}
                                 </button>
                             );
@@ -251,10 +254,15 @@ export default function StudioView() {
                         {moodDrafts.length > 0 && (
                             <div style={{ display: 'flex', gap: 8 }}>
                                 {moodDrafts.map(d => (
-                                    <button key={d.id} onClick={() => anchor(d.id)} title="Anchor this mood"
-                                        style={{ padding: 2, borderRadius: 10, cursor: 'pointer', background: '#fff', border: job.plan!.moodAnchorResultId === d.id ? '2.5px solid #059669' : '1px solid #e4e4e7' }}>
-                                        <img src={d.image.value} alt="" style={{ width: 130, borderRadius: 8, display: 'block' }} />
-                                    </button>
+                                    <div key={d.id}
+                                        style={{ padding: 2, borderRadius: 10, background: '#fff', border: job.plan!.moodAnchorResultId === d.id ? '2.5px solid #059669' : '1px solid #e4e4e7' }}>
+                                        <img src={d.image.value} alt="" onClick={() => openLightbox(d.image.value)}
+                                            style={{ width: 130, borderRadius: 8, display: 'block', cursor: 'zoom-in' }} />
+                                        <button onClick={() => anchor(d.id)} disabled={!!busy}
+                                            style={{ ...S.btnGhost, width: '100%', marginTop: 3, fontSize: 10 }}>
+                                            {job.plan!.moodAnchorResultId === d.id ? '✓ Anchored' : '⚓ Anchor'}
+                                        </button>
+                                    </div>
                                 ))}
                             </div>
                         )}
@@ -278,7 +286,8 @@ export default function StudioView() {
                             const fb = feedback.get(r.id);
                             return (
                                 <div key={r.id} style={{ ...S.card, padding: 0, overflow: 'hidden' }}>
-                                    <img src={r.image.value} alt="" style={{ width: '100%', display: 'block' }} />
+                                    <img src={r.image.value} alt="" onClick={() => openLightbox(r.image.value)}
+                                        style={{ width: '100%', display: 'block', cursor: 'zoom-in' }} />
                                     <div style={{ padding: '6px 10px', display: 'flex', justifyContent: 'space-between' }}>
                                         <span style={{ display: 'flex', gap: 8 }}>
                                             <button onClick={() => rate(r, 'like')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, opacity: fb === 'like' ? 1 : 0.35 }}>👍</button>

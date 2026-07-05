@@ -7,6 +7,7 @@ import {
 } from '../brain/soul';
 import { TasteCandidate, getCandidatePool, recordPick, analyzeTaste } from '../brain/calibrate';
 import { exportBrandBook } from '../brain/brandBook';
+import { openLightbox } from './lightbox';
 import { S, chip } from './styles';
 
 /**
@@ -232,8 +233,10 @@ const CalibratePanel: React.FC = () => {
                 <div style={{ display: 'flex', gap: 12 }}>
                     {[{ me: a, other: b }, { me: b, other: a }].map(({ me, other }, i) => (
                         <button key={i} onClick={() => pick(me, other)}
-                            style={{ padding: 4, borderRadius: 14, cursor: 'pointer', border: '1px solid #e4e4e7', background: '#fff' }}>
+                            style={{ position: 'relative', padding: 4, borderRadius: 14, cursor: 'pointer', border: '1px solid #e4e4e7', background: '#fff' }}>
                             <img src={me.image} alt="" style={{ width: 280, height: 280, objectFit: 'cover', borderRadius: 10, display: 'block' }} />
+                            <span onClick={e => { e.stopPropagation(); openLightbox(me.image); }} title="View full size"
+                                style={{ position: 'absolute', top: 10, right: 10, background: 'rgba(0,0,0,0.45)', color: '#fff', borderRadius: 8, padding: '2px 7px', fontSize: 13, cursor: 'zoom-in' }}>🔍</span>
                         </button>
                     ))}
                 </div>

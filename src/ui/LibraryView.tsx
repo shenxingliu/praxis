@@ -10,6 +10,7 @@ import {
     TransferLevel, LEVEL_LABEL, FusionDraft, FusionCombo,
     synthesizeReference, keepFusion, proposeCombos, recordFusionVerdict,
 } from '../engine/fusion';
+import { openLightbox } from './lightbox';
 import { S, chip } from './styles';
 
 /**
@@ -38,8 +39,6 @@ export default function LibraryView() {
     const [busy, setBusy] = useState('');
     /** notice = outcome message (✓/❌/…). Never gates anything. */
     const [notice, setNotice] = useState('');
-    /** lightbox = full-size image viewer (click any image to open). */
-    const [lightbox, setLightbox] = useState<string | null>(null);
     const fileRef = useRef<HTMLInputElement>(null);
 
     // Fusion Lab state
@@ -221,15 +220,6 @@ export default function LibraryView() {
                     {busy ? `⏳ ${busy}` : notice}
                 </div>
             )}
-            {lightbox && (
-                <div onClick={() => setLightbox(null)}
-                    style={{
-                        position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.82)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out',
-                    }}>
-                    <img src={lightbox} alt="" style={{ maxWidth: '92vw', maxHeight: '92vh', borderRadius: 12, boxShadow: '0 12px 60px rgba(0,0,0,0.5)' }} />
-                </div>
-            )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={S.label}>REFERENCES · {refs.length}</span>
                 <button style={S.btn} onClick={() => fileRef.current?.click()}>＋ Upload references</button>
@@ -240,7 +230,7 @@ export default function LibraryView() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
                 {refs.map(r => (
                     <div key={r.id} style={{ ...S.card, padding: 0, overflow: 'hidden', position: 'relative' }}>
-                        <img src={r.image.value} alt={r.name} onClick={() => setLightbox(r.image.value)}
+                        <img src={r.image.value} alt={r.name} onClick={() => openLightbox(r.image.value)}
                             style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block', cursor: 'zoom-in' }} />
                         <div style={{ padding: '5px 8px', fontSize: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
@@ -294,7 +284,7 @@ export default function LibraryView() {
                 </div>
                 {draft && (
                     <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                        <img src={draft.image} alt="fusion draft" onClick={() => setLightbox(draft.image)}
+                        <img src={draft.image} alt="fusion draft" onClick={() => openLightbox(draft.image)}
                             style={{ width: 260, borderRadius: 10, cursor: 'zoom-in' }} />
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12 }}>
                             <span style={{ fontWeight: 700 }}>Generation {draft.generation}</span>
@@ -336,7 +326,8 @@ export default function LibraryView() {
                     return (
                         <div key={el.id} style={{ ...S.card, display: 'flex', gap: 10, opacity: el.enabled ? 1 : 0.45, border: on ? '1.5px solid #18181b' : undefined }}>
                             <input type="checkbox" checked={on} onChange={() => toggleSelect(el.id)} style={{ alignSelf: 'flex-start', marginTop: 4, cursor: 'pointer' }} title="Select for Fusion Lab" />
-                            {src && <img src={src.image.value} alt="" style={{ width: 54, height: 54, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />}
+                            {src && <img src={src.image.value} alt="" onClick={() => openLightbox(src.image.value)}
+                                style={{ width: 54, height: 54, borderRadius: 8, objectFit: 'cover', flexShrink: 0, cursor: 'zoom-in' }} />}
                             <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: '#71717a' }}>
                                     {TYPE_LABEL[el.type]} · w{el.weight.toFixed(1)}

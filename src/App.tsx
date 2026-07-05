@@ -5,6 +5,7 @@ import LibraryView from './ui/LibraryView';
 import KnowledgeView from './ui/KnowledgeView';
 import SystemView from './ui/SystemView';
 import { S } from './ui/styles';
+import { LightboxHost } from './ui/lightbox';
 import { Brand } from './domain/types';
 import {
     listBrands, getCurrentBrandId, setCurrentBrandId, createBrand,
@@ -38,6 +39,7 @@ export default function App() {
 
     return (
         <div style={S.page}>
+            <LightboxHost />
             <style>{`
                 button { transition: opacity .15s ease, transform .06s ease; }
                 button:not(:disabled):hover { opacity: .8; }
