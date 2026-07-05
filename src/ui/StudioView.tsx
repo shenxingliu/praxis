@@ -115,7 +115,31 @@ export default function StudioView() {
         setJob(await closeJob(job));
     });
 
-    const reset = () => { setJob(null); setResults([]); setBrief(''); setFeedback(new Map()); };
+    const reset = () => { setJob(null); setResults([]); setBrief(''); setFeedback(new Map()); setMoodDrafts([]); };
+
+    /** Step back one stage — every decision is reversible. */
+    const back = async () => {
+        if (!job) return;
+        const s = job.stage;
+        if (s === 'concepts') {
+            // Back to the brief: keep the text, abandon this job's concepts.
+            setBrief(job.brief);
+            const j = { ...job, stage: 'brief' as const, updatedAt: Date.now() };
+            await storage.upsertJob(j);
+            setJob(null);
+            return;
+        }
+        const prev: Partial<PraxisJob> =
+            s === 'plan' ? { stage: 'concepts', plan: undefined, chosenConceptId: undefined }
+            : s === 'execute' ? { stage: 'plan' }
+            : s === 'review' || s === 'done' ? { stage: 'execute', review: undefined }
+            : {};
+        if (!prev.stage) return;
+        const j = { ...job, ...prev, updatedAt: Date.now() } as PraxisJob;
+        await storage.upsertJob(j);
+        setJob(j);
+        if (prev.stage === 'plan') setResults([]);
+    };
 
     const rate = async (r: GenerationResult, rating: 'like' | 'dislike') => {
         const reason = rating === 'dislike'
@@ -152,7 +176,12 @@ export default function StudioView() {
                         }}>{STAGE_LABEL[s]}</span>
                     </React.Fragment>
                 ))}
-                {job && <button style={{ ...S.btnGhost, marginLeft: 'auto' }} onClick={reset}>New job</button>}
+                {job && (
+                    <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                        <button style={S.btnGhost} disabled={!!busy} onClick={back} title="Step back one stage">← Back</button>
+                        <button style={S.btnGhost} onClick={reset}>New job</button>
+                    </span>
+                )}
             </div>
 
             {busy && <div style={{ ...S.card, fontSize: 12, color: '#52525b' }}>⏳ {busy}</div>}
