@@ -99,6 +99,47 @@ Output JSON: { "elements": [ { "lens", "concept", "analysis", "manifestation", "
     return elements;
 }
 
+/** Re-decompose ONE reference: wipe its old concepts, extract fresh. */
+export async function redecomposeReference(ref: Reference): Promise<Element[]> {
+    const all = await storage.listElements();
+    for (const el of all.filter(e => e.sourceRefId === ref.id)) {
+        await storage.deleteElement(el.id);
+    }
+    return decomposeReference(ref);
+}
+
+/**
+ * Rebuild the whole library from scratch: wipe every concept, re-decompose
+ * every inline reference sequentially (the dedupe-aware prompt keeps the
+ * result lean by construction), then auto-curate if it still grew fat.
+ * Zero manual selection required.
+ */
+export async function rebuildLibrary(
+    onStatus?: (text: string) => void
+): Promise<{ refs: number; elements: number; curated: number }> {
+    onStatus?.('Wiping old concepts…');
+    for (const el of await storage.listElements()) {
+        await storage.deleteElement(el.id);
+    }
+    const refs = (await storage.listReferences())
+        .filter(r => r.image.kind === 'data' && r.source !== 'promoted');
+    let total = 0;
+    for (let i = 0; i < refs.length; i++) {
+        onStatus?.(`Decomposing ${i + 1}/${refs.length}: ${refs[i].name}…`);
+        try {
+            total += (await decomposeReference(refs[i])).length;
+        } catch (err) {
+            console.warn('[rebuild] failed for', refs[i].name, err);
+        }
+    }
+    let curated = 0;
+    if (total > 40) {
+        onStatus?.('Auto-curating…');
+        try { curated = (await curateLibrary()).disabled; } catch { /* best-effort */ }
+    }
+    return { refs: refs.length, elements: total, curated };
+}
+
 /**
  * Curator agent — one pass over the whole library:
  * merges near-duplicates (keeps the strongest wording, disables the rest)
@@ -148,5 +189,13 @@ export async function decomposeAllPending(
             console.warn('[decompose] failed for', refs[i].name, err);
         }
     }
+    // Anti-hoarding: if the library got fat, auto-curate without asking.
+    try {
+        const enabled = (await storage.listElements()).filter(e => e.enabled);
+        if (enabled.length > 40) {
+            onStatus?.('Auto-curating…');
+            await curateLibrary();
+        }
+    } catch { /* best-effort */ }
     return { refs: refs.length, elements: total };
 }

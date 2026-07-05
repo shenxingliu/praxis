@@ -2,7 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Element, ElementType, Reference } from '../domain/types';
 import { storage } from '../storage/local';
 import { getCurrentBrandId } from '../domain/brand';
-import { decomposeReference, decomposeAllPending, curateLibrary } from '../engine/decompose';
+import {
+    decomposeReference, decomposeAllPending, curateLibrary,
+    redecomposeReference, rebuildLibrary,
+} from '../engine/decompose';
 import {
     TransferLevel, LEVEL_LABEL, FusionDraft, FusionCombo,
     synthesizeReference, keepFusion, proposeCombos,
@@ -144,6 +147,25 @@ export default function LibraryView() {
         } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
     };
 
+    const redo = async (r: Reference) => {
+        setBusy(`Re-decomposing ${r.name}…`);
+        try {
+            const els = await redecomposeReference(r);
+            setBusy(`✓ ${r.name} → ${els.length} fresh concepts`);
+            refresh();
+        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
+    };
+
+    const rebuild = async () => {
+        if (!window.confirm('Rebuild the whole concept library?\n\nAll current concepts are wiped and every reference is re-decomposed with dedupe + auto-curation. No selection needed.')) return;
+        try {
+            const r = await rebuildLibrary(setBusy);
+            setBusy(`♻️ Rebuilt: ${r.refs} refs → ${r.elements} concepts${r.curated > 0 ? ` (auto-curated ${r.curated})` : ''}`);
+            setSelected(new Set());
+            refresh();
+        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
+    };
+
     const keep = async () => {
         if (!draft) return;
         setBusy('Saving…');
@@ -177,6 +199,8 @@ export default function LibraryView() {
                         </div>
                         <button onClick={() => removeRef(r)} title="Delete"
                             style={{ position: 'absolute', top: 4, right: 4, border: 'none', borderRadius: 6, background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 10, cursor: 'pointer', padding: '2px 6px' }}>✕</button>
+                        <button onClick={() => redo(r)} title="Re-decompose — wipe this reference's concepts and extract fresh"
+                            style={{ position: 'absolute', top: 4, left: 4, border: 'none', borderRadius: 6, background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 10, cursor: 'pointer', padding: '2px 6px' }}>🧩</button>
                     </div>
                 ))}
                 {refs.length === 0 && <p style={{ fontSize: 12, color: '#a1a1aa' }}>No references yet. Upload aesthetic references — each is decomposed into reusable elements.</p>}
@@ -240,6 +264,9 @@ export default function LibraryView() {
                 <span style={S.label}>ELEMENTS · {elements.length}</span>
                 <button style={S.btnGhost} disabled={!!busy} onClick={curate} title="Merge near-duplicates, disable generic filler — nothing is deleted">
                     🧹 Curate
+                </button>
+                <button style={S.btnGhost} disabled={!!busy} onClick={rebuild} title="Wipe all concepts and re-decompose every reference — lean by construction, auto-curated, zero picking">
+                    ♻️ Rebuild library
                 </button>
                 <button style={chip(filter === 'all')} onClick={() => setFilter('all')}>All</button>
                 {(Object.keys(TYPE_LABEL) as ElementType[]).map(t => (
