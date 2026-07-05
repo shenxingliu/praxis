@@ -43,6 +43,7 @@ export interface StorageProvider {
     // Results + signals
     listResults(limit?: number): Promise<GenerationResult[]>;
     upsertResult(result: GenerationResult): Promise<void>;
+    deleteResult(id: string): Promise<void>;
     listSignals(onlyUndistilled?: boolean): Promise<FeedbackSignal[]>;
     addSignal(signal: FeedbackSignal): Promise<void>;
     markSignalsDistilled(ids: string[]): Promise<void>;

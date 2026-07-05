@@ -356,6 +356,7 @@ export default function StudioView() {
                                             <button onClick={() => rate(r, 'dislike')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, opacity: fb === 'dislike' ? 1 : 0.35 }}>👎</button>
                                         </span>
                                         <span style={{ display: 'flex', gap: 6 }}>
+                                            <button style={S.btnGhost} title="Save to Gallery (curated set, used for training export)" onClick={async () => { await recordSignal(r, 'save'); setBusy(''); setError(null); window.alert('✓ Saved — find it in Gallery.'); }}>★</button>
                                             <button style={S.btnGhost} title="Save this whole setup as a Quick preset — same look, swap products" onClick={() => toPreset(r)}>☆</button>
                                             <button style={S.btnGhost} onClick={() => download(r)}>⬇</button>
                                         </span>

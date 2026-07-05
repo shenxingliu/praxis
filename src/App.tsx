@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import StudioView from './ui/StudioView';
 import QuickView from './ui/QuickView';
+import GalleryView from './ui/GalleryView';
 import ProductsView from './ui/ProductsView';
 import LibraryView from './ui/LibraryView';
 import KnowledgeView from './ui/KnowledgeView';
@@ -12,7 +13,7 @@ import {
     listBrands, getCurrentBrandId, setCurrentBrandId, createBrand,
 } from './domain/brand';
 
-type Tab = 'studio' | 'quick' | 'products' | 'library' | 'knowledge' | 'system';
+type Tab = 'studio' | 'quick' | 'gallery' | 'products' | 'library' | 'knowledge' | 'system';
 
 export default function App() {
     const [tab, setTab] = useState<Tab>('studio');
@@ -59,15 +60,16 @@ export default function App() {
                     {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                     <option value="__new__">＋ New brand…</option>
                 </select>
-                {(['studio', 'quick', 'products', 'library', 'knowledge', 'system'] as Tab[]).map(t => (
+                {(['studio', 'quick', 'gallery', 'products', 'library', 'knowledge', 'system'] as Tab[]).map(t => (
                     <button key={t} onClick={() => setTab(t)} style={{ ...S.tab, ...(tab === t ? S.tabActive : {}) }}>
-                        {t === 'studio' ? 'Studio' : t === 'quick' ? 'Quick' : t === 'products' ? 'Products' : t === 'library' ? 'Library' : t === 'knowledge' ? 'Brain' : 'System'}
+                        {t === 'studio' ? 'Studio' : t === 'quick' ? 'Quick' : t === 'gallery' ? 'Gallery' : t === 'products' ? 'Products' : t === 'library' ? 'Library' : t === 'knowledge' ? 'Brain' : 'System'}
                     </button>
                 ))}
             </div>
             <div style={S.main}>
                 {tab === 'studio' && <StudioView />}
                 {tab === 'quick' && <QuickView />}
+                {tab === 'gallery' && <GalleryView />}
                 {tab === 'products' && <ProductsView />}
                 {tab === 'library' && <LibraryView />}
                 {tab === 'knowledge' && <KnowledgeView />}

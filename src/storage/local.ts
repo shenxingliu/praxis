@@ -96,6 +96,7 @@ export class LocalProvider implements StorageProvider {
         return all.sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
     }
     upsertResult(result: GenerationResult) { return put('results', result); }
+    deleteResult(id: string) { return del('results', id); }
 
     async listSignals(onlyUndistilled = false): Promise<FeedbackSignal[]> {
         const all = await getBrand<FeedbackSignal>('signals');

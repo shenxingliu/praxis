@@ -122,6 +122,7 @@ export class SupabaseProvider implements StorageProvider {
         return this.brandRows<GenerationResult>(TABLE.results, `&order=updated_at.desc&limit=${limit}`);
     }
     upsertResult(result: GenerationResult) { return this.upsert(TABLE.results, [{ id: result.id, data: result }]); }
+    deleteResult(id: string) { return this.remove(TABLE.results, id); }
 
     async listSignals(onlyUndistilled = false): Promise<FeedbackSignal[]> {
         const all = await this.brandRows<FeedbackSignal>(TABLE.signals);
