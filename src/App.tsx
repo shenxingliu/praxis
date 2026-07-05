@@ -38,6 +38,14 @@ export default function App() {
 
     return (
         <div style={S.page}>
+            <style>{`
+                button { transition: opacity .15s ease, transform .06s ease; }
+                button:not(:disabled):hover { opacity: .8; }
+                button:not(:disabled):active { transform: scale(.96); }
+                button:disabled { cursor: progress; }
+                @keyframes praxis-pulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
+                .praxis-running { animation: praxis-pulse 1.2s ease-in-out infinite; }
+            `}</style>
             <div style={S.topbar}>
                 <span style={S.brand}>Praxis</span>
                 <select

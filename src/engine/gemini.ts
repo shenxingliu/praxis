@@ -67,24 +67,37 @@ export const toInlinePart = (dataUrl: string): ImagePart => {
  * Direct mode calls Google straight with the local key.
  */
 async function restGenerate(model: string, body: unknown): Promise<any> {
+    // Hard timeout: a hung request must NEVER freeze the UI (busy-state
+    // buttons stay disabled until the promise settles).
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 120_000);
     let resp: Response;
-    if (isProxyMode()) {
-        resp = await fetch('/api/generate', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json', ...appApiHeaders() },
-            body: JSON.stringify({ model, body }),
-        });
-    } else {
-        const apiKey = getApiKey();
-        if (!apiKey) throw new Error('No API key. Set it in Settings or enable proxy mode.');
-        resp = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-            {
+    try {
+        if (isProxyMode()) {
+            resp = await fetch('/api/generate', {
                 method: 'POST',
-                headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
-                body: JSON.stringify(body),
-            }
-        );
+                headers: { 'content-type': 'application/json', ...appApiHeaders() },
+                body: JSON.stringify({ model, body }),
+                signal: controller.signal,
+            });
+        } else {
+            const apiKey = getApiKey();
+            if (!apiKey) throw new Error('No API key. Set it in Settings or enable proxy mode.');
+            resp = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+                {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+                    body: JSON.stringify(body),
+                    signal: controller.signal,
+                }
+            );
+        }
+    } catch (err: any) {
+        if (err?.name === 'AbortError') throw new Error('Request timed out (120s) — try again.');
+        throw err;
+    } finally {
+        clearTimeout(timer);
     }
     const text = await resp.text();
     if (!resp.ok) throw new Error(`Gemini ${resp.status}: ${text.slice(0, 300)}`);

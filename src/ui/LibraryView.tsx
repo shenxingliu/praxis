@@ -125,6 +125,21 @@ export default function LibraryView() {
         } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
     };
 
+    /** Full auto: curator picks combos → one is chosen at random (weighted
+     *  toward tension-forward) → synthesized. Only Keep/Discard remains. */
+    const fullAuto = async () => {
+        setBusy('Curator picking…');
+        setCombos([]);
+        setDraft(null);
+        try {
+            const cs = await proposeCombos(fusionNote.trim() || undefined);
+            if (cs.length === 0) throw new Error('No viable combos.');
+            const pick = cs[Math.min(cs.length - 1, Math.floor(Math.random() * cs.length))];
+            setCombos(cs);
+            await runCombo(pick);
+        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
+    };
+
     const runCombo = async (c: FusionCombo) => {
         const picked = elements.filter(e => c.elementIds.includes(e.id));
         setSelected(new Set(c.elementIds));
@@ -179,13 +194,26 @@ export default function LibraryView() {
         } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
     };
 
+    const isRunning = !!busy && !/^[✓❌🧹♻️]/.test(busy);
+
     return (
         <div style={{ maxWidth: 980, margin: '0 auto', padding: '22px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+            {busy && (
+                <div className={isRunning ? 'praxis-running' : undefined}
+                    style={{
+                        position: 'sticky', top: 8, zIndex: 10, fontSize: 12.5, fontWeight: 600,
+                        padding: '8px 14px', borderRadius: 10,
+                        background: busy.startsWith('❌') ? '#fef2f2' : isRunning ? '#fef3c7' : '#ecfdf5',
+                        color: busy.startsWith('❌') ? '#b91c1c' : isRunning ? '#92400e' : '#047857',
+                        border: '1px solid rgba(0,0,0,0.06)',
+                    }}>
+                    {isRunning ? `⏳ ${busy}` : busy}
+                </div>
+            )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={S.label}>REFERENCES · {refs.length}</span>
                 <button style={S.btn} onClick={() => fileRef.current?.click()}>＋ Upload references</button>
                 <button style={S.btnGhost} onClick={runPending}>Decompose pending</button>
-                {busy && <span style={{ fontSize: 11, color: '#a1a1aa' }}>{busy}</span>}
                 <input ref={fileRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={e => upload(e.target.files)} />
             </div>
 
@@ -219,6 +247,9 @@ export default function LibraryView() {
                     </button>
                     <button style={S.btn} disabled={!!busy} onClick={autoFuse} title="The curator picks 3 combinations for you — scored for productive tension, not similarity">
                         🤖 Auto-fuse
+                    </button>
+                    <button style={S.btn} disabled={!!busy} onClick={fullAuto} title="Zero decisions: curator picks the combo AND fuses it — you only Keep or Discard">
+                        🎲 Full auto
                     </button>
                 </div>
                 {combos.length > 0 && !draft && (
