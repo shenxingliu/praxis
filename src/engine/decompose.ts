@@ -4,62 +4,75 @@ import { getCurrentBrand, getCurrentBrandId } from '../domain/brand';
 import { generateJson } from './gemini';
 
 /**
- * Decomposition agent — the "art director's eye".
+ * Decomposition agent — the "creative director's eye".
  *
- * A reference image is not a black-box style blob: it gets decomposed into
- * 4-8 reusable semantic ELEMENTS (light / palette / composition / material
- * / mood / setting / prop / style), each promptable on its own and traced
- * back to its source pixels. Generation then recombines: "this image's
- * light + that image's palette + the product".
+ * A reference image is not read as a photographic checklist (light, props,
+ * palette) but analyzed through THREE LENSES into abstract, transferable
+ * concept cards:
+ *
+ *   VISUAL         the formal language — tension, rhythm, geometry, scale,
+ *                  emptiness/density, how the frame is organized as form
+ *   FEELING        the emotional/atmospheric essence — what it feels like
+ *                  to stand inside this image
+ *   COMMUNICATION  what the image argues — the claim it makes, the value
+ *                  it asserts, what it says without words
+ *
+ * Each concept carries a concrete MANIFESTATION so generation still gets
+ * something obeyable. Abstraction is what makes recombination transferable
+ * across contexts, products and even realisms.
  */
 
-const ELEMENT_TYPES: ElementType[] = [
-    'light', 'palette', 'composition', 'material', 'mood', 'setting', 'prop', 'style',
-];
+const LENSES: ElementType[] = ['visual', 'feeling', 'communication'];
 
-/** Which N/S/I soul fields each element type informs (for attribution). */
-const NSI_OF_TYPE: Record<ElementType, string[]> = {
-    light: ['sensation.light'],
-    palette: ['sensation.palette'],
-    composition: ['viewing.gaze_path', 'viewing.first_impression'],
-    material: ['sensation.tactile_implied'],
-    mood: ['sensation.atmosphere'],
-    setting: ['narrative.genre', 'sensation.atmosphere'],
-    prop: ['narrative.genre'],
-    style: ['narrative.cultural_lineage', 'narrative.temporality'],
+/** Which N/S/I soul axes each lens informs (for feedback attribution). */
+const NSI_OF_LENS: Record<ElementType, string[]> = {
+    visual: ['viewing.gaze_path', 'viewing.first_impression', 'sensation.meta'],
+    feeling: ['sensation.atmosphere', 'sensation.light', 'sensation.palette'],
+    communication: ['narrative.voice', 'narrative.position', 'narrative.truth_claim'],
 };
 
-interface RawElement {
-    type: string;
-    description: string;
+interface RawConcept {
+    lens: string;
+    concept: string;
+    analysis: string;
+    manifestation: string;
 }
 
 export async function decomposeReference(ref: Reference): Promise<Element[]> {
     if (ref.image.kind !== 'data') throw new Error('Only inline images can be decomposed.');
     const brand = await getCurrentBrand().catch(() => null);
 
-    const prompt = `You are the art director of a design studio${brand ? ` working for "${brand.name}" — ${brand.description}` : ''}.
-Decompose the attached reference image into REUSABLE VISUAL ELEMENTS a generation model can apply independently to other images.
+    const prompt = `You are the CREATIVE DIRECTOR of a design studio${brand ? ` working for "${brand.name}" — ${brand.description}` : ''}.
+Decompose the attached reference image into ABSTRACT, TRANSFERABLE CONCEPTS — not photographic facts. A concept must be an idea that could be re-applied to a completely different subject, context, or even level of realism.
 
-For each element:
-- type: one of ${ELEMENT_TYPES.join(' | ')}
-- description: 1-2 sentences, CONCRETE and promptable (specific hues, light direction and quality, named materials, compositional geometry). Never vague ("nice light" ✗; "low-angle warm golden side light casting long soft shadows, dust motes visible" ✓).
+Analyze through three lenses:
+- visual: the formal language. How the frame works as pure form — tension, rhythm, geometry, negative space, scale relationships, visual hierarchy. NOT "warm side light" but e.g. "weight resting on emptiness".
+- feeling: the emotional/atmospheric essence. What it feels like to inhabit this image. E.g. "the stillness after rain", "unhurried morning privacy".
+- communication: what the image ARGUES without words. The claim, the value assertion. E.g. "craft is a moral position", "luxury as restraint, not display".
 
-Extract 4-8 elements — only what is genuinely distinctive and transferable. Skip generic observations.
+For each concept output:
+- lens: visual | feeling | communication
+- concept: the abstract idea, 2-6 words, transferable to any subject
+- analysis: 1-2 sentences — why/how it works through this lens
+- manifestation: 1-2 sentences — how to CONCRETELY realize this concept in a new image (promptable: composition moves, light behavior, color logic)
 
-Output JSON: { "elements": [ { "type": string, "description": string } ] }`;
+Extract 2-3 concepts per lens (6-9 total). Only what is genuinely distinctive — skip generic observations.
 
-    const parsed = await generateJson<{ elements: RawElement[] }>(prompt, [ref.image.value]);
+Output JSON: { "elements": [ { "lens", "concept", "analysis", "manifestation" } ] }`;
+
+    const parsed = await generateJson<{ elements: RawConcept[] }>(prompt, [ref.image.value]);
     const now = Date.now();
     const elements: Element[] = (parsed?.elements ?? [])
-        .filter(e => ELEMENT_TYPES.includes(e.type as ElementType) && e.description?.trim())
+        .filter(e => LENSES.includes(e.lens as ElementType) && e.concept?.trim() && e.manifestation?.trim())
         .map(e => ({
             id: crypto.randomUUID(),
             brandId: getCurrentBrandId(),
-            type: e.type as ElementType,
-            description: e.description.trim(),
+            type: e.lens as ElementType,
+            concept: e.concept.trim(),
+            analysis: (e.analysis ?? '').trim(),
+            description: e.manifestation.trim(),
             sourceRefId: ref.id,
-            nsiKeys: NSI_OF_TYPE[e.type as ElementType] ?? [],
+            nsiKeys: NSI_OF_LENS[e.lens as ElementType] ?? [],
             weight: 1,
             enabled: true,
             createdAt: now,

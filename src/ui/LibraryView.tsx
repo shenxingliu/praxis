@@ -12,9 +12,7 @@ import { S, chip } from './styles';
  */
 
 const TYPE_LABEL: Record<ElementType, string> = {
-    light: '💡 Light', palette: '🎨 Palette', composition: '📐 Composition',
-    material: '🧱 Material', mood: '🌫 Mood', setting: '🏞 Setting',
-    prop: '🕯 Prop', style: '✒️ Style',
+    visual: '👁 Visual', feeling: '💫 Feeling', communication: '🗣 Communication',
 };
 
 const fileToDataUrl = (f: File): Promise<string> =>
@@ -130,8 +128,13 @@ export default function LibraryView() {
                             <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: '#71717a' }}>
                                     {TYPE_LABEL[el.type]} · w{el.weight.toFixed(1)}
+                                    {el.weight > 1 && <span style={{ color: '#059669' }}> ▲ rising</span>}
+                                    {el.weight < 0.9 && <span style={{ color: '#b91c1c' }}> ▼ fading</span>}
+                                    {!el.lastUsedAt && Date.now() - el.createdAt > 14 * 86400_000 && <span style={{ color: '#a1a1aa' }}> 😴 sleeping</span>}
                                 </div>
-                                <div style={{ fontSize: 11.5, marginTop: 3, lineHeight: 1.45 }}>{el.description}</div>
+                                <div style={{ fontSize: 12.5, fontWeight: 700, marginTop: 3 }}>{el.concept}</div>
+                                {el.analysis && <div style={{ fontSize: 10.5, color: '#71717a', marginTop: 2, lineHeight: 1.45 }}>{el.analysis}</div>}
+                                <div style={{ fontSize: 11, marginTop: 3, lineHeight: 1.45 }}>↳ {el.description}</div>
                                 <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                                     <button style={S.btnGhost} onClick={() => toggleElement(el)}>{el.enabled ? 'Disable' : 'Enable'}</button>
                                     <button style={S.btnGhost} onClick={() => removeElement(el)}>Delete</button>

@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Asset, Element, GenerationResult, PraxisJob } from '../domain/types';
 import { storage } from '../storage/local';
-import { startJob, proposeConcepts, makePlan, executeJob, reviewJob, closeJob } from '../studio/agents';
+import {
+    startJob, proposeConcepts, proposeWildcard, analyzeCompetitor, makePlan,
+    makeMoodboard, anchorMood, executeJob, executeCampaign, reviewJob, closeJob,
+} from '../studio/agents';
 import { recordSignal, maybeDistill } from '../learning/learning';
 import { attributeFeedback } from '../brain/soul';
 import { BudgetExceededError } from '../engine/engine';
@@ -30,6 +33,9 @@ export default function StudioView() {
     const [busy, setBusy] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [feedback, setFeedback] = useState<Map<string, 'like' | 'dislike'>>(new Map());
+    const [moodDrafts, setMoodDrafts] = useState<GenerationResult[]>([]);
+    const [competitorNote, setCompetitorNote] = useState('');
+    const competitorRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         storage.listAssets().then(setAssets);
@@ -53,6 +59,42 @@ export default function StudioView() {
     const choose = (conceptId: string) => guard('Producer drafting the plan…', async () => {
         if (!job) return;
         setJob(await makePlan(job, conceptId, Array.from(selectedAssets)));
+    });
+
+    const wildcard = () => guard('Colliding concepts…', async () => {
+        if (!job) return;
+        setJob(await proposeWildcard(job));
+    });
+
+    const reverseBrief = (files: FileList | null) => guard('Decoding the competitor…', async () => {
+        const f = files?.[0];
+        if (!f) return;
+        const dataUrl = await new Promise<string>((res, rej) => {
+            const r = new FileReader();
+            r.onload = () => res(String(r.result));
+            r.onerror = rej;
+            r.readAsDataURL(f);
+        });
+        const { argument, counterBrief } = await analyzeCompetitor(dataUrl);
+        setCompetitorNote(argument);
+        setBrief(counterBrief);
+    });
+
+    const moodboard = () => guard('Moodboard…', async () => {
+        if (!job) return;
+        setMoodDrafts(await makeMoodboard(job, setBusy));
+    });
+
+    const anchor = (resultId: string) => guard('Anchoring…', async () => {
+        if (!job) return;
+        setJob(await anchorMood(job, resultId));
+    });
+
+    const campaign = () => guard('Campaign kit…', async () => {
+        if (!job) return;
+        const { job: j, results: rs } = await executeCampaign(job, setBusy);
+        setResults(rs);
+        setJob(j);
     });
 
     const execute = () => guard('Executing…', async () => {
@@ -139,14 +181,31 @@ export default function StudioView() {
                         })}
                         {assets.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No products yet — import them in System.</span>}
                     </div>
-                    <button style={{ ...S.btn, alignSelf: 'flex-start' }} disabled={!!busy} onClick={begin}>
-                        Start — propose concepts
-                    </button>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <button style={S.btn} disabled={!!busy} onClick={begin}>
+                            Start — propose concepts
+                        </button>
+                        <button style={S.btnGhost} disabled={!!busy} onClick={() => competitorRef.current?.click()}>
+                            ↩ Reverse brief — answer a competitor's image
+                        </button>
+                        <input ref={competitorRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => reverseBrief(e.target.files)} />
+                    </div>
+                    {competitorNote && (
+                        <div style={{ fontSize: 11, color: '#92400e', lineHeight: 1.5 }}>
+                            Their argument: {competitorNote} — counter-brief drafted above; edit it, pick products, then Start.
+                        </div>
+                    )}
                 </div>
             )}
 
             {/* Stage 2 — concepts */}
             {job && stage === 'concepts' && (
+                <>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button style={S.btnGhost} disabled={!!busy} onClick={wildcard} title="Collide two contradictory concepts">
+                        ⚡ Wildcard — collide two opposites
+                    </button>
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
                     {job.concepts.map(c => (
                         <div key={c.id} style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -156,9 +215,9 @@ export default function StudioView() {
                             </div>
                             <div style={{ fontSize: 11.5, lineHeight: 1.5 }}>{c.rationale}</div>
                             <div style={{ fontSize: 10.5, color: '#71717a', lineHeight: 1.5 }}>{c.nsiSummary}</div>
-                            {c.elementIds.length > 0 && (
+                            {c.elementIds.some(id => elementById(id)) && (
                                 <div style={{ fontSize: 10, color: '#71717a' }}>
-                                    Recombines: {c.elementIds.map(id => elementById(id)?.type ?? '?').join(' + ')}
+                                    Recombines: {c.elementIds.map(id => elementById(id)?.concept).filter(Boolean).map(s => `“${s}”`).join(' + ')}
                                 </div>
                             )}
                             <button style={{ ...S.btn, marginTop: 'auto' }} disabled={!!busy} onClick={() => choose(c.id)}>
@@ -167,6 +226,7 @@ export default function StudioView() {
                         </div>
                     ))}
                 </div>
+                </>
             )}
 
             {/* Stage 3 — plan */}
@@ -180,10 +240,32 @@ export default function StudioView() {
                         ratio {job.plan.params.ratio} · purpose {job.plan.params.purpose} · {job.plan.elementIds.length} elements ·
                         note: “{job.plan.params.note}”
                     </div>
+                    {/* Moodboard — pick direction on visuals, cheap flash drafts */}
+                    <div style={{ borderTop: '1px solid #f4f4f5', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <button style={S.btnGhost} disabled={!!busy} onClick={moodboard}>
+                                🎨 Moodboard — 3 cheap drafts first
+                            </button>
+                            {job.plan.moodAnchorResultId && <span style={{ fontSize: 10, color: '#059669' }}>✓ mood anchored — its pixels will lead the final shot</span>}
+                        </div>
+                        {moodDrafts.length > 0 && (
+                            <div style={{ display: 'flex', gap: 8 }}>
+                                {moodDrafts.map(d => (
+                                    <button key={d.id} onClick={() => anchor(d.id)} title="Anchor this mood"
+                                        style={{ padding: 2, borderRadius: 10, cursor: 'pointer', background: '#fff', border: job.plan!.moodAnchorResultId === d.id ? '2.5px solid #059669' : '1px solid #e4e4e7' }}>
+                                        <img src={d.image.value} alt="" style={{ width: 130, borderRadius: 8, display: 'block' }} />
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         <span style={S.label}>VARIANTS</span>
                         {[1, 2, 3].map(n => <button key={n} style={chip(count === n)} onClick={() => setCount(n)}>{n}</button>)}
                         <button style={S.btn} disabled={!!busy} onClick={execute}>Approve — execute</button>
+                        <button style={S.btnGhost} disabled={!!busy} onClick={campaign} title="hero 16:9 + pdp 4:3 + social 1:1 + seasonal 3:4">
+                            📦 Campaign kit — all 4 purposes
+                        </button>
                     </div>
                 </div>
             )}

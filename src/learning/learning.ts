@@ -42,6 +42,20 @@ export async function recordSignal(
     if ((type === 'save' || type === 'export') && !result.adopted) {
         await storage.upsertResult({ ...result, adopted: true });
     }
+    // Concept half-life: adopted/liked generations bump the weight of every
+    // concept they recombined; dislikes decay it. The library curates itself.
+    if (result.elementIds?.length) {
+        const delta = SIGNAL_WEIGHT[type] >= 2 ? 0.1 : SIGNAL_WEIGHT[type] < 0 ? -0.1 : 0;
+        if (delta !== 0) {
+            const all = await storage.listElements();
+            for (const el of all.filter(e => result.elementIds!.includes(e.id))) {
+                await storage.upsertElement({
+                    ...el,
+                    weight: Math.max(0.1, Math.round((el.weight + delta) * 10) / 10),
+                });
+            }
+        }
+    }
     // Strong positive → promote the image into the reference pool so future
     // generations literally see what "good" looks like (LoRA door: these
     // promoted refs + their result metadata double as a training set).

@@ -65,8 +65,8 @@ ${job.brief}
 ### BRAND SOUL (locked fields are red-lines) ###
 ${(soul?.fields ?? []).filter(f => f.value.trim()).map(f => `${f.key}${f.locked ? ' [LOCKED]' : ''} (w${f.weight}): ${f.value}`).join('\n') || '(no soul yet — derive from brand description)'}
 ${complaints}
-### ELEMENT LIBRARY (decomposed fragments available for recombination) ###
-${elements.map(e => `- id=${e.id} [${e.type}] (w${e.weight}) ${e.description.slice(0, 140)}`).join('\n') || '(empty — concepts must describe environments from scratch)'}
+### CONCEPT LIBRARY (abstract ideas decomposed from brand references — recombine them) ###
+${elements.map(e => `- id=${e.id} [${e.type}] "${e.concept}" — ${e.description.slice(0, 120)}`).join('\n') || '(empty — invent concepts from scratch)'}
 
 ### CONTEXT MODES (the brand's environment grammars) ###
 ${brand.contextModes.map(m => `- id=${m.id} [${m.realism}] ${m.label}: ${m.directive}`).join('\n') || '(none — propose your own realism per concept)'}
@@ -101,6 +101,71 @@ Output JSON: { "concepts": [ { "title", "rationale", "nsiSummary", "elementIds":
     return next;
 }
 
+/** Concept collision (wildcard): deliberately recombine two CONTRADICTORY
+ *  concepts — creative tension from conflict, the way real studios find
+ *  their best work in "wrong" combinations. Appends 1 collision concept. */
+export async function proposeWildcard(job: PraxisJob): Promise<PraxisJob> {
+    const brand = await getCurrentBrand();
+    const soul = await getBrandSoul();
+    const elements = (await storage.listElements()).filter(e => e.enabled);
+
+    const prompt = `You are the CREATIVE DIRECTOR in a late-night experimental mood, working for "${brand.name}" — ${brand.description}
+
+### CLIENT BRIEF ###
+${job.brief}
+
+### CONCEPT LIBRARY ###
+${elements.map(e => `- id=${e.id} [${e.type}] "${e.concept}" — ${e.description.slice(0, 100)}`).join('\n') || '(empty — invent two contradictory concepts yourself)'}
+
+### BRAND RED-LINES (never violate) ###
+${(soul?.fields ?? []).filter(f => f.locked && f.value.trim()).map(f => `- ${f.key}: ${f.value}`).join('\n') || '(none)'}
+
+### TASK ###
+Pick (or invent) TWO concepts that CONTRADICT each other — opposing energies, incompatible logics. Then design ONE direction where their collision produces something the brand has never dared but would recognize as its own. The tension must be productive, not chaotic.
+
+Output JSON: { "title": string, "rationale": string (name the two colliding concepts and why the collision works), "nsiSummary": string, "elementIds": [] (library ids actually used, may be empty), "contextModeId": string|null, "realism": "photographic"|"surreal"|"abstract" }`;
+
+    const c = await generateJson<Record<string, unknown>>(prompt);
+    const validElement = new Set(elements.map(e => e.id));
+    const validMode = new Set(brand.contextModes.map(m => m.id));
+    const wildcard: ConceptProposal = {
+        id: crypto.randomUUID(),
+        title: `⚡ ${String(c.title ?? 'Collision')}`,
+        rationale: String(c.rationale ?? ''),
+        nsiSummary: String(c.nsiSummary ?? ''),
+        elementIds: (Array.isArray(c.elementIds) ? c.elementIds : []).filter((id: unknown) => validElement.has(String(id))).map(String),
+        contextModeId: validMode.has(String(c.contextModeId)) ? String(c.contextModeId) : undefined,
+        realism: REALISMS.includes(c.realism as Realism) ? c.realism as Realism : 'surreal',
+    };
+    const next: PraxisJob = { ...job, concepts: [...job.concepts, wildcard], updatedAt: Date.now() };
+    await storage.upsertJob(next);
+    return next;
+}
+
+/** Reverse brief: decompose a competitor's image — what does it ARGUE, and
+ *  how should OUR brand answer in its own voice? Returns a ready brief. */
+export async function analyzeCompetitor(imageDataUrl: string): Promise<{ argument: string; counterBrief: string }> {
+    const brand = await getCurrentBrand();
+    const soul = await getBrandSoul();
+    const parsed = await generateJson<{ argument: string; counterBrief: string }>(
+        `You are a brand strategist for "${brand.name}" — ${brand.description}
+
+### OUR SOUL (voice + position) ###
+${(soul?.fields ?? []).filter(f => f.axis === 'narrative' && f.value.trim()).map(f => `${f.key}: ${f.value}`).join('\n') || '(derive from description)'}
+
+The attached image is a COMPETITOR's marketing image.
+1. argument: In 2-3 sentences, decode what this image ARGUES — the claim it makes, the value it asserts, who it flatters.
+2. counterBrief: Write a production brief (3-4 sentences) for OUR studio that ANSWERS this argument in our own voice — not imitating, not merely opposing, but reframing the conversation on our terms.
+
+Output JSON: { "argument": string, "counterBrief": string }`,
+        [imageDataUrl]
+    );
+    return {
+        argument: String(parsed?.argument ?? ''),
+        counterBrief: String(parsed?.counterBrief ?? ''),
+    };
+}
+
 // ---------------------------------------------------------------------------
 // Stage 2 — Producer agent
 // ---------------------------------------------------------------------------
@@ -120,7 +185,7 @@ CHOSEN CONCEPT: ${concept.title} — ${concept.rationale}
 N/S/I: ${concept.nsiSummary}
 REALISM: ${concept.realism}
 PRODUCTS: ${assets.map(a => `${a.name}${a.category ? ` (${a.category})` : ''}`).join('; ') || '(none picked)'}
-ELEMENTS TO RECOMBINE: ${elements.map(e => `[${e.type}] ${e.description.slice(0, 100)}`).join('; ') || '(none)'}
+CONCEPTS TO RECOMBINE: ${elements.map(e => `[${e.type}] "${e.concept}" (${e.description.slice(0, 80)})`).join('; ') || '(none)'}
 
 ### TASK ###
 - steps: 3-5 short production steps a human can sanity-check (what happens, in order)
@@ -159,8 +224,51 @@ Output JSON: { "steps": [], "ratio": string, "note": string, "purpose": string }
 }
 
 // ---------------------------------------------------------------------------
+// Stage 2.5 — Moodboard (cheap flash drafts: pick direction on VISUALS,
+// not text; the chosen draft anchors the final pro execution)
+// ---------------------------------------------------------------------------
+
+export async function makeMoodboard(
+    job: PraxisJob,
+    onStatus?: (text: string) => void
+): Promise<GenerationResult[]> {
+    if (!job.plan) throw new Error('No production plan.');
+    const drafts: GenerationResult[] = [];
+    for (let i = 0; i < 3; i++) {
+        onStatus?.(`Moodboard draft ${i + 1}/3 (flash)…`);
+        try {
+            const r = await generate(
+                { ...job.plan.params, modelTier: 'flash', note: `${job.plan.params.note ?? ''} — mood study variant ${i + 1}, prioritize atmosphere over product perfection.` },
+                job.plan.assetIds, onStatus
+            );
+            await storage.upsertResult({ ...r, jobId: job.id });
+            drafts.push({ ...r, jobId: job.id });
+        } catch (err) {
+            console.warn('[moodboard] draft failed:', err);
+        }
+    }
+    return drafts;
+}
+
+/** Anchor a moodboard draft: its pixels lead the final execution. */
+export async function anchorMood(job: PraxisJob, resultId: string): Promise<PraxisJob> {
+    if (!job.plan) throw new Error('No production plan.');
+    const next: PraxisJob = { ...job, plan: { ...job.plan, moodAnchorResultId: resultId }, updatedAt: Date.now() };
+    await storage.upsertJob(next);
+    return next;
+}
+
+// ---------------------------------------------------------------------------
 // Stage 3 — Execution
 // ---------------------------------------------------------------------------
+
+async function anchorImageOf(job: PraxisJob): Promise<string[]> {
+    const id = job.plan?.moodAnchorResultId;
+    if (!id) return [];
+    const results = await storage.listResults(500);
+    const anchor = results.find(r => r.id === id && r.image.kind === 'data');
+    return anchor ? [anchor.image.value] : [];
+}
 
 export async function executeJob(
     job: PraxisJob,
@@ -168,12 +276,53 @@ export async function executeJob(
     onStatus?: (text: string) => void
 ): Promise<{ job: PraxisJob; results: GenerationResult[] }> {
     if (!job.plan) throw new Error('No production plan.');
+    const anchor = await anchorImageOf(job);
     const results: GenerationResult[] = [];
     for (let i = 0; i < count; i++) {
         onStatus?.(count > 1 ? `Executing ${i + 1}/${count}…` : 'Executing…');
-        const r = await generate(job.plan.params, job.plan.assetIds, onStatus);
+        const r = await generate(job.plan.params, job.plan.assetIds, onStatus, anchor);
         await storage.upsertResult({ ...r, jobId: job.id });
         results.push({ ...r, jobId: job.id });
+    }
+    const next: PraxisJob = {
+        ...job,
+        stage: 'execute',
+        resultIds: [...job.resultIds, ...results.map(r => r.id)],
+        updatedAt: Date.now(),
+    };
+    await storage.upsertJob(next);
+    return { job: next, results };
+}
+
+/** Campaign kit: ONE concept executed across all four purposes with
+ *  purpose-appropriate ratios — a brand-consistent set in one job. */
+const CAMPAIGN_SET: Array<{ purpose: NonNullable<GenerationParams['purpose']>; ratio: GenerationParams['ratio'] }> = [
+    { purpose: 'hero', ratio: '16:9' },
+    { purpose: 'pdp', ratio: '4:3' },
+    { purpose: 'social', ratio: '1:1' },
+    { purpose: 'seasonal', ratio: '3:4' },
+];
+
+export async function executeCampaign(
+    job: PraxisJob,
+    onStatus?: (text: string) => void
+): Promise<{ job: PraxisJob; results: GenerationResult[] }> {
+    if (!job.plan) throw new Error('No production plan.');
+    const anchor = await anchorImageOf(job);
+    const results: GenerationResult[] = [];
+    for (let i = 0; i < CAMPAIGN_SET.length; i++) {
+        const slot = CAMPAIGN_SET[i];
+        onStatus?.(`Campaign ${i + 1}/4 — ${slot.purpose}…`);
+        try {
+            const r = await generate(
+                { ...job.plan.params, purpose: slot.purpose, ratio: slot.ratio },
+                job.plan.assetIds, onStatus, anchor
+            );
+            await storage.upsertResult({ ...r, jobId: job.id });
+            results.push({ ...r, jobId: job.id });
+        } catch (err) {
+            console.warn('[campaign] slot failed:', slot.purpose, err);
+        }
     }
     const next: PraxisJob = {
         ...job,

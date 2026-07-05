@@ -65,7 +65,10 @@ export class BudgetExceededError extends Error {
 export async function generate(
     params: GenerationParams,
     assetIds: string[],
-    onStatus?: (text: string) => void
+    onStatus?: (text: string) => void,
+    /** Extra reference images (data URLs) attached FIRST — e.g. the chosen
+     *  moodboard anchor whose pixels should dominate the mood. */
+    extraRefImages: string[] = []
 ): Promise<GenerationResult> {
     const recipe = RECIPES[params.outputType];
 
@@ -131,9 +134,15 @@ export async function generate(
             .map(p => p.image.value)
     );
     const refImages = [
+        ...extraRefImages,
         ...(plate ? [plate.image.value] : []),
         ...aesthetic.map(r => r.image.value),
     ];
+
+    // Concept half-life: touch lastUsedAt on every concept used.
+    for (const el of elements) {
+        storage.upsertElement({ ...el, lastUsedAt: Date.now() }).catch(() => {});
+    }
 
     // ---- Generate ----
     onStatus?.('Generating…');
@@ -202,11 +211,12 @@ FIDELITY RULE: reconstruct the exact product — silhouette, geometry, color, ma
         if (!brand) return '';
         return `\n### BRAND ###\n${brand.name}: ${brand.description}`;
     },
-    /** The recombination directive — elements pulled from decomposed refs. */
+    /** The recombination directive — concept cards from decomposed refs. */
     elements(elements: Element[]): string {
         if (elements.length === 0) return '';
-        const lines = elements.map(e => `- ${e.type.toUpperCase()}: ${e.description}`);
-        return `\n### RECOMBINATION (fragments extracted from the attached aesthetic references — apply each faithfully) ###\n${lines.join('\n')}`;
+        const lines = elements.map(e =>
+            `- [${e.type.toUpperCase()}] "${e.concept}" — realize it: ${e.description}`);
+        return `\n### CONCEPTUAL RECOMBINATION (ideas extracted from the attached references — embody each concept, do NOT copy the source subjects) ###\n${lines.join('\n')}`;
     },
     /** Environment grammar from the brand's context mode. */
     context(mode: ContextMode | null | undefined): string {

@@ -113,28 +113,41 @@ export interface Reference {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Element — decomposed semantic fragments of references (the recombination
-//    vocabulary: "this image's light + that image's palette + the product")
+// 3. Element — abstract concept cards decomposed from references.
+//    Not photographic fragments ("warm side light") but transferable ideas,
+//    analyzed through three lenses:
+//      visual         — the formal language (tension, rhythm, scale, geometry)
+//      feeling        — the emotional/atmospheric essence
+//      communication  — what the image argues / says about the brand
+//    Abstraction is what makes recombination work: "the stillness after
+//    rain" transfers into a surreal perfume dreamscape; "beige bedroom
+//    wall" does not. Each concept carries a concrete manifestation so the
+//    image model still gets something obeyable.
 // ---------------------------------------------------------------------------
 
-export type ElementType =
-    | 'light' | 'palette' | 'composition' | 'material'
-    | 'mood' | 'setting' | 'prop' | 'style';
+export type ElementType = 'visual' | 'feeling' | 'communication';
 
 export interface Element {
     id: string;
     brandId: string;
+    /** The analytical lens this concept was extracted through. */
     type: ElementType;
-    /** Concrete, promptable description of the fragment. */
+    /** The abstract, transferable idea — 2-6 words. */
+    concept: string;
+    /** Why/how it works, through this lens. */
+    analysis: string;
+    /** Concrete promptable translation — how to realize the concept. */
     description: string;
     /** Source reference — lets generation attach the original pixels. */
     sourceRefId: string;
-    /** N/S/I soul-field keys this element informs (e.g. 'sensation.light'). */
+    /** N/S/I soul-field keys this element informs (e.g. 'sensation.atmosphere'). */
     nsiKeys: string[];
     /** Selection weight — learning bumps/decays it. */
     weight: number;
     enabled: boolean;
     createdAt: number;
+    /** Set whenever the concept is used in a generation (half-life display). */
+    lastUsedAt?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -245,6 +258,8 @@ export interface ProductionPlan {
     assetIds: string[];
     elementIds: string[];
     referenceIds: string[];
+    /** Moodboard draft chosen as the visual anchor for final execution. */
+    moodAnchorResultId?: string;
 }
 
 export interface ReviewReport {
