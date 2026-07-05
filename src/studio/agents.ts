@@ -5,6 +5,7 @@ import {
 import { storage } from '../storage/local';
 import { getCurrentBrand, getCurrentBrandId } from '../domain/brand';
 import { getBrandSoul, getFieldAttributions, SOUL_SCHEMA } from '../brain/soul';
+import { getFusionVerdicts } from '../engine/fusion';
 import { generateJson } from '../engine/gemini';
 import { generate } from '../engine/engine';
 
@@ -57,6 +58,18 @@ export async function proposeConcepts(job: PraxisJob): Promise<PraxisJob> {
         if (relevant.length > 0) complaints = `\n### RECENT FAILURES (avoid repeating) ###\n${relevant.join('\n')}\n`;
     }
 
+    // Fusion Lab memory: which concept COMBINATIONS the owner kept vs threw
+    // away — taste at the pairing level, not just per-card weights.
+    const verdicts = (await getFusionVerdicts().catch(() => [])).slice(-12);
+    const keptV = verdicts.filter(v => v.verdict === 'keep');
+    const discV = verdicts.filter(v => v.verdict === 'discard');
+    const fusionMemory = verdicts.length > 0 ? `
+### FUSION LAB VERDICTS (the owner's taste at the combination level) ###
+${keptV.length > 0 ? `KEPT: ${keptV.map(v => v.concepts.map(c => `“${c}”`).join('×')).join(' ; ')}` : ''}
+${discV.length > 0 ? `DISCARDED: ${discV.map(v => v.concepts.map(c => `“${c}”`).join('×')).join(' ; ')}` : ''}
+Let KEPT pairings inform which concepts you recombine; avoid DISCARDED pairings and close variants.
+` : '';
+
     const prompt = `You are the CREATIVE DIRECTOR of an elite design studio working for "${brand.name}" — ${brand.description}
 
 ### CLIENT BRIEF ###
@@ -64,7 +77,7 @@ ${job.brief}
 
 ### BRAND SOUL (locked fields are red-lines) ###
 ${(soul?.fields ?? []).filter(f => f.value.trim()).map(f => `${f.key}${f.locked ? ' [LOCKED]' : ''} (w${f.weight}): ${f.value}`).join('\n') || '(no soul yet — derive from brand description)'}
-${complaints}
+${complaints}${fusionMemory}
 ### CONCEPT LIBRARY (abstract ideas decomposed from brand references — recombine them) ###
 ${elements.map(e => `- id=${e.id} [${e.type}] "${e.concept}" — ${e.description.slice(0, 120)}`).join('\n') || '(empty — invent concepts from scratch)'}
 
