@@ -1,7 +1,7 @@
 import { Element, Reference } from '../domain/types';
 import { storage } from '../storage/local';
 import { getCurrentBrand, getCurrentBrandId } from '../domain/brand';
-import { getBrandSoul } from '../brain/soul';
+import { getBrandSoul, getFieldAttributions } from '../brain/soul';
 import { generateImage, generateJson, MODELS } from './gemini';
 import { decomposeReference } from './decompose';
 
@@ -38,6 +38,67 @@ const levelText = (e: Element, level: TransferLevel): string => {
         case 'worldview': return e.worldview ?? e.concept;
     }
 };
+
+// ---------------------------------------------------------------------------
+// Auto-Fuse — the curator picks the combination, scored for PRODUCTIVE
+// TENSION (not similarity): concepts that rub against each other in ways
+// the brand would recognize as its own. Removes the manual-picking burden.
+// ---------------------------------------------------------------------------
+
+export interface FusionCombo {
+    title: string;
+    why: string;
+    elementIds: string[];
+    level: TransferLevel;
+    /** One deliberately foreign twist injected for creativity. */
+    provocation?: string;
+}
+
+export async function proposeCombos(intent?: string): Promise<FusionCombo[]> {
+    const elements = (await storage.listElements()).filter(e => e.enabled);
+    if (elements.length < 4) throw new Error('Need at least 4 enabled concepts — decompose more references first.');
+    const brand = await getCurrentBrand();
+    const soul = await getBrandSoul().catch(() => null);
+    const recentDislikes = (await getFieldAttributions().catch(() => []))
+        .slice(-3).map(a => a.reason);
+
+    const parsed = await generateJson<{ combos: Array<Record<string, unknown>> }>(
+        `You are the CURATOR of a design studio's concept library, working for "${brand.name}" — ${brand.description}
+${intent ? `\nThe owner's intent right now: ${intent}\n` : ''}
+### CONCEPT LIBRARY ###
+${elements.map(e => `- id=${e.id} [${e.type}] (w${e.weight}) "${e.concept}"${e.worldview ? ` / believes: ${e.worldview}` : ''} — ${e.description.slice(0, 90)}`).join('\n')}
+
+### BRAND SOUL (locked = untouchable) ###
+${(soul?.fields ?? []).filter(f => f.value.trim()).slice(0, 10).map(f => `${f.key}${f.locked ? ' [LOCKED]' : ''}: ${f.value.slice(0, 80)}`).join('\n') || '(none yet)'}
+${recentDislikes.length > 0 ? `\n### RECENT COMPLAINTS (avoid these failure modes) ###\n${recentDislikes.map(r => `- ${r}`).join('\n')}` : ''}
+
+### TASK ###
+Propose exactly 3 fusion combinations. Selection criteria, in order:
+1. PRODUCTIVE TENSION — concepts that resist each other interestingly. Never pick concepts because they are similar; similar + similar = wallpaper.
+2. CROSS-LENS — each combo should mix lenses (a visual × a feeling × a communication beats three visuals).
+3. Weight-aware — favor rising concepts (w>1), but each combo may include ONE sleeper as a dark horse.
+Make the three combos genuinely different strategies: one SAFE-ADJACENT (closest to current soul), one TENSION-FORWARD, one WILD (still inside locked red-lines).
+
+For each combo:
+- title: 3-5 words
+- why: 1-2 sentences — name the tension and why the brand would recognize the result as its own
+- elementIds: 2-4 ids from the library
+- level: percept | principle | concept | worldview (higher = more creative freedom; match the combo's strategy)
+- provocation: optional — ONE deliberately foreign art-direction twist, max 12 words (e.g. "shot as if underwater", "colors of an overexposed Polaroid")
+
+Output JSON: { "combos": [ { "title", "why", "elementIds", "level", "provocation" } ] }`
+    );
+
+    const valid = new Set(elements.map(e => e.id));
+    const levels: TransferLevel[] = ['percept', 'principle', 'concept', 'worldview'];
+    return (parsed?.combos ?? []).slice(0, 3).map(c => ({
+        title: String(c.title ?? 'Combo'),
+        why: String(c.why ?? ''),
+        elementIds: (Array.isArray(c.elementIds) ? c.elementIds : []).filter((id: unknown) => valid.has(String(id))).map(String),
+        level: levels.includes(c.level as TransferLevel) ? c.level as TransferLevel : 'concept',
+        provocation: c.provocation ? String(c.provocation) : undefined,
+    })).filter(c => c.elementIds.length >= 2);
+}
 
 export interface FusionDraft {
     image: string; // data URL

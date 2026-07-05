@@ -44,7 +44,15 @@ export async function decomposeReference(ref: Reference): Promise<Element[]> {
     if (ref.image.kind !== 'data') throw new Error('Only inline images can be decomposed.');
     const brand = await getCurrentBrand().catch(() => null);
 
+    // Dedupe at the source: the model sees what the library already knows
+    // and only extracts what is NEW — keeps the library lean by construction.
+    const existing = (await storage.listElements()).filter(e => e.enabled);
+    const existingBlock = existing.length > 0
+        ? `\n### ALREADY IN THE LIBRARY (do NOT re-extract these or near-duplicates — only concepts meaningfully DIFFERENT from all of them) ###\n${existing.slice(0, 60).map(e => `- [${e.type}] ${e.concept}`).join('\n')}\n`
+        : '';
+
     const prompt = `You are the CREATIVE DIRECTOR of a design studio${brand ? ` working for "${brand.name}" — ${brand.description}` : ''}.
+${existingBlock}
 Decompose the attached reference image into ABSTRACT, TRANSFERABLE CONCEPTS — not photographic facts. A concept must be an idea that could be re-applied to a completely different subject, context, or even level of realism.
 
 Analyze through three lenses:
@@ -62,7 +70,7 @@ For each concept output the FULL ABSTRACTION LADDER:
 
 Transferring at L1 is imitation; transferring at L3/L4 is creation — make every rung genuinely different in abstraction.
 
-Extract 2-3 concepts per lens (6-9 total). Only what is genuinely distinctive — skip generic observations.
+Extract AT MOST 1-2 concepts per lens (3-6 total), and FEWER is better: only what is genuinely distinctive about THIS image and absent from the library. If the image adds nothing new to a lens, return nothing for that lens.
 
 Output JSON: { "elements": [ { "lens", "concept", "analysis", "manifestation", "principle", "worldview" } ] }`;
 
@@ -89,6 +97,40 @@ Output JSON: { "elements": [ { "lens", "concept", "analysis", "manifestation", "
     for (const el of elements) await storage.upsertElement(el);
     await storage.upsertReference({ ...ref, decomposed: true });
     return elements;
+}
+
+/**
+ * Curator agent — one pass over the whole library:
+ * merges near-duplicates (keeps the strongest wording, disables the rest)
+ * and disables generic concepts that would apply to any brand's imagery.
+ * Nothing is deleted — you can re-enable anything by hand.
+ */
+export async function curateLibrary(): Promise<{ disabled: number; kept: number; note: string }> {
+    const all = (await storage.listElements()).filter(e => e.enabled);
+    if (all.length < 6) return { disabled: 0, kept: all.length, note: 'Library too small to curate.' };
+    const brand = await getCurrentBrand().catch(() => null);
+
+    const parsed = await generateJson<{ disableIds: string[]; note: string }>(
+        `You are the LIBRARIAN of a design studio${brand ? ` for "${brand.name}" — ${brand.description}` : ''}. Curate this concept library down to a sharp working vocabulary.
+
+### LIBRARY ###
+${all.map(e => `- id=${e.id} [${e.type}] (w${e.weight}) "${e.concept}" — ${e.description.slice(0, 100)}`).join('\n')}
+
+### RULES ###
+1. Near-duplicates: keep ONE per cluster — the sharpest, most transferable wording (prefer higher weight) — disable the others.
+2. Generic filler: disable concepts that would be true of almost any decent brand image ("clean composition", "soft natural light" with no specific twist).
+3. Never disable more than half the library. When in doubt, keep.
+
+Output JSON: { "disableIds": [ids to disable], "note": one sentence summarizing what you pruned }`
+    );
+
+    const valid = new Set(all.map(e => e.id));
+    const toDisable = (parsed?.disableIds ?? []).filter(id => valid.has(id)).slice(0, Math.floor(all.length / 2));
+    for (const id of toDisable) {
+        const el = all.find(e => e.id === id)!;
+        await storage.upsertElement({ ...el, enabled: false });
+    }
+    return { disabled: toDisable.length, kept: all.length - toDisable.length, note: String(parsed?.note ?? '') };
 }
 
 /** Decompose every not-yet-decomposed inline reference of the brand. */

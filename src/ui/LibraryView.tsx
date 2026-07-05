@@ -2,9 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Element, ElementType, Reference } from '../domain/types';
 import { storage } from '../storage/local';
 import { getCurrentBrandId } from '../domain/brand';
-import { decomposeReference, decomposeAllPending } from '../engine/decompose';
+import { decomposeReference, decomposeAllPending, curateLibrary } from '../engine/decompose';
 import {
-    TransferLevel, LEVEL_LABEL, FusionDraft, synthesizeReference, keepFusion,
+    TransferLevel, LEVEL_LABEL, FusionDraft, FusionCombo,
+    synthesizeReference, keepFusion, proposeCombos,
 } from '../engine/fusion';
 import { S, chip } from './styles';
 
@@ -38,6 +39,7 @@ export default function LibraryView() {
     const [level, setLevel] = useState<TransferLevel>('concept');
     const [fusionNote, setFusionNote] = useState('');
     const [draft, setDraft] = useState<FusionDraft | null>(null);
+    const [combos, setCombos] = useState<FusionCombo[]>([]);
 
     const refresh = () => {
         storage.listReferences().then(setRefs);
@@ -110,6 +112,38 @@ export default function LibraryView() {
         } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
     };
 
+    const autoFuse = async () => {
+        setBusy('Curator picking combinations…');
+        setCombos([]);
+        setDraft(null);
+        try {
+            setCombos(await proposeCombos(fusionNote.trim() || undefined));
+            setBusy('');
+        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
+    };
+
+    const runCombo = async (c: FusionCombo) => {
+        const picked = elements.filter(e => c.elementIds.includes(e.id));
+        setSelected(new Set(c.elementIds));
+        setLevel(c.level);
+        setBusy(`Fusing “${c.title}”…`);
+        setDraft(null);
+        try {
+            const note = [fusionNote.trim(), c.provocation].filter(Boolean).join(' · ');
+            setDraft(await synthesizeReference(picked, c.level, note || undefined, setBusy));
+            setBusy('');
+        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
+    };
+
+    const curate = async () => {
+        setBusy('Curating library…');
+        try {
+            const r = await curateLibrary();
+            setBusy(`🧹 Disabled ${r.disabled}, kept ${r.kept}. ${r.note}`);
+            refresh();
+        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
+    };
+
     const keep = async () => {
         if (!draft) return;
         setBusy('Saving…');
@@ -159,7 +193,26 @@ export default function LibraryView() {
                     <button style={{ ...S.btn, opacity: selected.size >= 2 ? 1 : 0.4 }} disabled={selected.size < 2 || !!busy} onClick={fuse}>
                         Fuse → new reference
                     </button>
+                    <button style={S.btn} disabled={!!busy} onClick={autoFuse} title="The curator picks 3 combinations for you — scored for productive tension, not similarity">
+                        🤖 Auto-fuse
+                    </button>
                 </div>
+                {combos.length > 0 && !draft && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+                        {combos.map((c, i) => (
+                            <div key={i} style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 6, background: '#fafafa' }}>
+                                <div style={{ fontSize: 12.5, fontWeight: 700 }}>{c.title}</div>
+                                <div style={{ fontSize: 10, color: '#71717a' }}>{LEVEL_LABEL[c.level]}</div>
+                                <div style={{ fontSize: 11, lineHeight: 1.5 }}>{c.why}</div>
+                                <div style={{ fontSize: 10.5, color: '#57534e' }}>
+                                    {c.elementIds.map(id => elements.find(e => e.id === id)?.concept).filter(Boolean).map(s => `“${s}”`).join(' × ')}
+                                </div>
+                                {c.provocation && <div style={{ fontSize: 10.5, color: '#92400e' }}>⚡ {c.provocation}</div>}
+                                <button style={{ ...S.btn, marginTop: 'auto' }} disabled={!!busy} onClick={() => runCombo(c)}>Fuse this</button>
+                            </div>
+                        ))}
+                    </div>
+                )}
                 <div style={{ fontSize: 10, color: '#a1a1aa' }}>
                     Select 2-4 concept cards below (☐), pick the transfer level — L1 imitates, L3/L4 creates — and breed a brand-new pure aesthetic reference (no product, flash-model cost).
                 </div>
@@ -185,6 +238,9 @@ export default function LibraryView() {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 <span style={S.label}>ELEMENTS · {elements.length}</span>
+                <button style={S.btnGhost} disabled={!!busy} onClick={curate} title="Merge near-duplicates, disable generic filler — nothing is deleted">
+                    🧹 Curate
+                </button>
                 <button style={chip(filter === 'all')} onClick={() => setFilter('all')}>All</button>
                 {(Object.keys(TYPE_LABEL) as ElementType[]).map(t => (
                     <button key={t} style={chip(filter === t)} onClick={() => setFilter(t)}>
