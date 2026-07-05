@@ -6,6 +6,9 @@
   "functions": {
     "api/generate.ts": {
       "maxDuration": 30
+    },
+    "api/fetch-site.ts": {
+      "maxDuration": 30
     }
   }
 }

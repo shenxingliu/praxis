@@ -1,6 +1,6 @@
 import { storage } from '../storage/local';
 import { getCurrentBrand, brandKey } from '../domain/brand';
-import { generateJson } from '../engine/gemini';
+import { generateJson, appApiHeaders } from '../engine/gemini';
 
 /**
  * Brand Soul — the persistent N/S/I semantic baseline, per brand.
@@ -140,6 +140,77 @@ Output JSON: { "fields": [ { "key": string, "value": string, "rationale": string
         });
 
     return { version: 1, updatedAt: Date.now(), fields };
+}
+
+// ---------------------------------------------------------------------------
+// Website archaeology — derive a soul draft from a brand's live website
+// (their words + their imagery), via the server-side /api/fetch-site proxy.
+// ---------------------------------------------------------------------------
+
+export interface WebDerivation {
+    soul: BrandSoul;
+    /** Suggested brand meta extracted from the site — apply if you like it. */
+    suggestedDescription: string;
+    suggestedEssence: string;
+}
+
+export async function deriveSoulFromWebsite(url: string): Promise<WebDerivation> {
+    const brand = await getCurrentBrand();
+
+    const resp = await fetch('/api/fetch-site', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...appApiHeaders() },
+        body: JSON.stringify({ url }),
+    });
+    const site = await resp.json();
+    if (!resp.ok) throw new Error(site?.error?.message || `Fetch failed (${resp.status})`);
+
+    const images: string[] = (site.images ?? []).map((i: { dataUrl: string }) => i.dataUrl);
+    const prompt = `You are a brand semiotician. The attached images and the text below come from a brand's LIVE WEBSITE. Derive its visual BRAND SOUL from what the brand actually says and shows.
+
+### SITE ###
+Title: ${site.title || '-'}
+Meta description: ${site.description || '-'}
+Page text (truncated): ${site.text || '-'}
+${images.length > 0 ? `\n${images.length} site image(s) attached — derive the sensation axis primarily from those pixels.` : ''}
+
+### FIELD SCHEMA ###
+${SOUL_SCHEMA.map(f => `- ${f.key} (${f.label}): ${f.hint}`).join('\n')}
+
+### TASK ###
+1. For every schema key output value (concrete, promptable, 1-2 sentences, specific to THIS brand) + rationale (one line citing site evidence).
+2. suggestedDescription: one line — category + positioning, as this site presents itself.
+3. suggestedEssence: one line — the product-fidelity essentials (materials, signatures that must never change in imagery).
+
+Output JSON: { "fields": [ { "key", "value", "rationale" } ], "suggestedDescription": string, "suggestedEssence": string }`;
+
+    const parsed = await generateJson<{
+        fields: Array<{ key: string; value: string; rationale?: string }>;
+        suggestedDescription: string;
+        suggestedEssence: string;
+    }>(prompt, images);
+
+    const allowed = new Map(SOUL_SCHEMA.map(s => [s.key, s]));
+    const existing = await getBrandSoul();
+    const lockedByKey = new Map((existing?.fields ?? []).filter(f => f.locked).map(f => [f.key, f]));
+    const fields: SoulField[] = (parsed?.fields ?? [])
+        .filter(f => allowed.has(f.key))
+        .map(f => lockedByKey.get(f.key) ?? ({
+            key: f.key,
+            axis: allowed.get(f.key)!.axis,
+            value: String(f.value ?? '').trim(),
+            weight: 1,
+            locked: false,
+            rationale: f.rationale?.trim() || `From ${new URL(url).hostname}`,
+        }));
+
+    if (fields.length === 0) throw new Error('Could not derive fields from this site — try another page (e.g. the About page).');
+
+    return {
+        soul: { version: 1, updatedAt: Date.now(), fields },
+        suggestedDescription: String(parsed?.suggestedDescription ?? '').trim() || brand.description,
+        suggestedEssence: String(parsed?.suggestedEssence ?? '').trim() || brand.productEssence,
+    };
 }
 
 /** Flat prompt block — used when generation bypasses the semantic fill. */

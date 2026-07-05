@@ -4,7 +4,9 @@ import { storage } from '../storage/local';
 import { adoptionRate, distill } from '../learning/learning';
 import {
     BrandSoul, SoulField, SOUL_SCHEMA, getBrandSoul, saveBrandSoul, deriveBrandSoul,
+    deriveSoulFromWebsite, WebDerivation,
 } from '../brain/soul';
+import { getCurrentBrand, saveBrand } from '../domain/brand';
 import { TasteCandidate, getCandidatePool, recordPick, analyzeTaste } from '../brain/calibrate';
 import { exportBrandBook } from '../brain/brandBook';
 import { openLightbox } from './lightbox';
@@ -125,6 +127,7 @@ const SoulPanel: React.FC = () => {
     const [soul, setSoul] = useState<BrandSoul | null>(null);
     const [busy, setBusy] = useState('');
     const [dirty, setDirty] = useState(false);
+    const [webSuggest, setWebSuggest] = useState<WebDerivation | null>(null);
 
     useEffect(() => { getBrandSoul().then(setSoul); }, []);
 
@@ -135,6 +138,31 @@ const SoulPanel: React.FC = () => {
             setDirty(true);
             setBusy('');
         } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
+    };
+
+    const deriveFromWeb = async () => {
+        const url = window.prompt('Brand website URL (their homepage or About page):', 'https://')?.trim();
+        if (!url || url === 'https://') return;
+        setBusy('Reading the site + its imagery… (15–40s)');
+        try {
+            const d = await deriveSoulFromWebsite(url);
+            setSoul(d.soul);
+            setWebSuggest(d);
+            setDirty(true);
+            setBusy('✓ Draft derived from the website — review below, then Save');
+        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
+    };
+
+    const applySuggestion = async () => {
+        if (!webSuggest) return;
+        const brand = await getCurrentBrand();
+        await saveBrand({
+            ...brand,
+            description: webSuggest.suggestedDescription,
+            productEssence: webSuggest.suggestedEssence,
+        });
+        setWebSuggest(null);
+        setBusy('✓ Brand description & essence updated');
     };
 
     const save = async () => {
@@ -155,11 +183,25 @@ const SoulPanel: React.FC = () => {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <button style={S.btn} onClick={derive}>{soul ? 'Re-derive draft' : 'Derive brand soul'}</button>
+                <button style={S.btnGhost} onClick={deriveFromWeb} title="Point at any brand website — its words and imagery become a soul draft">
+                    🌐 From website
+                </button>
                 {soul && <button style={{ ...S.btn, opacity: dirty ? 1 : 0.4 }} disabled={!dirty} onClick={save}>Save</button>}
                 <span style={{ fontSize: 11, color: '#71717a' }}>{busy}</span>
             </div>
+            {webSuggest && (
+                <div style={{ ...S.card, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 6, background: '#fffbeb' }}>
+                    <span style={{ fontWeight: 700 }}>The site also suggests brand meta — apply?</span>
+                    <span>Description: {webSuggest.suggestedDescription}</span>
+                    <span>Product essence: {webSuggest.suggestedEssence}</span>
+                    <span style={{ display: 'flex', gap: 8 }}>
+                        <button style={S.btn} onClick={applySuggestion}>Apply to brand</button>
+                        <button style={S.btnGhost} onClick={() => setWebSuggest(null)}>Ignore</button>
+                    </span>
+                </div>
+            )}
             {!soul && <div style={{ ...S.card, fontSize: 12, color: '#a1a1aa' }}>
                 No soul yet. Derive it from the brand description, learned rules, feedback and approved imagery — then review, edit, and lock the red-lines.
             </div>}

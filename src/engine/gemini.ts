@@ -23,7 +23,7 @@ export const COST_ESTIMATE_USD: Record<string, number> = {
 const isProxyMode = (): boolean =>
     String(import.meta.env.VITE_USE_PROXY || '').toLowerCase() === 'true';
 
-const appApiHeaders = (): Record<string, string> => {
+export const appApiHeaders = (): Record<string, string> => {
     const token = import.meta.env.VITE_APP_ACCESS_TOKEN;
     return token ? { 'x-app-token': token } : {};
 };
