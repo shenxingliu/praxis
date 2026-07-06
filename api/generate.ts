@@ -66,8 +66,9 @@ function checkAppAccess(req, res) {
 
 
 export const config = {
-  // 30s — Hobby-plan-safe. (60 caused FUNCTION_INVOCATION_FAILED at boot.)
-  maxDuration: 30,
+  // Pro-model image generation regularly takes 30-90s. Fluid compute
+  // (default on new projects) allows up to 300s on Hobby.
+  maxDuration: 300,
 };
 
 const UPSTREAM = 'https://generativelanguage.googleapis.com/v1beta/models';

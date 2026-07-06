@@ -5,10 +5,10 @@
   "framework": "vite",
   "functions": {
     "api/generate.ts": {
-      "maxDuration": 30
+      "maxDuration": 300
     },
     "api/fetch-site.ts": {
-      "maxDuration": 30
+      "maxDuration": 60
     }
   }
 }

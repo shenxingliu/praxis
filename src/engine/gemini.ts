@@ -154,7 +154,7 @@ export async function generateImage(opts: {
                 body = makeBody(false);
                 continue;
             }
-            const retriable = /429|quota|rate|unavailable|deadline|500|503/i.test(msg);
+            const retriable = /429|quota|rate|unavailable|deadline|timeout|timed out|500|503|504/i.test(msg);
             if (!retriable || attempt === MAX_RETRIES) break;
             await new Promise(r => setTimeout(r, 3000 * Math.pow(2, attempt)));
         }
