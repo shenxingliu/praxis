@@ -73,7 +73,7 @@ Let KEPT pairings inform which concepts you recombine; avoid DISCARDED pairings 
     const prompt = `You are the CREATIVE DIRECTOR of an elite design studio working for "${brand.name}" — ${brand.description}
 
 ### CLIENT BRIEF ###
-${job.brief}
+${job.brief.trim() || '(no brief — OPEN EXPLORATION: propose what this brand should make next. Ground every direction in the soul and the concept library; surprise the owner with directions they would not have briefed but will recognize as their own.)'}
 
 ### BRAND SOUL (locked fields are red-lines) ###
 ${(soul?.fields ?? []).filter(f => f.value.trim()).map(f => `${f.key}${f.locked ? ' [LOCKED]' : ''} (w${f.weight}): ${f.value}`).join('\n') || '(no soul yet — derive from brand description)'}
@@ -125,7 +125,7 @@ export async function proposeWildcard(job: PraxisJob): Promise<PraxisJob> {
     const prompt = `You are the CREATIVE DIRECTOR in a late-night experimental mood, working for "${brand.name}" — ${brand.description}
 
 ### CLIENT BRIEF ###
-${job.brief}
+${job.brief.trim() || '(no brief — OPEN EXPLORATION: propose what this brand should make next. Ground every direction in the soul and the concept library; surprise the owner with directions they would not have briefed but will recognize as their own.)'}
 
 ### CONCEPT LIBRARY ###
 ${elements.map(e => `- id=${e.id} [${e.type}] "${e.concept}" — ${e.description.slice(0, 100)}`).join('\n') || '(empty — invent two contradictory concepts yourself)'}
@@ -193,7 +193,7 @@ export async function makePlan(job: PraxisJob, conceptId: string, assetIds: stri
     const prompt = `You are the PRODUCER of a design studio. Turn the chosen concept into a concrete production plan.
 
 BRAND: ${brand.name} — ${brand.description}
-BRIEF: ${job.brief}
+BRIEF: ${job.brief.trim() || '(open exploration — judge against the brand soul alone)'}
 CHOSEN CONCEPT: ${concept.title} — ${concept.rationale}
 N/S/I: ${concept.nsiSummary}
 REALISM: ${concept.realism}
@@ -360,7 +360,7 @@ export async function reviewJob(job: PraxisJob, results: GenerationResult[]): Pr
     const prompt = `You are the DESIGN CRITIC of the studio. Score the attached generated image(s) against the brand's soul.
 
 BRAND: ${brand.name} — ${brand.description}
-BRIEF: ${job.brief}
+BRIEF: ${job.brief.trim() || '(open exploration — judge against the brand soul alone)'}
 
 ### BRAND SOUL ###
 ${(soul?.fields ?? []).filter(f => f.value.trim()).map(f => `${f.key}: ${f.value}`).join('\n') || '(no soul — score against the brand description)'}

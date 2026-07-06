@@ -53,9 +53,8 @@ export default function StudioView() {
     };
 
     const begin = () => guard('Concept agent thinking…', async () => {
-        if (!brief.trim()) throw new Error('Write a brief first.');
         if (selectedAssets.size === 0) throw new Error('Pick at least one product.');
-        const j = await startJob(brief.trim());
+        const j = await startJob(brief.trim()); // empty brief = open exploration
         setJob(await proposeConcepts(j));
     });
 
@@ -220,7 +219,7 @@ export default function StudioView() {
                     <span style={S.label}>CLIENT BRIEF</span>
                     <textarea
                         style={{ ...S.input, width: '100%', minHeight: 70, boxSizing: 'border-box', resize: 'vertical' }}
-                        placeholder='e.g. "Spring campaign hero image for the new collection — fresh, optimistic, must work as a website banner"'
+                        placeholder='Optional — leave blank for open exploration (the studio proposes what the brand should make next). Or e.g. "Spring campaign hero image — fresh, optimistic, website banner"'
                         value={brief} onChange={e => setBrief(e.target.value)}
                     />
                     <span style={S.label}>PRODUCTS · {selectedAssets.size} selected</span>
