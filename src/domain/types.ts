@@ -236,6 +236,8 @@ export interface GenerationResult {
     adopted: boolean;
     /** Studio job that produced this, when run through the workflow. */
     jobId?: string;
+    /** Product-consistency enforcement outcome (pro generations only). */
+    consistency?: { pass: boolean; issues: string[]; retried: boolean };
 }
 
 // ---------------------------------------------------------------------------

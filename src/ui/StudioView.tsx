@@ -361,9 +361,22 @@ export default function StudioView() {
                         {results.map(r => {
                             const fb = feedback.get(r.id);
                             return (
-                                <div key={r.id} style={{ ...S.card, padding: 0, overflow: 'hidden' }}>
+                                <div key={r.id} style={{ ...S.card, padding: 0, overflow: 'hidden', position: 'relative' }}>
                                     <img src={r.image.value} alt="" onClick={() => openLightbox(r.image.value)}
                                         style={{ width: '100%', display: 'block', cursor: 'zoom-in' }} />
+                                    {r.consistency && (
+                                        <span title={r.consistency.pass
+                                            ? `Product inspection passed${r.consistency.retried ? ' (after 1 correction pass)' : ''}`
+                                            : `Still off after correction: ${r.consistency.issues.join('; ')}`}
+                                            style={{
+                                                position: 'absolute', top: 6, left: 6, fontSize: 10, fontWeight: 800,
+                                                padding: '2px 7px', borderRadius: 999,
+                                                background: r.consistency.pass ? 'rgba(5,150,105,0.92)' : 'rgba(217,119,6,0.92)',
+                                                color: '#fff',
+                                            }}>
+                                            {r.consistency.pass ? (r.consistency.retried ? '✓ fixed' : '✓ exact') : '⚠ check'}
+                                        </span>
+                                    )}
                                     <div style={{ padding: '6px 10px', display: 'flex', justifyContent: 'space-between' }}>
                                         <span style={{ display: 'flex', gap: 8 }}>
                                             <button onClick={() => rate(r, 'like')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, opacity: fb === 'like' ? 1 : 0.35 }}>👍</button>

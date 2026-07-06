@@ -4,7 +4,7 @@ import {
 } from '../domain/types';
 import { storage } from '../storage/local';
 import { getCurrentBrand, getCurrentBrandId } from '../domain/brand';
-import { generateImage, MODELS, COST_ESTIMATE_USD } from './gemini';
+import { generateImage, generateJson, MODELS, COST_ESTIMATE_USD } from './gemini';
 import { RECIPES } from './recipes';
 
 /**
@@ -154,7 +154,10 @@ export async function generate(
     const prompt = `${recipe.buildPrompt(ctx)}
 
 ### ATTACHED IMAGE ROLES (obey strictly) ###
-${manifestLines.join('\n')}`;
+${manifestLines.join('\n')}
+
+### FINAL, NON-NEGOTIABLE ###
+The product must be pixel-faithful to images 1-${n}: same silhouette, proportions, construction, material, color, hardware. Everything else serves the creative direction; the product serves ONLY its source photos.`;
 
     // Concept half-life: touch lastUsedAt on every concept used.
     for (const el of elements) {
@@ -163,13 +166,57 @@ ${manifestLines.join('\n')}`;
 
     // ---- Generate ----
     onStatus?.('Generating…');
-    const out = await generateImage({
+    let out = await generateImage({
         prompt,
         referenceImages: [...assetImages, ...refImages],
         model,
         aspectRatio: params.ratio,
         imageSize: params.size,
     });
+
+    // ---- Product-consistency enforcement (pro generations only) ----
+    // An inspector agent compares the render against the product photos.
+    // On failure it regenerates ONCE with the concrete deviations injected —
+    // prompt persuasion plus after-the-fact enforcement.
+    let consistency: GenerationResult['consistency'];
+    if (model === MODELS.imagePro && assetImages.length > 0) {
+        const check = async (img: string) => {
+            const parsed = await generateJson<{ pass: boolean; issues: string[] }>(
+                `The first ${Math.min(assetImages.length, 5)} attached image(s) are OFFICIAL PRODUCT PHOTOS. The LAST attached image is an AI-generated marketing image featuring this product.
+
+Compare THE PRODUCT ONLY: silhouette, proportions, structure/construction, material and grain, color/finish, hardware. IGNORE styling (bedding, props, dressing), environment, lighting and camera angle — those are allowed to differ.
+
+Output JSON: { "pass": boolean (true only if the product is faithfully identical), "issues": [up to 4 CONCRETE deviations, each one actionable, e.g. "headboard slats are vertical but should be horizontal"] }`,
+                [...assetImages.slice(0, 5), img]
+            );
+            return { pass: !!parsed?.pass, issues: (parsed?.issues ?? []).map(String).slice(0, 4) };
+        };
+        try {
+            onStatus?.('Inspecting product consistency…');
+            const first = await check(out.image);
+            if (first.pass || first.issues.length === 0) {
+                consistency = { ...first, retried: false };
+            } else {
+                onStatus?.('Consistency failed — correcting and re-rendering…');
+                const corrected = await generateImage({
+                    prompt: `${prompt}
+
+### CONSISTENCY CORRECTIONS (a previous attempt FAILED product inspection — fix every item) ###
+${first.issues.map(s => `- ${s}`).join('\n')}
+Re-render with the product EXACTLY as in its source photos.`,
+                    referenceImages: [...assetImages, ...refImages],
+                    model,
+                    aspectRatio: params.ratio,
+                    imageSize: params.size,
+                });
+                out = corrected;
+                const second = await check(out.image).catch(() => ({ pass: true, issues: [] }));
+                consistency = { ...second, retried: true };
+            }
+        } catch (err) {
+            console.warn('[engine] consistency check failed:', err); // never blocks delivery
+        }
+    }
 
     // ---- Record ----
     const result: GenerationResult = {
@@ -183,15 +230,16 @@ ${manifestLines.join('\n')}`;
         fullPrompt: prompt,
         model: out.model,
         image: { kind: 'data', value: out.image },
-        estimatedCostUsd: cost,
+        estimatedCostUsd: consistency?.retried ? cost * 2 : cost,
         createdAt: Date.now(),
         adopted: false,
+        consistency,
     };
     await storage.upsertResult(result);
     await storage.addSpend({
         id: crypto.randomUUID(),
         resultId: result.id,
-        usd: cost,
+        usd: consistency?.retried ? cost * 2 : cost,
         model: out.model,
         month: monthKey(),
         createdAt: Date.now(),
