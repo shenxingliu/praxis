@@ -157,7 +157,9 @@ export async function generate(
 ${manifestLines.join('\n')}
 
 ### FINAL, NON-NEGOTIABLE ###
-The product must be pixel-faithful to images 1-${n}: same silhouette, proportions, construction, material, color, hardware. Everything else serves the creative direction; the product serves ONLY its source photos.`;
+1. The product must be pixel-faithful to images 1-${n}: same silhouette, proportions, construction, material, color, hardware.
+2. The listed product(s) are the ONLY furniture in the image — zero invented companion pieces.
+3. The product must be fully styled per the direction (dressed bed, curated surfaces) — styling changes, the product never does.`;
 
     // Concept half-life: touch lastUsedAt on every concept used.
     for (const el of elements) {
@@ -184,9 +186,11 @@ The product must be pixel-faithful to images 1-${n}: same silhouette, proportion
             const parsed = await generateJson<{ pass: boolean; issues: string[] }>(
                 `The first ${Math.min(assetImages.length, 5)} attached image(s) are OFFICIAL PRODUCT PHOTOS. The LAST attached image is an AI-generated marketing image featuring this product.
 
-Compare THE PRODUCT ONLY: silhouette, proportions, structure/construction, material and grain, color/finish, hardware. IGNORE styling (bedding, props, dressing), environment, lighting and camera angle — those are allowed to differ.
+Check TWO things:
+1. PRODUCT FIDELITY: silhouette, proportions, structure/construction, material and grain, color/finish, hardware. IGNORE styling (bedding, props, dressing), environment, lighting and camera angle — those are allowed to differ.
+2. FURNITURE EXCLUSIVITY: the generated image must contain NO furniture other than the product(s) shown in the official photos. Extra nightstands, chairs, tables, dressers or other beds are violations. Rugs, curtains, plants, wall art, lighting and small decor are fine.
 
-Output JSON: { "pass": boolean (true only if the product is faithfully identical), "issues": [up to 4 CONCRETE deviations, each one actionable, e.g. "headboard slats are vertical but should be horizontal"] }`,
+Output JSON: { "pass": boolean (true only if the product is faithfully identical AND no extra furniture exists), "issues": [up to 4 CONCRETE deviations, each one actionable, e.g. "headboard slats are vertical but should be horizontal" or "remove the invented nightstand on the left"] }`,
                 [...assetImages.slice(0, 5), img]
             );
             return { pass: !!parsed?.pass, issues: (parsed?.issues ?? []).map(String).slice(0, 4) };
@@ -271,7 +275,8 @@ export const promptBlocks = {
             `PRODUCT: ${a.name}${a.category ? ` (${a.category})` : ''}
 SOURCE OF TRUTH: the attached reference photos for this product. Use ONLY them.
 FIDELITY RULE — applies to the PRODUCT ITSELF ONLY: reconstruct its exact silhouette, geometry, construction, color, material texture and hardware${essence ? `, with special care for: ${essence}` : ''}. ZERO deviation, no creative reinterpretation.
-STYLING RULE — decorative styling is NOT the product: bedding, pillows, throws, tabletop objects, vases, books, plants and any dressing visible in the product photos are disposable staging. REPLACE them with styling that serves THIS generation's creative direction. STYLING IS MANDATORY, not optional: a bed MUST be fully dressed (mattress, layered bedding, pillows) in the direction's palette and mood; tables/desks/consoles MUST carry a few curated objects; shelves must not be empty. A bare, unstyled product is a FAILED image unless the direction explicitly asks for bare. Styling must never alter or obscure the product's own structure, material or color.`
+STYLING RULE — decorative styling is NOT the product: bedding, pillows, throws, tabletop objects, vases, books, plants and any dressing visible in the product photos are disposable staging. REPLACE them with styling that serves THIS generation's creative direction. STYLING IS MANDATORY, not optional: a bed MUST be fully dressed (mattress, layered bedding, pillows) in the direction's palette and mood; tables/desks/consoles MUST carry a few curated objects; shelves must not be empty. A bare, unstyled product is a FAILED image unless the direction explicitly asks for bare. Styling must never alter or obscure the product's own structure, material or color.
+EXCLUSIVITY RULE — the listed product(s) are the ONLY furniture in the frame. NEVER invent companion furniture: no extra nightstands, side tables, chairs, benches, dressers, shelving or other beds. The environment may include architecture, rugs, curtains, plants, wall art, lighting fixtures and small decor objects — but anything that qualifies as furniture and is not a listed product makes the image a FAILURE.`
         ).join('\n\n');
     },
     brand(brand: Brand | null): string {
