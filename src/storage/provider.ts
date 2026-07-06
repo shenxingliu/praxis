@@ -42,6 +42,7 @@ export interface StorageProvider {
 
     // Results + signals
     listResults(limit?: number): Promise<GenerationResult[]>;
+    getResult(id: string): Promise<GenerationResult | null>;
     upsertResult(result: GenerationResult): Promise<void>;
     deleteResult(id: string): Promise<void>;
     listSignals(onlyUndistilled?: boolean): Promise<FeedbackSignal[]>;

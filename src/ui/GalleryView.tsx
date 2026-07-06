@@ -19,7 +19,7 @@ export default function GalleryView() {
     const [busy, setBusy] = useState('');
     const [notice, setNotice] = useState('');
 
-    const refresh = () => storage.listResults(500).then(setResults);
+    const refresh = () => storage.listResults(120).then(setResults);
     useEffect(() => { refresh(); }, []);
 
     const shown = view === 'saved' ? results.filter(r => r.adopted) : results;

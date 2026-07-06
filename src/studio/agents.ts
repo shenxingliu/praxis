@@ -278,9 +278,8 @@ export async function anchorMood(job: PraxisJob, resultId: string): Promise<Prax
 async function anchorImageOf(job: PraxisJob): Promise<string[]> {
     const id = job.plan?.moodAnchorResultId;
     if (!id) return [];
-    const results = await storage.listResults(500);
-    const anchor = results.find(r => r.id === id && r.image.kind === 'data');
-    return anchor ? [anchor.image.value] : [];
+    const anchor = await storage.getResult(id).catch(() => null);
+    return anchor && anchor.image.kind === 'data' ? [anchor.image.value] : [];
 }
 
 export async function executeJob(

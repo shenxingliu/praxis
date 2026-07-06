@@ -41,7 +41,7 @@ ${params.room && !contextMode ? `Environment: ${params.room}.` : ''}
 ${params.note ? `Additional direction: ${params.note}` : ''}
 
 ### REQUIREMENTS ###
-${skeleton.physics} Place every listed product naturally and prominently. Attached aesthetic reference images carry the extracted fragments above — follow their light, color and material language without copying their subjects.`;
+${skeleton.physics} Place every listed product naturally and prominently, FULLY STYLED per the styling rule — dressed beds, curated surfaces, lived-in detail that serves the direction. Attached aesthetic reference images carry the extracted fragments above — follow their light, color and material language without copying their subjects.`;
         },
     },
 

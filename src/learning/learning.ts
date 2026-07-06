@@ -88,7 +88,7 @@ async function promoteToReference(result: GenerationResult): Promise<void> {
 
 /** North-star metric: adopted ÷ generated. */
 export async function adoptionRate(): Promise<{ adopted: number; total: number; rate: number }> {
-    const results = await storage.listResults(1000);
+    const results = await storage.listResults(200);
     const adopted = results.filter(r => r.adopted).length;
     return { adopted, total: results.length, rate: results.length ? adopted / results.length : 0 };
 }

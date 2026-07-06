@@ -271,7 +271,7 @@ export const promptBlocks = {
             `PRODUCT: ${a.name}${a.category ? ` (${a.category})` : ''}
 SOURCE OF TRUTH: the attached reference photos for this product. Use ONLY them.
 FIDELITY RULE — applies to the PRODUCT ITSELF ONLY: reconstruct its exact silhouette, geometry, construction, color, material texture and hardware${essence ? `, with special care for: ${essence}` : ''}. ZERO deviation, no creative reinterpretation.
-STYLING RULE — decorative styling is NOT the product: bedding, pillows, throws, tabletop objects, vases, books, plants and any dressing visible in the product photos are disposable staging. REPLACE them freely with styling that serves this generation's creative direction — restyle boldly, but never let styling alter or obscure the product's own structure, material or color.`
+STYLING RULE — decorative styling is NOT the product: bedding, pillows, throws, tabletop objects, vases, books, plants and any dressing visible in the product photos are disposable staging. REPLACE them with styling that serves THIS generation's creative direction. STYLING IS MANDATORY, not optional: a bed MUST be fully dressed (mattress, layered bedding, pillows) in the direction's palette and mood; tables/desks/consoles MUST carry a few curated objects; shelves must not be empty. A bare, unstyled product is a FAILED image unless the direction explicitly asks for bare. Styling must never alter or obscure the product's own structure, material or color.`
         ).join('\n\n');
     },
     brand(brand: Brand | null): string {
