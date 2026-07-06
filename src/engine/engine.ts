@@ -146,7 +146,7 @@ export async function generate(
     const plateIdx = anchorIdx + extraRefImages.length;
     const aestheticStart = plateIdx + (plate ? 1 : 0);
     const manifestLines = [
-        `Images 1-${n}: PRODUCT SOURCE OF TRUTH. Reconstruct the product EXACTLY and ONLY from these — silhouette, geometry, color, material, hardware. If any other attached image shows a similar product, IGNORE that rendering completely.`,
+        `Images 1-${n}: PRODUCT SOURCE OF TRUTH. Reconstruct the product EXACTLY and ONLY from these — silhouette, geometry, color, material, hardware. If any other attached image shows a similar product, IGNORE that rendering completely. The decorative styling in these photos (bedding, props, dressing) is NOT part of the product — restyle it per the creative direction.`,
         extraRefImages.length > 0 && `Image ${anchorIdx}${extraRefImages.length > 1 ? `-${anchorIdx + extraRefImages.length - 1}` : ''}: MOOD ANCHOR — an approved rough draft. Inherit its light, palette, atmosphere and composition energy ONLY. Its product rendering is APPROXIMATE and WRONG — never copy any object geometry from it.`,
         plate && `Image ${plateIdx}: BACKDROP PLATE — reconstruct this exact backdrop with zero drift.`,
         aesthetic.length > 0 && `Images ${aestheticStart}-${aestheticStart + aesthetic.length - 1}: AESTHETIC REFERENCES — style, light and material language only. NEVER copy their subjects or furniture.`,
@@ -222,7 +222,8 @@ export const promptBlocks = {
         return assets.map(a =>
             `PRODUCT: ${a.name}${a.category ? ` (${a.category})` : ''}
 SOURCE OF TRUTH: the attached reference photos for this product. Use ONLY them.
-FIDELITY RULE: reconstruct the exact product — silhouette, geometry, color, material texture${essence ? `, with special care for: ${essence}` : ''}. ZERO deviation, no creative reinterpretation.`
+FIDELITY RULE — applies to the PRODUCT ITSELF ONLY: reconstruct its exact silhouette, geometry, construction, color, material texture and hardware${essence ? `, with special care for: ${essence}` : ''}. ZERO deviation, no creative reinterpretation.
+STYLING RULE — decorative styling is NOT the product: bedding, pillows, throws, tabletop objects, vases, books, plants and any dressing visible in the product photos are disposable staging. REPLACE them freely with styling that serves this generation's creative direction — restyle boldly, but never let styling alter or obscure the product's own structure, material or color.`
         ).join('\n\n');
     },
     brand(brand: Brand | null): string {
