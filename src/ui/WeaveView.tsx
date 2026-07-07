@@ -44,10 +44,6 @@ const fileToDataUrl = (f: File): Promise<string> =>
     });
 
 let dropCount = 0;
-const nextPos = () => {
-    dropCount += 1;
-    return { x: 30 + (dropCount % 5) * 150, y: 30 + (Math.floor(dropCount / 5) % 4) * 130 };
-};
 
 export default function WeaveView() {
     const [assets, setAssets] = useState<Asset[]>([]);
@@ -66,6 +62,26 @@ export default function WeaveView() {
     const fileRef = useRef<HTMLInputElement>(null);
     const drag = useRef<{ id: string; dx: number; dy: number } | null>(null);
     const boardRef = useRef<HTMLDivElement>(null);
+    // Infinite canvas: pan + zoom.
+    const [pan, setPan] = useState({ x: 40, y: 40 });
+    const [scale, setScale] = useState(1);
+    const panning = useRef<{ sx: number; sy: number; px: number; py: number } | null>(null);
+
+    /** Screen (client) → world coordinates. */
+    const toWorld = (clientX: number, clientY: number) => {
+        const rect = boardRef.current?.getBoundingClientRect();
+        if (!rect) return { x: 0, y: 0 };
+        return { x: (clientX - rect.left - pan.x) / scale, y: (clientY - rect.top - pan.y) / scale };
+    };
+
+    /** New nodes land near the current view center. */
+    const nextPos = () => {
+        dropCount += 1;
+        const rect = boardRef.current?.getBoundingClientRect();
+        const cx = rect ? (rect.width / 2 - pan.x) / scale : 200;
+        const cy = rect ? (rect.height / 2 - pan.y) / scale : 160;
+        return { x: cx - 220 + (dropCount % 4) * 150, y: cy - 140 + (Math.floor(dropCount / 4) % 3) * 130 };
+    };
 
     useEffect(() => {
         storage.listAssets().then(setAssets);
@@ -161,30 +177,45 @@ export default function WeaveView() {
         setBusy('');
     };
 
-    // --- drag ---
+    // --- drag / pan / zoom ---
     const onDown = (e: React.PointerEvent, node: WeaveNode) => {
-        const rect = boardRef.current?.getBoundingClientRect();
-        if (!rect) return;
-        drag.current = { id: node.id, dx: e.clientX - rect.left - node.x, dy: e.clientY - rect.top - node.y };
-        (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+        const w = toWorld(e.clientX, e.clientY);
+        drag.current = { id: node.id, dx: w.x - node.x, dy: w.y - node.y };
+        e.stopPropagation();
+    };
+    const onBoardDown = (e: React.PointerEvent) => {
+        // Background press → pan the infinite canvas.
+        panning.current = { sx: e.clientX, sy: e.clientY, px: pan.x, py: pan.y };
     };
     const onMove = (e: React.PointerEvent) => {
-        const rect = boardRef.current?.getBoundingClientRect();
-        if (!rect) return;
         if (linking) {
-            setLinking({ ...linking, x: e.clientX - rect.left, y: e.clientY - rect.top });
+            const w = toWorld(e.clientX, e.clientY);
+            setLinking({ ...linking, x: w.x, y: w.y });
             return;
         }
         const d = drag.current;
-        if (!d) return;
-        const x = Math.max(0, Math.min(rect.width - 130, e.clientX - rect.left - d.dx));
-        const y = Math.max(0, Math.min(rect.height - 110, e.clientY - rect.top - d.dy));
-        setNodes(prev => prev.map(nn => nn.id === d.id ? { ...nn, x, y } : nn));
+        if (d) {
+            const w = toWorld(e.clientX, e.clientY);
+            setNodes(prev => prev.map(nn => nn.id === d.id ? { ...nn, x: w.x - d.dx, y: w.y - d.dy } : nn));
+            return;
+        }
+        const p = panning.current;
+        if (p) setPan({ x: p.px + (e.clientX - p.sx), y: p.py + (e.clientY - p.sy) });
     };
-    const onUp = () => { drag.current = null; setLinking(null); };
+    const onUp = () => { drag.current = null; panning.current = null; setLinking(null); };
+    const onWheel = (e: React.WheelEvent) => {
+        e.preventDefault();
+        const rect = boardRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const next = Math.max(0.35, Math.min(2.2, scale * (e.deltaY > 0 ? 0.92 : 1.08)));
+        const cx = e.clientX - rect.left;
+        const cy = e.clientY - rect.top;
+        setPan({ x: cx - ((cx - pan.x) / scale) * next, y: cy - ((cy - pan.y) / scale) * next });
+        setScale(next);
+    };
 
     // --- geometry for edges (Weave-style horizontal beziers) ---
-    const W = (nn: WeaveNode) => nn.kind === 'note' ? 200 : nn.kind === 'output' ? 110 : 130;
+    const W = (nn: WeaveNode) => nn.kind === 'note' ? 200 : nn.kind === 'output' ? (nn.image ? 200 : 110) : 130;
     const anchorY = (nn: WeaveNode) => nn.y + 46;
     const bezier = (x1: number, y1: number, x2: number, y2: number) => {
         const dx = Math.max(40, Math.abs(x2 - x1) / 2);
@@ -192,7 +223,7 @@ export default function WeaveView() {
     };
 
     /** Weave a specific set of nodes (a connected group, or the whole board). */
-    const weaveNodes = async (pool: WeaveNode[], tier: 'flash' | 'pro') => {
+    const weaveNodes = async (pool: WeaveNode[], tier: 'flash' | 'pro'): Promise<GenerationResult | undefined> => {
         const boardAssets = assets.filter(a => pool.some(nn => nn.kind === 'product' && nn.assetId === a.id));
         const boardElements = elements.filter(el => pool.some(nn => nn.kind === 'element' && nn.elementId === el.id));
         const facets: WeaveFacet[] = pool
@@ -218,9 +249,11 @@ export default function WeaveView() {
             );
             setResults(prev => [r, ...prev]);
             setNotice(tier === 'pro' ? '✓ Woven (pro).' : '✓ Draft woven — happy? Weave in pro.');
+            return r;
         } catch (err: any) {
             setNotice(`❌ ${err instanceof BudgetExceededError ? err.message : err?.message || err}`);
         } finally { setBusy(''); }
+        return undefined;
     };
 
     /** Global Run: output nodes present → run each output's connected group;
@@ -233,16 +266,23 @@ export default function WeaveView() {
         }
         for (const o of outputs) {
             const comp = componentOf(o.id);
-            if (comp.size <= 1) { setNotice('❌ An 🎯 output has no connections — link materials to it with ⚭.'); continue; }
-            await weaveNodes(nodes.filter(nn => comp.has(nn.id) && nn.id !== o.id), tier);
+            if (comp.size <= 1) { setNotice('❌ An 🎯 output has no connections — drag a port line to it first.'); continue; }
+            const r = await weaveNodes(nodes.filter(nn => comp.has(nn.id) && nn.id !== o.id), tier);
+            if (r) setNodes(prev => prev.map(x => x.id === o.id ? { ...x, image: r.image.value } : x));
         }
     };
 
-    /** Run a single output node's connected group. */
+    /** Run a single output node's connected group — result lands IN the node. */
     const runOutput = async (o: WeaveNode) => {
         const comp = componentOf(o.id);
-        if (comp.size <= 1) { setNotice('❌ Link materials to this 🎯 output with ⚭ first.'); return; }
-        await weaveNodes(nodes.filter(nn => comp.has(nn.id) && nn.id !== o.id), tierSel);
+        if (comp.size <= 1) { setNotice('❌ Drag a port line from your materials to this 🎯 output first.'); return; }
+        const r = await weaveNodes(nodes.filter(nn => comp.has(nn.id) && nn.id !== o.id), tierSel);
+        if (r) setNodes(prev => prev.map(x => x.id === o.id ? { ...x, image: r.image.value } : x));
+    };
+
+    /** Solo-run one facet node: visualize that single dimension (flash). */
+    const runFacet = async (f: WeaveNode) => {
+        await weaveNodes([f], 'flash');
     };
 
     const assetOf = (id?: string) => assets.find(a => a.id === id);
@@ -306,21 +346,25 @@ export default function WeaveView() {
                 </div>
             )}
 
-            {/* Board */}
+            {/* Board — infinite canvas: drag background to pan, wheel to zoom */}
             <DropZone onFiles={addImages} hint="Drop images — fusion sources">
-                <div ref={boardRef} onPointerMove={onMove} onPointerUp={onUp}
+                <div ref={boardRef} onPointerDown={onBoardDown} onPointerMove={onMove} onPointerUp={onUp} onWheel={onWheel}
                     style={{
-                        position: 'relative', height: 480, borderRadius: 16,
+                        position: 'relative', height: 560, borderRadius: 16,
                         background: 'repeating-linear-gradient(0deg, #fafafa, #fafafa 23px, #f0f0f1 24px), repeating-linear-gradient(90deg, #fafafa, #fafafa 23px, #f0f0f1 24px)',
-                        border: '1px solid #e4e4e7', overflow: 'hidden', touchAction: 'none',
+                        border: '1px solid #e4e4e7', overflow: 'hidden', touchAction: 'none', cursor: 'grab',
                     }}>
+                    <div style={{ position: 'absolute', top: 8, right: 12, zIndex: 10, fontSize: 10, color: '#a1a1aa', pointerEvents: 'none' }}>
+                        {Math.round(scale * 100)}% · drag background to pan · wheel to zoom
+                    </div>
                     {nodes.length === 0 && (
                         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a1a1aa', fontSize: 13, pointerEvents: 'none', textAlign: 'center', padding: 20 }}>
                             The board is empty — add materials and prompts, drag from a node's ⚪ port to another node to link, wire groups into 🎯 outputs, then ▶ Run.
                         </div>
                     )}
+                    <div style={{ position: 'absolute', left: 0, top: 0, transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`, transformOrigin: '0 0' }}>
                     {/* Edges — Weave-style beziers; click a curve to unlink */}
-                    <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+                    <svg width={8000} height={8000} style={{ position: 'absolute', left: -2000, top: -2000, pointerEvents: 'none', overflow: 'visible' }} viewBox="-2000 -2000 8000 8000">
                         {edges.map(e => {
                             const a = nodes.find(nn => nn.id === e.from);
                             const b = nodes.find(nn => nn.id === e.to);
@@ -353,7 +397,7 @@ export default function WeaveView() {
                                 onPointerUp={e => { if (linking) { e.stopPropagation(); completeLink(nn.id); } }}
                                 style={{
                                     position: 'absolute', left: nn.x, top: nn.y,
-                                    width: nn.kind === 'note' ? 200 : nn.kind === 'output' ? 110 : 130,
+                                    width: nn.kind === 'note' ? 200 : nn.kind === 'output' ? (nn.image ? 200 : 110) : 130,
                                     background: nn.kind === 'output' ? '#18181b' : '#fff',
                                     borderRadius: 12,
                                     border: linking?.from === nn.id ? '2px solid #d97706'
@@ -368,9 +412,8 @@ export default function WeaveView() {
                                     <div key={side}
                                         onPointerDown={e => {
                                             e.stopPropagation();
-                                            const rect = boardRef.current?.getBoundingClientRect();
-                                            if (!rect) return;
-                                            setLinking({ from: nn.id, x: e.clientX - rect.left, y: e.clientY - rect.top });
+                                            const w = toWorld(e.clientX, e.clientY);
+                                            setLinking({ from: nn.id, x: w.x, y: w.y });
                                         }}
                                         title="Drag to another node to link"
                                         style={{
@@ -380,15 +423,41 @@ export default function WeaveView() {
                                         }} />
                                 ))}
                                 {nn.kind === 'output' && (
-                                    <div style={{ textAlign: 'center', paddingTop: 12 }}>
-                                        <div style={{ fontSize: 20 }}>🎯</div>
-                                        <div style={{ fontSize: 9, color: '#a1a1aa', margin: '2px 0 6px' }}>
+                                    <div style={{ textAlign: 'center', paddingTop: nn.image ? 2 : 12 }}>
+                                        {nn.image ? (
+                                            <img src={nn.image} alt="" draggable={false}
+                                                onClick={e => { e.stopPropagation(); openLightbox(nn.image!); }}
+                                                style={{ width: '100%', borderRadius: 9, display: 'block', cursor: 'zoom-in' }} />
+                                        ) : (
+                                            <div style={{ fontSize: 20 }}>🎯</div>
+                                        )}
+                                        <div style={{ fontSize: 9, color: '#a1a1aa', margin: '3px 0 5px' }}>
                                             {Math.max(0, componentOf(nn.id).size - 1)} linked
                                         </div>
-                                        <button onClick={e => { e.stopPropagation(); runOutput(nn); }} onPointerDown={e => e.stopPropagation()} disabled={!!busy}
-                                            style={{ border: 'none', borderRadius: 7, background: '#fff', color: '#18181b', fontSize: 10, fontWeight: 800, cursor: 'pointer', padding: '3px 12px' }}>
-                                            ▶ Run
-                                        </button>
+                                        <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }} onPointerDown={e => e.stopPropagation()}>
+                                            <button onClick={e => { e.stopPropagation(); runOutput(nn); }} disabled={!!busy}
+                                                style={{ border: 'none', borderRadius: 7, background: '#fff', color: '#18181b', fontSize: 10, fontWeight: 800, cursor: 'pointer', padding: '3px 12px' }}>
+                                                ▶ Run
+                                            </button>
+                                            {nn.image && <>
+                                                <button title="Save to Gallery" disabled={!!busy}
+                                                    onClick={async e => {
+                                                        e.stopPropagation();
+                                                        const r = results.find(x => x.image.value === nn.image);
+                                                        if (r) { await recordSignal(r, 'save'); setNotice('✓ Saved to Gallery.'); }
+                                                    }}
+                                                    style={{ border: 'none', borderRadius: 7, background: 'rgba(255,255,255,0.2)', color: '#fff', fontSize: 10, cursor: 'pointer', padding: '3px 8px' }}>★</button>
+                                                <button title="Download"
+                                                    onClick={e => {
+                                                        e.stopPropagation();
+                                                        const a2 = document.createElement('a');
+                                                        a2.href = nn.image!;
+                                                        a2.download = `praxis-weave-${nn.id.slice(0, 6)}.png`;
+                                                        a2.click();
+                                                    }}
+                                                    style={{ border: 'none', borderRadius: 7, background: 'rgba(255,255,255,0.2)', color: '#fff', fontSize: 10, cursor: 'pointer', padding: '3px 8px' }}>⬇</button>
+                                            </>}
+                                        </div>
                                     </div>
                                 )}
                                 {nn.kind === 'product' && a && (
@@ -445,6 +514,9 @@ export default function WeaveView() {
                                             <span style={{ fontSize: 10, fontWeight: 800 }}>⚡ {nn.dimension?.toUpperCase()}</span>
                                         </div>
                                         <div style={{ fontSize: 9, color: '#71717a', marginTop: 3, display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{nn.description}</div>
+                                        <button onClick={e => { e.stopPropagation(); runFacet(nn); }} onPointerDown={e => e.stopPropagation()} disabled={!!busy}
+                                            title="Generate from this single dimension alone (flash)"
+                                            style={{ width: '100%', marginTop: 3, border: 'none', background: '#f4f4f5', borderRadius: 5, fontSize: 8.5, fontWeight: 700, cursor: 'pointer', padding: '2px 0' }}>▶ solo</button>
                                     </>
                                 )}
                                 {nn.kind === 'note' && (
@@ -459,6 +531,7 @@ export default function WeaveView() {
                             </div>
                         );
                     })}
+                    </div>
                 </div>
             </DropZone>
 
