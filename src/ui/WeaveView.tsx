@@ -163,6 +163,15 @@ const miniBtn: React.CSSProperties = {
     fontWeight: 700, cursor: 'pointer', padding: '3px 7px', color: '#3f3f46',
 };
 
+const fitImage = (fixed: boolean, extra: React.CSSProperties = {}): React.CSSProperties => ({
+    width: '100%',
+    height: fixed ? '100%' : undefined,
+    objectFit: fixed ? 'cover' : undefined,
+    borderRadius: 8,
+    display: 'block',
+    ...extra,
+});
+
 export default function WeaveView() {
     const [assets, setAssets] = useState<Asset[]>([]);
     const [elements, setElements] = useState<Element[]>([]);
@@ -842,6 +851,7 @@ export default function WeaveView() {
                         const a = assetOf(nn.assetId);
                         const el = elementOf(nn.elementId);
                         const open = expandedId === nn.id;
+                        const fixed = !!H(nn);
                         return (
                             <div key={nn.id}
                                 onPointerDown={e => {
@@ -864,6 +874,7 @@ export default function WeaveView() {
                                         : open ? '2px solid #18181b' : '1px solid #d4d4d8',
                                     boxShadow: open ? '0 8px 24px rgba(0,0,0,0.16)' : '0 3px 10px rgba(0,0,0,0.08)',
                                     cursor: 'grab', userSelect: 'none', padding: 6, zIndex: open ? 5 : 1,
+                                    boxSizing: 'border-box',
                                 }}>
                                 {/* Resize handle — drag ◢ to scale the node */}
                                 <div
@@ -895,11 +906,24 @@ export default function WeaveView() {
                                 ))}
 
                                 {/* --- content (collapsed = content only, no buttons) --- */}
+                                <div style={{
+                                    height: fixed ? '100%' : undefined,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    minHeight: 0,
+                                    overflow: 'hidden',
+                                }}>
+                                <div style={{
+                                    flex: fixed ? '1 1 auto' : undefined,
+                                    minHeight: 0,
+                                    overflow: 'hidden',
+                                    borderRadius: 8,
+                                }}>
                                 {nn.kind === 'hero' && a && (
-                                    <div onClick={() => toggleExpand(nn.id)}>
+                                    <div onClick={() => toggleExpand(nn.id)} style={{ height: fixed ? '100%' : undefined, overflow: 'hidden' }}>
                                         {a.photos[0] && <img src={a.photos[0].image.value} alt="" draggable={false}
-                                            style={{ width: '100%', borderRadius: 8, display: 'block' }} />}
-                                        <div style={{ fontSize: 10, fontWeight: 700, marginTop: 3 }}>
+                                            style={fitImage(fixed)} />}
+                                        <div style={{ fontSize: 10, fontWeight: 700, marginTop: 3, display: fixed ? 'none' : undefined }}>
                                             {a.name}
                                             {(nn.quantity ?? 1) > 1 && <span style={{ color: '#d97706', marginLeft: 4 }}>×{nn.quantity}</span>}
                                         </div>
@@ -912,19 +936,19 @@ export default function WeaveView() {
                                     </div>
                                 )}
                                 {nn.kind === 'image' && nn.image && (
-                                    <div onClick={() => toggleExpand(nn.id)}>
+                                    <div onClick={() => toggleExpand(nn.id)} style={{ height: fixed ? '100%' : undefined, overflow: 'hidden' }}>
                                         {nodeImages(nn).length > 1 ? (
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, height: fixed ? '100%' : undefined }}>
                                                 {nodeImages(nn).slice(0, 4).map((img, i) => (
                                                     <img key={i} src={img} alt="" draggable={false}
-                                                        style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 6, display: 'block' }} />
+                                                        style={{ width: '100%', height: fixed ? '100%' : undefined, aspectRatio: fixed ? undefined : '1', objectFit: 'cover', borderRadius: 6, display: 'block', minHeight: 0 }} />
                                                 ))}
                                             </div>
                                         ) : (
                                             <img src={nn.image} alt="" draggable={false}
-                                                style={{ width: '100%', borderRadius: 8, display: 'block' }} />
+                                                style={fitImage(fixed)} />
                                         )}
-                                        <div style={{ fontSize: 9, color: '#a1a1aa', marginTop: 2 }}>
+                                        <div style={{ fontSize: 9, color: '#a1a1aa', marginTop: 2, display: fixed ? 'none' : undefined }}>
                                             {nn.role === 'hero' ? 'hero (exact)' : nn.role === 'concept' ? 'concept' : 'fusion'}
                                             {nodeImages(nn).length > 1 ? ` · ${nodeImages(nn).length} angles` : ''}
                                         </div>
@@ -946,7 +970,7 @@ export default function WeaveView() {
                                         {nn.image && (
                                             <img src={nn.image} alt="" draggable={false}
                                                 onClick={() => toggleExpand(nn.id)}
-                                                style={{ width: '100%', borderRadius: 8, display: 'block', marginBottom: 4 }} />
+                                                style={fitImage(fixed, { marginBottom: fixed ? 0 : 4 })} />
                                         )}
                                         {/* 3D trackball — the WHOLE body orbits; click for actions */}
                                         <div
@@ -986,7 +1010,7 @@ export default function WeaveView() {
                                     <div onClick={() => toggleExpand(nn.id)} style={{ textAlign: 'center', paddingTop: nn.image ? 0 : 10 }}>
                                         {nn.image ? (
                                             <img src={nn.image} alt="" draggable={false}
-                                                style={{ width: '100%', borderRadius: 9, display: 'block' }} />
+                                                style={fitImage(fixed, { borderRadius: 9 })} />
                                         ) : (
                                             <>
                                                 <div style={{ fontSize: 13, fontWeight: 800, color: '#71717a' }}>OUTPUT</div>
@@ -997,11 +1021,23 @@ export default function WeaveView() {
                                         )}
                                     </div>
                                 )}
+                                </div>
 
                                 {/* --- expanded action row --- */}
                                 {open && (
                                     <div onPointerDown={e => e.stopPropagation()}
-                                        style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 5, background: nn.kind === 'output' ? 'rgba(255,255,255,0.08)' : undefined, borderRadius: 8, padding: nn.kind === 'output' ? 4 : 0 }}>
+                                        style={{
+                                            flex: '0 0 auto',
+                                            display: 'flex',
+                                            gap: 3,
+                                            flexWrap: 'wrap',
+                                            marginTop: 5,
+                                            maxHeight: fixed ? 58 : undefined,
+                                            overflow: fixed ? 'auto' : undefined,
+                                            background: nn.kind === 'output' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.82)',
+                                            borderRadius: 8,
+                                            padding: nn.kind === 'output' ? 4 : fixed ? 4 : 0,
+                                        }}>
                                         {nn.kind === 'output' && (
                                             <>
                                                 <button style={{ ...miniBtn, background: '#fff' }} disabled={!!busy} onClick={() => runOutput(nn)}>Run</button>
@@ -1070,6 +1106,7 @@ export default function WeaveView() {
                                         <button style={{ ...miniBtn, color: '#b91c1c' }} onClick={() => remove(nn.id)}>✕ delete</button>
                                     </div>
                                 )}
+                                </div>
                             </div>
                         );
                     })}

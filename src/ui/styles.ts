@@ -45,7 +45,7 @@ export const S: Record<string, CSSProperties> = {
         cursor: 'pointer',
         textAlign: 'left',
     },
-    tabActive: { background: 'rgba(255,255,255,0.12)', color: '#fff', borderColor: 'rgba(255,255,255,0.13)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)' },
+    tabActive: { background: 'rgba(255,255,255,0.12)', color: '#fff', border: '1px solid rgba(255,255,255,0.13)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)' },
     shell: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: 'rgba(245,246,248,0.82)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)' },
     topbar: {
         minHeight: 48,
@@ -80,7 +80,7 @@ export const S: Record<string, CSSProperties> = {
         cursor: 'pointer',
         boxSizing: 'border-box',
     },
-    chipOn: { background: 'rgba(32,36,44,0.92)', color: '#fff', borderColor: 'rgba(32,36,44,0.92)' },
+    chipOn: { background: 'rgba(32,36,44,0.92)', color: '#fff', border: '1px solid rgba(32,36,44,0.92)' },
     card: {
         background: 'rgba(255,255,255,0.72)',
         border: '1px solid rgba(218,223,231,0.78)',
