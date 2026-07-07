@@ -53,6 +53,33 @@ const fileToDataUrl = (f: File): Promise<string> =>
 
 let dropCount = 0;
 
+/** 3D trackball — drag freely in any direction (az 0-359, pitch −60..+60). */
+const Ball: React.FC<{ az: number; pi: number; size: number }> = ({ az, pi, size }) => {
+    const rad = Math.PI / 180;
+    const r = size / 2 - 5;
+    const mx = r * Math.sin(az * rad) * Math.cos(pi * rad);
+    const my = -r * Math.sin(pi * rad);
+    const front = Math.cos(az * rad) >= 0;
+    return (
+        <div style={{
+            width: size, height: size, borderRadius: '50%', position: 'relative', flexShrink: 0,
+            background: 'radial-gradient(circle at 32% 28%, #ffffff, #d4d4d8 45%, #8a8a92 78%, #64646c)',
+            boxShadow: 'inset -4px -6px 12px rgba(0,0,0,0.28), 0 2px 6px rgba(0,0,0,0.25)',
+        }}>
+            {/* equator + meridian hints */}
+            <div style={{ position: 'absolute', left: '6%', right: '6%', top: '42%', height: '16%', borderRadius: '50%', border: '1px solid rgba(0,0,0,0.16)' }} />
+            <div style={{ position: 'absolute', top: '6%', bottom: '6%', left: '42%', width: '16%', borderRadius: '50%', border: '1px solid rgba(0,0,0,0.10)' }} />
+            {/* camera marker */}
+            <div style={{
+                position: 'absolute', width: 9, height: 9, borderRadius: '50%',
+                left: size / 2 + mx - 4.5, top: size / 2 + my - 4.5,
+                background: front ? '#18181b' : 'rgba(24,24,27,0.3)',
+                border: '1.5px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+            }} />
+        </div>
+    );
+};
+
 const miniBtn: React.CSSProperties = {
     border: 'none', background: '#f4f4f5', borderRadius: 6, fontSize: 9.5,
     fontWeight: 700, cursor: 'pointer', padding: '3px 7px', color: '#3f3f46',
@@ -175,8 +202,8 @@ export default function WeaveView() {
         }
         const o = orbit.current;
         if (o) {
-            const az = ((Math.round(o.a0 + (e.clientX - o.sx) * 0.9) % 360) + 360) % 360;
-            const pi = Math.max(-45, Math.min(45, Math.round(o.p0 - (e.clientY - o.sy) * 0.4)));
+            const az = ((Math.round(o.a0 + (e.clientX - o.sx) * 1.1) % 360) + 360) % 360;
+            const pi = Math.max(-60, Math.min(60, Math.round(o.p0 - (e.clientY - o.sy) * 0.6)));
             setNodes(prev => prev.map(nn => nn.id === o.id ? { ...nn, angle: az, pitch: pi } : nn));
             return;
         }
@@ -278,13 +305,14 @@ export default function WeaveView() {
         const conceptIdeas = imageNodes
             .filter(nn => nn.role === 'concept')
             .map(nn => ({ image: nn.image!, idea: nn.description?.trim() || 'the transferable aesthetic idea of this image' }));
-        // Rotate nodes with results feed their view in as product truth too.
-        adhocProductImages.push(...pool.filter(nn => nn.kind === 'rotate' && nn.image).map(nn => nn.image!));
+        // Rotate nodes with results are VIEWPOINT TRUTH: the final image must
+        // show the product from exactly the chosen angle.
+        const viewpointImages = pool.filter(nn => nn.kind === 'rotate' && nn.image).map(nn => nn.image!);
         const note = pool.filter(nn => nn.kind === 'note' && nn.text?.trim()).map(nn => nn.text!.trim()).join(' · ') || undefined;
         // Output nodes with results also act as fusion sources when linked onward.
         const outputImages = pool.filter(nn => nn.kind === 'output' && nn.image).map(nn => nn.image!);
         fusionImages.push(...outputImages);
-        if (boardAssets.length + boardElements.length + fusionImages.length + facets.length + adhocProductImages.length + conceptIdeas.length === 0) {
+        if (boardAssets.length + boardElements.length + fusionImages.length + facets.length + adhocProductImages.length + conceptIdeas.length + viewpointImages.length === 0) {
             setNotice('❌ Nothing usable in this group.');
             return undefined;
         }
@@ -292,7 +320,7 @@ export default function WeaveView() {
         setNotice('');
         try {
             const r = await weaveGenerate(
-                { assets: boardAssets, elements: boardElements, fusionImages, adhocProductImages, conceptIdeas, facets, note, ratio, size, tier },
+                { assets: boardAssets, elements: boardElements, fusionImages, adhocProductImages, viewpointImages, conceptIdeas, facets, note, ratio, size, tier },
                 setBusy
             );
             resultsRef.current.set(r.id, r);
@@ -615,47 +643,27 @@ export default function WeaveView() {
                                 )}
                                 {nn.kind === 'rotate' && (
                                     <div style={{ textAlign: 'center' }}>
-                                        {/* 3D orbit pad — drag to rotate: X = azimuth, Y = pitch */}
+                                        {nn.image && (
+                                            <img src={nn.image} alt="" draggable={false}
+                                                onClick={() => toggleExpand(nn.id)}
+                                                style={{ width: '100%', borderRadius: 8, display: 'block', marginBottom: 4 }} />
+                                        )}
+                                        {/* 3D trackball — drag in ANY direction */}
                                         <div
                                             onPointerDown={e => {
                                                 e.stopPropagation();
                                                 orbit.current = { id: nn.id, sx: e.clientX, sy: e.clientY, a0: nn.angle ?? 90, p0: nn.pitch ?? 0 };
                                             }}
                                             onClick={() => toggleExpand(nn.id)}
-                                            style={{ position: 'relative', cursor: 'grab', touchAction: 'none' }}>
-                                            {nn.image ? (
-                                                <img src={nn.image} alt="" draggable={false}
-                                                    style={{ width: '100%', borderRadius: 8, display: 'block', transform: `perspective(300px) rotateX(${(nn.pitch ?? 0) / 4}deg)` }} />
-                                            ) : (
-                                                <div style={{
-                                                    height: 78, borderRadius: 8, background: '#18181b',
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                }}>
-                                                    {/* wireframe turntable gizmo */}
-                                                    <div style={{
-                                                        width: 52, height: 52, borderRadius: '50%',
-                                                        border: '1px solid rgba(255,255,255,0.35)', position: 'relative',
-                                                        transform: `perspective(140px) rotateX(${55 - (nn.pitch ?? 0) / 2}deg)`,
-                                                    }}>
-                                                        <div style={{
-                                                            position: 'absolute', width: 8, height: 8, borderRadius: '50%', background: '#fff',
-                                                            left: 22 + 24 * Math.sin(((nn.angle ?? 90) * Math.PI) / 180) - 4,
-                                                            top: 22 - 24 * Math.cos(((nn.angle ?? 90) * Math.PI) / 180) - 4,
-                                                        }} />
-                                                        <div style={{ position: 'absolute', inset: '40%', borderRadius: '50%', background: 'rgba(255,255,255,0.25)' }} />
-                                                    </div>
-                                                </div>
-                                            )}
-                                            <div style={{
-                                                position: 'absolute', bottom: 4, left: '50%', transform: 'translateX(-50%)',
-                                                fontSize: 9, fontWeight: 800, color: '#fff', background: 'rgba(0,0,0,0.55)',
-                                                borderRadius: 999, padding: '1px 8px', whiteSpace: 'nowrap', pointerEvents: 'none',
-                                            }}>
-                                                {nn.angle ?? 90}° · {(nn.pitch ?? 0) > 0 ? '+' : ''}{nn.pitch ?? 0}°
+                                            style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'grab', touchAction: 'none', justifyContent: 'center', padding: '2px 0' }}>
+                                            <Ball az={nn.angle ?? 90} pi={nn.pitch ?? 0} size={nn.image ? 40 : 72} />
+                                            <div style={{ textAlign: 'left' }}>
+                                                <div style={{ fontSize: 12, fontWeight: 800 }}>{nn.angle ?? 90}°</div>
+                                                <div style={{ fontSize: 10, fontWeight: 700, color: '#71717a' }}>{(nn.pitch ?? 0) > 0 ? '+' : ''}{nn.pitch ?? 0}°</div>
                                             </div>
                                         </div>
-                                        <div style={{ fontSize: 8.5, color: '#71717a', margin: '3px 0 0' }}>
-                                            drag to orbit · {rotateInputs(nn).length} input img
+                                        <div style={{ fontSize: 8.5, color: '#71717a', marginTop: 2 }}>
+                                            drag ball to orbit · {rotateInputs(nn).length} input img
                                         </div>
                                     </div>
                                 )}

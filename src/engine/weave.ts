@@ -76,7 +76,7 @@ export async function rotateView(
     onStatus?: (t: string) => void
 ): Promise<GenerationResult> {
     if (sourceImages.length === 0) throw new Error('Connect or add at least one image of the subject.');
-    const pitch = Math.max(-45, Math.min(45, Math.round(opts.pitch ?? 0)));
+    const pitch = Math.max(-60, Math.min(60, Math.round(opts.pitch ?? 0)));
     const pitchLine = pitch > 5
         ? `CAMERA ELEVATION: raised camera looking DOWN at the subject by about ${pitch}°.`
         : pitch < -5
@@ -130,6 +130,8 @@ export interface WeaveInput {
     fusionImages: string[];
     /** Uploaded images marked as PRODUCT — ad-hoc source-of-truth pixels. */
     adhocProductImages: string[];
+    /** Rotate-node views: the product must appear from EXACTLY these angles. */
+    viewpointImages?: string[];
     /** Uploaded images marked as CONCEPT — embody the idea, never copy. */
     conceptIdeas: Array<{ image: string; idea: string }>;
     /** Dimension-level extraction: take ONLY these facets of their sources. */
@@ -149,8 +151,9 @@ export async function weaveGenerate(
     const redlines = (soul?.fields ?? []).filter(f => f.locked && f.value.trim());
 
     const libraryProductImages = input.assets.flatMap(a => a.photos.slice(0, Math.ceil(8 / Math.max(1, input.assets.length))).map(p => p.image.value));
-    const assetImages = [...libraryProductImages, ...input.adhocProductImages].slice(0, 10);
-    const hasProducts = assetImages.length > 0;
+    const viewpoints = (input.viewpointImages ?? []).slice(0, 2);
+    const assetImages = [...libraryProductImages, ...input.adhocProductImages].slice(0, 10 - viewpoints.length);
+    const hasProducts = assetImages.length > 0 || viewpoints.length > 0;
     const fusion = input.fusionImages.slice(0, hasProducts ? 4 : 6);
     const concepts = input.conceptIdeas.slice(0, 4);
     // Facets grouped by source image — each source attached once.
@@ -173,7 +176,8 @@ export async function weaveGenerate(
 
     // ---- Prompt ----
     const n = assetImages.length;
-    const fusionStart = n + 1;
+    const vpStart = n + 1;
+    const fusionStart = vpStart + viewpoints.length;
     const conceptStart = fusionStart + fusion.length;
     const facetStart = conceptStart + concepts.length;
     const facetManifest = facetImages.map((img, i) => {
@@ -181,7 +185,8 @@ export async function weaveGenerate(
         return `Image ${facetStart + i}: FACET SOURCE — take ONLY its ${dims} as described in the DIMENSIONAL EXTRACTION section; ignore everything else about this image (subjects, furniture, and all other dimensions).`;
     });
     const manifest = [
-        hasProducts && `Images 1-${n}: PRODUCT SOURCE OF TRUTH. Reconstruct the product(s) EXACTLY and ONLY from these. Their decorative styling is disposable staging — restyle it per the direction.`,
+        n > 0 && `Images 1-${n}: PRODUCT SOURCE OF TRUTH. Reconstruct the product(s) EXACTLY and ONLY from these. Their decorative styling is disposable staging — restyle it per the direction.`,
+        viewpoints.length > 0 && `Image${viewpoints.length > 1 ? `s ${vpStart}-${vpStart + viewpoints.length - 1}` : ` ${vpStart}`}: VIEWPOINT TRUTH — the user chose this exact camera angle on the product. The product MUST appear in the final image from EXACTLY this viewpoint (same rotation, same camera elevation). ${n > 0 ? 'Use images 1-' + n + ' only for material and detail fidelity;' : ''} the viewpoint image defines HOW the product faces the camera.`,
         fusion.length > 0 && `Images ${fusionStart}-${fusionStart + fusion.length - 1}: FUSION SOURCES. Blend their aesthetic ideas — light behavior, palette logic, material language, mood, formal energy — into ONE new coherent image. NEVER copy their subjects, furniture or composition literally.`,
         concepts.length > 0 && `Images ${conceptStart}-${conceptStart + concepts.length - 1}: CONCEPT SOURCES. Embody each one's stated idea (see CONCEPT IDEAS section); never copy its composition or subjects.`,
         ...facetManifest,
@@ -217,7 +222,7 @@ One coherent, museum-grade image where every board input coexists and reinforces
     onStatus?.(input.tier === 'pro' ? 'Weaving (pro)…' : 'Weaving (flash)…');
     let out = await generateImage({
         prompt,
-        referenceImages: [...assetImages, ...fusion, ...concepts.map(c => c.image), ...facetImages, ...heroReminder],
+        referenceImages: [...assetImages, ...viewpoints, ...fusion, ...concepts.map(c => c.image), ...facetImages, ...heroReminder],
         model,
         aspectRatio: input.ratio,
         imageSize: input.size,
