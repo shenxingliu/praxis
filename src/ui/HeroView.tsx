@@ -171,7 +171,7 @@ export default function HeroView() {
                 ))}
                 {assets.length === 0 && (
                     <p style={{ fontSize: 12, color: '#a1a1aa' }}>
-                        No heroes yet. Upload or drag & drop hero photos here, or import Greenington in System.
+                        No heroes yet. Upload or drag & drop hero photos here, or import legacy data in System.
                     </p>
                 )}
             </div>

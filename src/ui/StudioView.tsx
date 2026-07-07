@@ -239,7 +239,7 @@ export default function StudioView() {
                         })}
                         {assets.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No heroes yet — import them in System.</span>}
                     </div>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                         <button style={S.btn} disabled={!!busy} onClick={begin}>
                             Start — propose concepts
                         </button>
