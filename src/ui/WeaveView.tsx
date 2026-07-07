@@ -338,9 +338,24 @@ export default function WeaveView() {
         const conceptIdeas = imageNodes
             .filter(nn => nn.role === 'concept')
             .map(nn => ({ image: nn.image!, idea: nn.description?.trim() || 'the transferable aesthetic idea of this image' }));
-        // Rotate nodes with results are VIEWPOINT TRUTH: the final image must
-        // show the product from exactly the chosen angle.
-        const viewpointImages = pool.filter(nn => nn.kind === 'rotate' && nn.image).map(nn => nn.image!);
+        // Rotate nodes define the VIEWPOINT. If one hasn't been rendered yet,
+        // auto-render it first (flash) so "drag ball → Run" just works.
+        const rotateNodes = pool.filter(nn => nn.kind === 'rotate');
+        const viewpointImages = rotateNodes.filter(nn => nn.image).map(nn => nn.image!);
+        const viewpoint = rotateNodes.length > 0
+            ? { azimuth: rotateNodes[0].angle ?? 90, pitch: rotateNodes[0].pitch ?? 0 }
+            : undefined;
+        for (const rn of rotateNodes.filter(nn => !nn.image)) {
+            const imgs = rotateInputs(rn);
+            if (imgs.length === 0) continue;
+            setBusy(`Rendering viewpoint ${rn.angle ?? 90}° first…`);
+            try {
+                const rv = await rotateView(imgs, rn.angle ?? 90, { ratio, size, tier: 'flash', pitch: rn.pitch ?? 0 }, setBusy);
+                resultsRef.current.set(rv.id, rv);
+                setNodes(prev => prev.map(x => x.id === rn.id ? { ...x, image: rv.image.value, resultId: rv.id } : x));
+                viewpointImages.push(rv.image.value);
+            } catch (err) { console.warn('[weave] viewpoint pre-render failed:', err); }
+        }
         const note = pool.filter(nn => nn.kind === 'note' && nn.text?.trim()).map(nn => nn.text!.trim()).join(' · ') || undefined;
         // Output nodes with results also act as fusion sources when linked onward.
         const outputImages = pool.filter(nn => nn.kind === 'output' && nn.image).map(nn => nn.image!);
@@ -353,7 +368,7 @@ export default function WeaveView() {
         setNotice('');
         try {
             const r = await weaveGenerate(
-                { assets: boardAssets, elements: boardElements, fusionImages, adhocProductImages, viewpointImages, conceptIdeas, facets, note, ratio, size, tier },
+                { assets: boardAssets, elements: boardElements, fusionImages, adhocProductImages, viewpointImages, viewpoint, conceptIdeas, facets, note, ratio, size, tier },
                 setBusy
             );
             resultsRef.current.set(r.id, r);

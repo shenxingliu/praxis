@@ -132,6 +132,8 @@ export interface WeaveInput {
     adhocProductImages: string[];
     /** Rotate-node views: the product must appear from EXACTLY these angles. */
     viewpointImages?: string[];
+    /** Numeric camera viewpoint from a rotate node — obeyed even without pixels. */
+    viewpoint?: { azimuth: number; pitch: number };
     /** Uploaded images marked as CONCEPT — embody the idea, never copy. */
     conceptIdeas: Array<{ image: string; idea: string }>;
     /** Dimension-level extraction: take ONLY these facets of their sources. */
@@ -208,6 +210,7 @@ ${promptBlocks.brand(brand)}
 ${promptBlocks.elements(input.elements)}
 ${extractionBlock}
 ${redlines.length > 0 ? `\n### BRAND RED-LINES (never violate) ###\n${redlines.map(f => `- ${f.key}: ${f.value}`).join('\n')}` : ''}
+${input.viewpoint ? `\n### CAMERA VIEWPOINT (user-selected on the 3D trackball — obey EXACTLY) ###\nShow the product from azimuth ${Math.round(input.viewpoint.azimuth)}° (0° = the product's front, rotating clockwise around its vertical axis) with camera elevation ${Math.round(input.viewpoint.pitch)}° (positive = camera raised, looking down). This viewpoint overrides any angle suggested by the product photos.` : ''}
 ${input.note ? `\n### ART DIRECTION ###\n${input.note}` : ''}
 
 ### ATTACHED IMAGE ROLES (obey strictly) ###
