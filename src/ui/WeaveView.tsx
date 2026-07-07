@@ -15,7 +15,8 @@ import { S, chip } from './styles';
  * Results can be pulled back onto the board for iterative fusion.
  */
 
-type NodeKind = 'product' | 'element' | 'image' | 'note' | 'facet';
+type NodeKind = 'product' | 'element' | 'image' | 'note' | 'facet' | 'output';
+interface WeaveEdge { id: string; from: string; to: string }
 interface WeaveNode {
     id: string;
     kind: NodeKind;
@@ -52,6 +53,8 @@ export default function WeaveView() {
     const [assets, setAssets] = useState<Asset[]>([]);
     const [elements, setElements] = useState<Element[]>([]);
     const [nodes, setNodes] = useState<WeaveNode[]>([]);
+    const [edges, setEdges] = useState<WeaveEdge[]>([]);
+    const [linkFrom, setLinkFrom] = useState<string | null>(null);
     const [picker, setPicker] = useState<'product' | 'element' | null>(null);
     const [ratio, setRatio] = useState<GenerationParams['ratio']>('4:3');
     const [size, setSize] = useState<NonNullable<GenerationParams['size']>>('1K');
@@ -71,7 +74,39 @@ export default function WeaveView() {
     const add = (partial: Omit<WeaveNode, 'id' | 'x' | 'y'>) =>
         setNodes(prev => [...prev, { id: crypto.randomUUID(), ...nextPos(), ...partial }]);
 
-    const remove = (id: string) => setNodes(prev => prev.filter(nn => nn.id !== id));
+    const remove = (id: string) => {
+        setNodes(prev => prev.filter(nn => nn.id !== id));
+        setEdges(prev => prev.filter(e => e.from !== id && e.to !== id));
+        if (linkFrom === id) setLinkFrom(null);
+    };
+
+    /** Click ⚭ on node A, then ⚭ on node B → edge (click again to unlink). */
+    const link = (id: string) => {
+        if (!linkFrom) { setLinkFrom(id); return; }
+        if (linkFrom === id) { setLinkFrom(null); return; }
+        const exists = edges.find(e =>
+            (e.from === linkFrom && e.to === id) || (e.from === id && e.to === linkFrom));
+        if (exists) {
+            setEdges(prev => prev.filter(e => e.id !== exists.id));
+        } else {
+            setEdges(prev => [...prev, { id: crypto.randomUUID(), from: linkFrom, to: id }]);
+        }
+        setLinkFrom(null);
+    };
+
+    /** Undirected connected component containing `startId`. */
+    const componentOf = (startId: string): Set<string> => {
+        const seen = new Set<string>([startId]);
+        const queue = [startId];
+        while (queue.length > 0) {
+            const cur = queue.pop()!;
+            for (const e of edges) {
+                const other = e.from === cur ? e.to : e.to === cur ? e.from : null;
+                if (other && !seen.has(other)) { seen.add(other); queue.push(other); }
+            }
+        }
+        return seen;
+    };
 
     const addImages = async (files: File[] | FileList | null) => {
         for (const f of imageFiles(files)) add({ kind: 'image', image: await fileToDataUrl(f), role: 'fusion' });
@@ -145,21 +180,22 @@ export default function WeaveView() {
     };
     const onUp = () => { drag.current = null; };
 
-    const weave = async (tier: 'flash' | 'pro') => {
-        const boardAssets = assets.filter(a => nodes.some(nn => nn.kind === 'product' && nn.assetId === a.id));
-        const boardElements = elements.filter(el => nodes.some(nn => nn.kind === 'element' && nn.elementId === el.id));
-        const facets: WeaveFacet[] = nodes
+    /** Weave a specific set of nodes (a connected group, or the whole board). */
+    const weaveNodes = async (pool: WeaveNode[], tier: 'flash' | 'pro') => {
+        const boardAssets = assets.filter(a => pool.some(nn => nn.kind === 'product' && nn.assetId === a.id));
+        const boardElements = elements.filter(el => pool.some(nn => nn.kind === 'element' && nn.elementId === el.id));
+        const facets: WeaveFacet[] = pool
             .filter(nn => nn.kind === 'facet' && nn.image && nn.dimension && nn.description)
             .map(nn => ({ image: nn.image!, dimension: nn.dimension!, description: nn.description! }));
-        const imageNodes = nodes.filter(nn => nn.kind === 'image' && nn.image);
+        const imageNodes = pool.filter(nn => nn.kind === 'image' && nn.image);
         const fusionImages = imageNodes.filter(nn => (nn.role ?? 'fusion') === 'fusion').map(nn => nn.image!);
         const adhocProductImages = imageNodes.filter(nn => nn.role === 'product').map(nn => nn.image!);
         const conceptIdeas = imageNodes
             .filter(nn => nn.role === 'concept')
             .map(nn => ({ image: nn.image!, idea: nn.description?.trim() || 'the transferable aesthetic idea of this image' }));
-        const note = nodes.filter(nn => nn.kind === 'note' && nn.text?.trim()).map(nn => nn.text!.trim()).join(' · ') || undefined;
+        const note = pool.filter(nn => nn.kind === 'note' && nn.text?.trim()).map(nn => nn.text!.trim()).join(' · ') || undefined;
         if (boardAssets.length + boardElements.length + fusionImages.length + facets.length + adhocProductImages.length + conceptIdeas.length === 0) {
-            setNotice('❌ Put something on the board first.');
+            setNotice('❌ Nothing usable in this group — connect materials to it first.');
             return;
         }
         setBusy(tier === 'pro' ? 'Weaving (pro, inspected)…' : 'Weaving (flash draft)…');
@@ -174,6 +210,28 @@ export default function WeaveView() {
         } catch (err: any) {
             setNotice(`❌ ${err instanceof BudgetExceededError ? err.message : err?.message || err}`);
         } finally { setBusy(''); }
+    };
+
+    /** Global Run: output nodes present → run each output's connected group;
+     *  otherwise weave the whole board (classic mode). */
+    const weave = async (tier: 'flash' | 'pro') => {
+        const outputs = nodes.filter(nn => nn.kind === 'output');
+        if (outputs.length === 0) {
+            await weaveNodes(nodes, tier);
+            return;
+        }
+        for (const o of outputs) {
+            const comp = componentOf(o.id);
+            if (comp.size <= 1) { setNotice('❌ An 🎯 output has no connections — link materials to it with ⚭.'); continue; }
+            await weaveNodes(nodes.filter(nn => comp.has(nn.id) && nn.id !== o.id), tier);
+        }
+    };
+
+    /** Run a single output node's connected group. */
+    const runOutput = async (o: WeaveNode) => {
+        const comp = componentOf(o.id);
+        if (comp.size <= 1) { setNotice('❌ Link materials to this 🎯 output with ⚭ first.'); return; }
+        await weaveNodes(nodes.filter(nn => comp.has(nn.id) && nn.id !== o.id), tierSel);
     };
 
     const assetOf = (id?: string) => assets.find(a => a.id === id);
@@ -200,6 +258,7 @@ export default function WeaveView() {
                 <button style={S.btn} onClick={() => setPicker(picker === 'element' ? null : 'element')}>💡 + Concept</button>
                 <button style={S.btnGhost} onClick={() => fileRef.current?.click()}>🖼 + Images</button>
                 <button style={S.btnGhost} onClick={() => add({ kind: 'note', text: '' })}>📝 + Note</button>
+                <button style={S.btnGhost} onClick={() => add({ kind: 'output' })} title="An output collects connected materials into ONE image — several outputs = several images from one board">🎯 + Output</button>
                 <input ref={fileRef} type="file" multiple accept="image/*" style={{ display: 'none' }}
                     onChange={e => { addImages(e.target.files); e.currentTarget.value = ''; }} />
                 <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -245,23 +304,60 @@ export default function WeaveView() {
                         border: '1px solid #e4e4e7', overflow: 'hidden', touchAction: 'none',
                     }}>
                     {nodes.length === 0 && (
-                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a1a1aa', fontSize: 13, pointerEvents: 'none' }}>
-                            The board is empty — add products, concepts, images and notes, then Weave.
+                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a1a1aa', fontSize: 13, pointerEvents: 'none', textAlign: 'center', padding: 20 }}>
+                            The board is empty — add materials, link them with ⚭ into groups (optionally toward 🎯 outputs), then ▶ Run.
                         </div>
                     )}
+                    {/* Edges */}
+                    <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+                        {edges.map(e => {
+                            const a = nodes.find(nn => nn.id === e.from);
+                            const b = nodes.find(nn => nn.id === e.to);
+                            if (!a || !b) return null;
+                            const cx = (nn: WeaveNode) => nn.x + (nn.kind === 'note' ? 100 : nn.kind === 'output' ? 55 : 65);
+                            const cy = (nn: WeaveNode) => nn.y + 42;
+                            return (
+                                <line key={e.id}
+                                    x1={cx(a)} y1={cy(a)} x2={cx(b)} y2={cy(b)}
+                                    stroke="#18181b" strokeWidth={2} strokeOpacity={0.35} strokeDasharray="6 4" />
+                            );
+                        })}
+                    </svg>
                     {nodes.map(nn => {
                         const a = assetOf(nn.assetId);
                         const el = elementOf(nn.elementId);
                         return (
                             <div key={nn.id} onPointerDown={e => onDown(e, nn)}
                                 style={{
-                                    position: 'absolute', left: nn.x, top: nn.y, width: nn.kind === 'note' ? 200 : 130,
-                                    background: '#fff', borderRadius: 12, border: '1px solid #d4d4d8',
+                                    position: 'absolute', left: nn.x, top: nn.y,
+                                    width: nn.kind === 'note' ? 200 : nn.kind === 'output' ? 110 : 130,
+                                    background: nn.kind === 'output' ? '#18181b' : '#fff',
+                                    borderRadius: 12,
+                                    border: linkFrom === nn.id ? '2.5px solid #d97706' : '1px solid #d4d4d8',
                                     boxShadow: '0 3px 10px rgba(0,0,0,0.08)', cursor: 'grab', userSelect: 'none',
                                     padding: 6,
                                 }}>
                                 <button onClick={() => remove(nn.id)}
                                     style={{ position: 'absolute', top: 2, right: 2, zIndex: 2, border: 'none', borderRadius: 5, background: 'rgba(0,0,0,0.4)', color: '#fff', fontSize: 9, cursor: 'pointer', padding: '1px 5px' }}>✕</button>
+                                <button onClick={e => { e.stopPropagation(); link(nn.id); }} onPointerDown={e => e.stopPropagation()}
+                                    title={linkFrom ? (linkFrom === nn.id ? 'Cancel linking' : 'Link to this node') : 'Start a link from this node'}
+                                    style={{
+                                        position: 'absolute', top: 2, left: 2, zIndex: 2, border: 'none', borderRadius: 5,
+                                        background: linkFrom === nn.id ? '#d97706' : 'rgba(0,0,0,0.4)',
+                                        color: '#fff', fontSize: 9, fontWeight: 800, cursor: 'pointer', padding: '1px 5px',
+                                    }}>⚭</button>
+                                {nn.kind === 'output' && (
+                                    <div style={{ textAlign: 'center', paddingTop: 12 }}>
+                                        <div style={{ fontSize: 20 }}>🎯</div>
+                                        <div style={{ fontSize: 9, color: '#a1a1aa', margin: '2px 0 6px' }}>
+                                            {Math.max(0, componentOf(nn.id).size - 1)} linked
+                                        </div>
+                                        <button onClick={e => { e.stopPropagation(); runOutput(nn); }} onPointerDown={e => e.stopPropagation()} disabled={!!busy}
+                                            style={{ border: 'none', borderRadius: 7, background: '#fff', color: '#18181b', fontSize: 10, fontWeight: 800, cursor: 'pointer', padding: '3px 12px' }}>
+                                            ▶ Run
+                                        </button>
+                                    </div>
+                                )}
                                 {nn.kind === 'product' && a && (
                                     <>
                                         {a.photos[0] && <img src={a.photos[0].image.value} alt="" draggable={false}
