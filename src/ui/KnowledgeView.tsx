@@ -51,7 +51,7 @@ export default function KnowledgeView() {
             const r = await distill();
             setMsg(`Distilled ${r.newRules} new rule${r.newRules === 1 ? '' : 's'} from ${r.consumed} signals`);
         } catch (err: any) {
-            setMsg(`❌ ${err?.message || err}`);
+            setMsg(`${err?.message || err}`);
         } finally {
             setBusy(false);
             refresh();
@@ -68,7 +68,7 @@ export default function KnowledgeView() {
                 <button style={chip(panel === 'soul')} onClick={() => setPanel('soul')}>Brand Soul</button>
                 <button style={chip(panel === 'calibrate')} onClick={() => setPanel('calibrate')}>Calibrate Taste</button>
                 <button style={{ ...S.btnGhost, marginLeft: 'auto' }} onClick={() => exportBrandBook()}>
-                    📖 Export brand book
+                    Export brand book
                 </button>
             </div>
 
@@ -137,7 +137,7 @@ const SoulPanel: React.FC = () => {
             setSoul(await deriveBrandSoul());
             setDirty(true);
             setBusy('');
-        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
+        } catch (err: any) { setBusy(`${err?.message || err}`); }
     };
 
     const deriveFromWeb = async () => {
@@ -149,8 +149,8 @@ const SoulPanel: React.FC = () => {
             setSoul(d.soul);
             setWebSuggest(d);
             setDirty(true);
-            setBusy('✓ Draft derived from the website — review below, then Save');
-        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
+            setBusy('Draft derived from the website — review below, then Save');
+        } catch (err: any) { setBusy(`${err?.message || err}`); }
     };
 
     const applySuggestion = async () => {
@@ -162,14 +162,14 @@ const SoulPanel: React.FC = () => {
             productEssence: webSuggest.suggestedEssence,
         });
         setWebSuggest(null);
-        setBusy('✓ Brand description & essence updated');
+        setBusy('Brand description & essence updated');
     };
 
     const save = async () => {
         if (!soul) return;
         setBusy('Saving…');
-        try { await saveBrandSoul(soul); setDirty(false); setBusy('✓ Saved (previous version archived)'); }
-        catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
+        try { await saveBrandSoul(soul); setDirty(false); setBusy('Saved (previous version archived)'); }
+        catch (err: any) { setBusy(`${err?.message || err}`); }
     };
 
     const update = (key: string, patch: Partial<SoulField>) => {
@@ -186,7 +186,7 @@ const SoulPanel: React.FC = () => {
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <button style={S.btn} onClick={derive}>{soul ? 'Re-derive draft' : 'Derive brand soul'}</button>
                 <button style={S.btnGhost} onClick={deriveFromWeb} title="Point at any brand website — its words and imagery become a soul draft">
-                    🌐 From website
+                    From website
                 </button>
                 {soul && <button style={{ ...S.btn, opacity: dirty ? 1 : 0.4 }} disabled={!dirty} onClick={save}>Save</button>}
                 <span style={{ fontSize: 11, color: '#71717a' }}>{busy}</span>
@@ -216,7 +216,7 @@ const SoulPanel: React.FC = () => {
                                         {specOf(f.key)?.label ?? f.key} <span style={{ color: '#a1a1aa', fontWeight: 400 }}>· w{f.weight.toFixed(1)}</span>
                                     </span>
                                     <button style={S.btnGhost} onClick={() => update(f.key, { locked: !f.locked })}>
-                                        {f.locked ? '🔒 Locked' : '🔓 Lock'}
+                                        {f.locked ? 'Locked' : 'Lock'}
                                     </button>
                                 </div>
                                 <textarea
@@ -262,8 +262,8 @@ const CalibratePanel: React.FC = () => {
         try {
             const r = await analyzeTaste(winners.map(w => w.image), losers.map(l => l.image));
             setSummary(r.summary);
-            setBusy(`✓ Refined ${r.refined} soul field${r.refined === 1 ? '' : 's'} — review them in Brand Soul`);
-        } catch (err: any) { setBusy(`❌ ${err?.message || err}`); }
+            setBusy(`Refined ${r.refined} soul field${r.refined === 1 ? '' : 's'} — review them in Brand Soul`);
+        } catch (err: any) { setBusy(`${err?.message || err}`); }
     };
 
     return (
@@ -278,7 +278,7 @@ const CalibratePanel: React.FC = () => {
                             style={{ position: 'relative', padding: 4, borderRadius: 14, cursor: 'pointer', border: '1px solid #e4e4e7', background: '#fff' }}>
                             <img src={me.image} alt="" style={{ width: 280, height: 280, objectFit: 'cover', borderRadius: 10, display: 'block' }} />
                             <span onClick={e => { e.stopPropagation(); openLightbox(me.image); }} title="View full size"
-                                style={{ position: 'absolute', top: 10, right: 10, background: 'rgba(0,0,0,0.45)', color: '#fff', borderRadius: 8, padding: '2px 7px', fontSize: 13, cursor: 'zoom-in' }}>🔍</span>
+                                style={{ position: 'absolute', top: 10, right: 10, background: 'rgba(0,0,0,0.45)', color: '#fff', borderRadius: 8, padding: '2px 7px', fontSize: 13, cursor: 'zoom-in' }}>Zoom</span>
                         </button>
                     ))}
                 </div>
@@ -294,7 +294,7 @@ const CalibratePanel: React.FC = () => {
                 </button>
                 <span style={{ fontSize: 11, color: '#059669' }}>{busy}</span>
             </div>
-            {summary && <div style={{ ...S.card, fontSize: 12.5, lineHeight: 1.6 }}>🗒 {summary}</div>}
+            {summary && <div style={{ ...S.card, fontSize: 12.5, lineHeight: 1.6 }}>{summary}</div>}
         </div>
     );
 };

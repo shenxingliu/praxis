@@ -75,10 +75,10 @@ export default function SystemView() {
             const assets = assetRows.map(r => r.data).filter(a => a?.name && Array.isArray(a.photos));
             const references = refRows.map(r => r.data).filter(r => r?.image?.value);
             await storage.importBulk({ assets, references });
-            setImportLog(`✓ Imported ${assets.length} products + ${references.length} references from V1.3 cloud`);
+            setImportLog(`Imported ${assets.length} products + ${references.length} references from V1.3 cloud`);
             window.dispatchEvent(new CustomEvent(INVENTORY_CHANGED_EVENT));
         } catch (err: any) {
-            setImportLog(`❌ Import failed: ${err?.message || err}`);
+            setImportLog(`Import failed: ${err?.message || err}`);
         }
         refresh();
     };
@@ -94,9 +94,9 @@ export default function SystemView() {
             ]);
             await storage.importBulk({ assets, references, rules, results, signals });
             await storage.setBudget(budget);
-            setImportLog(`☁ Uploaded: ${assets.length} assets, ${references.length} refs, ${rules.length} rules, ${results.length} results, ${signals.length} signals`);
+            setImportLog(`Uploaded: ${assets.length} assets, ${references.length} refs, ${rules.length} rules, ${results.length} results, ${signals.length} signals`);
         } catch (err: any) {
-            setImportLog(`❌ Upload failed: ${err?.message || err}`);
+            setImportLog(`Upload failed: ${err?.message || err}`);
         }
         refresh();
     };
@@ -104,7 +104,7 @@ export default function SystemView() {
     return (
         <div style={{ maxWidth: 720, margin: '0 auto', padding: '24px 28px' }}>
             <p style={{ fontSize: 12, color: isCloud ? '#059669' : '#a1a1aa' }}>
-                Storage: {isCloud ? '☁ Supabase cloud' : 'local IndexedDB (offline mode)'}
+                Storage: {isCloud ? 'Supabase cloud' : 'local IndexedDB (offline mode)'}
             </p>
             <h2 style={{ fontSize: 16 }}>Stores</h2>
             <table style={{ fontSize: 14, borderSpacing: '1.5rem 0.25rem' }}>
@@ -132,7 +132,7 @@ export default function SystemView() {
             )}
             {isCloud && (
                 <button style={{ ...S.btnGhost, marginRight: 8 }} onClick={uploadLocalToCloud}>
-                    ☁ Upload local data → cloud (one-time)
+                    Upload local data → cloud (one-time)
                 </button>
             )}
             <button style={S.btnGhost} onClick={() => fileRef.current?.click()}>Import V1 data (migration-out/*.json)</button>

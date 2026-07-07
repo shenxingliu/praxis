@@ -22,7 +22,7 @@ import { S, chip } from './styles';
 const STAGES = ['brief', 'concepts', 'plan', 'execute', 'review', 'done'] as const;
 const STAGE_LABEL: Record<string, string> = {
     brief: '1 · Brief', concepts: '2 · Concepts', plan: '3 · Plan',
-    execute: '4 · Execute', review: '5 · Review', done: '✓ Done',
+    execute: '4 · Execute', review: '5 · Review', done: 'Done',
 };
 
 export default function StudioView() {
@@ -181,7 +181,7 @@ export default function StudioView() {
         await savePreset(name, job.plan.params, job.plan.elementIds, r.image.value);
         setError(null);
         setBusy('');
-        window.alert(`✓ Preset "${name}" saved — use it in the Quick tab: pick products, draft, execute.`);
+        window.alert(`Preset "${name}" saved — use it in the Quick tab: pick products, draft, execute.`);
     };
 
     const stage = job?.stage ?? 'brief';
@@ -209,7 +209,7 @@ export default function StudioView() {
                 )}
             </div>
 
-            {busy && <div style={{ ...S.card, fontSize: 12, color: '#52525b' }}>⏳ {busy}</div>}
+            {busy && <div style={{ ...S.card, fontSize: 12, color: '#52525b' }}>{busy}</div>}
             {error && <div style={S.err}>{error}</div>}
 
             {/* Stage 1 — brief */}
@@ -262,7 +262,7 @@ export default function StudioView() {
                 <>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                     <button style={S.btnGhost} disabled={!!busy} onClick={wildcard} title="Collide two contradictory concepts">
-                        ⚡ Wildcard — collide two opposites
+                        Wildcard — collide two opposites
                     </button>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
@@ -311,9 +311,9 @@ export default function StudioView() {
                     <div style={{ borderTop: '1px solid #f4f4f5', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                             <button style={S.btnGhost} disabled={!!busy} onClick={moodboard}>
-                                🎨 Moodboard — 3 cheap drafts first
+                                Moodboard — 3 cheap drafts first
                             </button>
-                            {job.plan.moodAnchorResultId && <span style={{ fontSize: 10, color: '#059669' }}>✓ mood anchored — its pixels will lead the final shot</span>}
+                            {job.plan.moodAnchorResultId && <span style={{ fontSize: 10, color: '#059669' }}>mood anchored — its pixels will lead the final shot</span>}
                         </div>
                         {moodDrafts.length > 0 && (
                             <div style={{ display: 'flex', gap: 8 }}>
@@ -325,17 +325,17 @@ export default function StudioView() {
                                         <div style={{ display: 'flex', gap: 3, marginTop: 3 }}>
                                             <button onClick={() => anchor(d.id)} disabled={!!busy}
                                                 style={{ ...S.btnGhost, flex: 1, fontSize: 10 }}>
-                                                {job.plan!.moodAnchorResultId === d.id ? '✓ Anchored' : '⚓ Anchor'}
+                                                {job.plan!.moodAnchorResultId === d.id ? 'Anchored' : 'Anchor'}
                                             </button>
                                             <button title="Save to Gallery" disabled={!!busy}
-                                                onClick={async () => { await recordSignal(d, 'save'); window.alert('✓ Saved to Gallery.'); }}
-                                                style={{ ...S.btnGhost, fontSize: 10 }}>★</button>
+                                                onClick={async () => { await recordSignal(d, 'save'); window.alert('Saved to Gallery.'); }}
+                                                style={{ ...S.btnGhost, fontSize: 10 }}>Fav</button>
                                             <button title="Download" onClick={() => {
                                                 const a = document.createElement('a');
                                                 a.href = d.image.value;
                                                 a.download = `praxis-mood-${d.id.slice(0, 6)}.png`;
                                                 a.click();
-                                            }} style={{ ...S.btnGhost, fontSize: 10 }}>⬇</button>
+                                            }} style={{ ...S.btnGhost, fontSize: 10 }}>DL</button>
                                         </div>
                                     </div>
                                 ))}
@@ -347,7 +347,7 @@ export default function StudioView() {
                         {[1, 2, 3].map(n => <button key={n} style={chip(count === n)} onClick={() => setCount(n)}>{n}</button>)}
                         <button style={S.btn} disabled={!!busy} onClick={execute}>Approve — execute</button>
                         <button style={S.btnGhost} disabled={!!busy} onClick={campaign} title="hero 16:9 + pdp 4:3 + social 1:1 + seasonal 3:4">
-                            📦 Campaign kit — all 4 purposes
+                            Campaign kit — all 4 purposes
                         </button>
                     </div>
                 </div>
@@ -373,18 +373,18 @@ export default function StudioView() {
                                                 background: r.consistency.pass ? 'rgba(5,150,105,0.92)' : 'rgba(217,119,6,0.92)',
                                                 color: '#fff',
                                             }}>
-                                            {r.consistency.pass ? (r.consistency.retried ? '✓ fixed' : '✓ exact') : '⚠ check'}
+                                            {r.consistency.pass ? (r.consistency.retried ? 'fixed' : 'exact') : 'check'}
                                         </span>
                                     )}
                                     <div style={{ padding: '6px 10px', display: 'flex', justifyContent: 'space-between' }}>
                                         <span style={{ display: 'flex', gap: 8 }}>
-                                            <button onClick={() => rate(r, 'like')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, opacity: fb === 'like' ? 1 : 0.35 }}>👍</button>
-                                            <button onClick={() => rate(r, 'dislike')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, opacity: fb === 'dislike' ? 1 : 0.35 }}>👎</button>
+                                            <button onClick={() => rate(r, 'like')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, opacity: fb === 'like' ? 1 : 0.35 }}>+</button>
+                                            <button onClick={() => rate(r, 'dislike')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, opacity: fb === 'dislike' ? 1 : 0.35 }}>-</button>
                                         </span>
                                         <span style={{ display: 'flex', gap: 6 }}>
-                                            <button style={S.btnGhost} title="Save to Gallery (curated set, used for training export)" onClick={async () => { await recordSignal(r, 'save'); setBusy(''); setError(null); window.alert('✓ Saved — find it in Gallery.'); }}>★</button>
-                                            <button style={S.btnGhost} title="Save this whole setup as a Quick preset — same look, swap products" onClick={() => toPreset(r)}>☆</button>
-                                            <button style={S.btnGhost} onClick={() => download(r)}>⬇</button>
+                                            <button style={S.btnGhost} title="Save to Gallery (curated set, used for training export)" onClick={async () => { await recordSignal(r, 'save'); setBusy(''); setError(null); window.alert('Saved — find it in Gallery.'); }}>Fav</button>
+                                            <button style={S.btnGhost} title="Save this whole setup as a Quick preset — same look, swap products" onClick={() => toPreset(r)}>Preset</button>
+                                            <button style={S.btnGhost} onClick={() => download(r)}>DL</button>
                                         </span>
                                     </div>
                                 </div>
@@ -401,7 +401,7 @@ export default function StudioView() {
                     {job.review && (
                         <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 8 }}>
                             <span style={S.label}>
-                                DESIGN CRIT — {job.review.overall}/100 · {job.review.verdict === 'pass' ? '✅ ON BRAND' : '🔶 REVISE'}
+                                DESIGN CRIT — {job.review.overall}/100 · {job.review.verdict === 'pass' ? 'ON BRAND' : 'REVISE'}
                             </span>
                             {job.review.axisScores.map(a => (
                                 <div key={a.axis} style={{ fontSize: 11.5 }}>
@@ -424,7 +424,7 @@ export default function StudioView() {
 
                     {stage === 'done' && (
                         <div style={{ ...S.card, fontSize: 12, color: '#059669' }}>
-                            ✓ Job archived. Feedback recorded — the studio learns from every job.
+                            Job archived. Feedback recorded — the studio learns from every job.
                         </div>
                     )}
                 </>

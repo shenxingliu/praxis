@@ -253,12 +253,12 @@ export default function CreateView() {
                             </button>
                         </div>
                         <div style={{ fontSize: 10, color: '#a1a1aa' }}>
-                            ✓ Brand DNA · ✓ learned rules · ✓ promoted references — applied automatically
+                            Brand DNA · learned rules · promoted references — applied automatically
                             {selected.size === 0 && ' · pick at least one product on the left'}
                         </div>
                     </div>
 
-                    {isGenerating && <div style={{ ...S.card, fontSize: 12, color: '#52525b' }}>⏳ {status || 'Working…'}</div>}
+                    {isGenerating && <div style={{ ...S.card, fontSize: 12, color: '#52525b' }}>{status || 'Working…'}</div>}
                     {error && <div style={S.err}>{error}</div>}
 
                     {results.length > 0 && (
@@ -277,12 +277,12 @@ export default function CreateView() {
                                                 </div>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
                                                     <span style={{ display: 'flex', gap: 8 }}>
-                                                        <button title="Like — teaches the AI" onClick={() => rate(r, 'like')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, opacity: fb === 'like' ? 1 : 0.35 }}>👍</button>
-                                                        <button title="Dislike — teaches the AI" onClick={() => rate(r, 'dislike')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, opacity: fb === 'dislike' ? 1 : 0.35 }}>👎</button>
+                                                        <button title="Like — teaches the AI" onClick={() => rate(r, 'like')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, opacity: fb === 'like' ? 1 : 0.35 }}>+</button>
+                                                        <button title="Dislike — teaches the AI" onClick={() => rate(r, 'dislike')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, opacity: fb === 'dislike' ? 1 : 0.35 }}>-</button>
                                                     </span>
                                                     <span style={{ display: 'flex', gap: 6 }}>
-                                                        <button style={S.btnGhost} onClick={() => download(r)}>⬇</button>
-                                                        <button style={{ ...S.btnGhost, ...(adopted ? { opacity: 0.5 } : {}) }} disabled={adopted} onClick={() => save(r)}>{adopted ? '✓' : 'Save'}</button>
+                                                        <button style={S.btnGhost} onClick={() => download(r)}>DL</button>
+                                                        <button style={{ ...S.btnGhost, ...(adopted ? { opacity: 0.5 } : {}) }} disabled={adopted} onClick={() => save(r)}>{adopted ? 'Done' : 'Save'}</button>
                                                     </span>
                                                 </div>
                                             </div>

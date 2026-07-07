@@ -61,9 +61,9 @@ export default function ProductsView() {
                 updatedAt: Date.now(),
             };
             await storage.upsertAsset(asset);
-            setNotice(`✓ "${name}" added with ${photos.length} photo${photos.length === 1 ? '' : 's'}`);
+            setNotice(`"${name}" added with ${photos.length} photo${photos.length === 1 ? '' : 's'}`);
             announce();
-        } catch (err: any) { setNotice(`❌ ${err?.message || err}`); }
+        } catch (err: any) { setNotice(`${err?.message || err}`); }
         setBusy('');
         refresh();
     };
@@ -83,9 +83,9 @@ export default function ProductsView() {
                 });
             }
             await storage.upsertAsset({ ...target, photos: [...target.photos, ...extra], updatedAt: Date.now() });
-            setNotice(`✓ ${extra.length} photo${extra.length === 1 ? '' : 's'} added to "${target.name}"`);
+            setNotice(`${extra.length} photo${extra.length === 1 ? '' : 's'} added to "${target.name}"`);
             announce();
-        } catch (err: any) { setNotice(`❌ ${err?.message || err}`); }
+        } catch (err: any) { setNotice(`${err?.message || err}`); }
         setBusy('');
         refresh();
     };
@@ -97,7 +97,7 @@ export default function ProductsView() {
     };
 
     const removePhoto = async (a: Asset, photoId: string) => {
-        if (a.photos.length <= 1) { setNotice('❌ A product needs at least one photo — delete the product instead.'); return; }
+        if (a.photos.length <= 1) { setNotice('A product needs at least one photo — delete the product instead.'); return; }
         await storage.upsertAsset({ ...a, photos: a.photos.filter(p => p.id !== photoId), updatedAt: Date.now() });
         announce();
         refresh();
@@ -114,7 +114,7 @@ export default function ProductsView() {
     const remove = async (a: Asset) => {
         if (!window.confirm(`Delete product "${a.name}" and its ${a.photos.length} photo${a.photos.length === 1 ? '' : 's'}?`)) return;
         await storage.deleteAsset(a.id);
-        setNotice(`✓ "${a.name}" deleted`);
+        setNotice(`"${a.name}" deleted`);
         announce();
         refresh();
     };
@@ -126,11 +126,11 @@ export default function ProductsView() {
                     style={{
                         position: 'sticky', top: 8, zIndex: 10, fontSize: 12.5, fontWeight: 600,
                         padding: '8px 14px', borderRadius: 10,
-                        background: busy ? '#fef3c7' : notice.startsWith('❌') ? '#fef2f2' : '#ecfdf5',
-                        color: busy ? '#92400e' : notice.startsWith('❌') ? '#b91c1c' : '#047857',
+                        background: busy ? '#fef3c7' : notice.startsWith('Error') ? '#fef2f2' : '#ecfdf5',
+                        color: busy ? '#92400e' : notice.startsWith('Error') ? '#b91c1c' : '#047857',
                         border: '1px solid rgba(0,0,0,0.06)',
                     }}>
-                    {busy ? `⏳ ${busy}` : notice}
+                    {busy ? `${busy}` : notice}
                 </div>
             )}
 
@@ -149,7 +149,7 @@ export default function ProductsView() {
                     <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 8, height: '100%', boxSizing: 'border-box' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
                             <span style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
-                            <span style={{ fontSize: 10, color: '#a1a1aa', flexShrink: 0 }}>{a.category || '—'} · {a.photos.length} 📷</span>
+                            <span style={{ fontSize: 10, color: '#a1a1aa', flexShrink: 0 }}>{a.category || '—'} · {a.photos.length}</span>
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
                             {a.photos.map(p => (

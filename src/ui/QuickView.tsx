@@ -12,7 +12,7 @@ import { S, chip } from './styles';
 /**
  * QUICK — preset-based generation: same approved look, different product.
  * Two steps by design: DRAFT (flash, cheap) → EXECUTE (pro, final).
- * Presets are saved from Studio results (☆ Save as preset).
+ * Presets are saved from Studio results (Save as preset).
  */
 
 const RATIOS: GenerationParams['ratio'][] = ['1:1', '16:9', '4:3', '3:4', '9:16'];
@@ -46,8 +46,8 @@ export default function QuickView() {
     const effSize = size ?? preset?.params.size ?? '1K';
 
     const runTier = async (tier: 'flash' | 'pro') => {
-        if (!preset) { setNotice('❌ Pick a preset first.'); return; }
-        if (selectedAssets.size === 0) { setNotice('❌ Pick at least one product.'); return; }
+        if (!preset) { setNotice('Pick a preset first.'); return; }
+        if (selectedAssets.size === 0) { setNotice('Pick at least one product.'); return; }
         setBusy(tier === 'flash' ? 'Draft (flash)…' : 'Executing (pro)…');
         setNotice('');
         try {
@@ -57,9 +57,9 @@ export default function QuickView() {
                 tier, setBusy
             );
             setResults(prev => [{ ...r, tier }, ...prev]);
-            setNotice(tier === 'flash' ? '✓ Draft ready — happy? Execute in pro.' : '✓ Final rendered.');
+            setNotice(tier === 'flash' ? 'Draft ready — happy? Execute in pro.' : 'Final rendered.');
         } catch (err: any) {
-            setNotice(`❌ ${err instanceof BudgetExceededError ? err.message : err?.message || err}`);
+            setNotice(`${err instanceof BudgetExceededError ? err.message : err?.message || err}`);
         } finally { setBusy(''); }
     };
 
@@ -95,11 +95,11 @@ export default function QuickView() {
                     style={{
                         position: 'sticky', top: 8, zIndex: 10, fontSize: 12.5, fontWeight: 600,
                         padding: '8px 14px', borderRadius: 10,
-                        background: busy ? '#fef3c7' : notice.startsWith('❌') ? '#fef2f2' : '#ecfdf5',
-                        color: busy ? '#92400e' : notice.startsWith('❌') ? '#b91c1c' : '#047857',
+                        background: busy ? '#fef3c7' : notice.startsWith('Error') ? '#fef2f2' : '#ecfdf5',
+                        color: busy ? '#92400e' : notice.startsWith('Error') ? '#b91c1c' : '#047857',
                         border: '1px solid rgba(0,0,0,0.06)',
                     }}>
-                    {busy ? `⏳ ${busy}` : notice}
+                    {busy ? `${busy}` : notice}
                 </div>
             )}
 
@@ -107,7 +107,7 @@ export default function QuickView() {
                 <div style={{ ...S.label, marginBottom: 6 }}>1 · PRESET · {presets.length}</div>
                 {presets.length === 0 && (
                     <div style={{ ...S.card, fontSize: 12, color: '#a1a1aa' }}>
-                        No presets yet. Run a job in Studio, then hit ☆ on a result you love — its full setup becomes a preset here.
+                        No presets yet. Run a job in Studio, then hit Save on a result you love — its full setup becomes a preset here.
                     </div>
                 )}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
@@ -179,10 +179,10 @@ export default function QuickView() {
                                         {r.tier === 'pro' ? 'FINAL' : 'DRAFT'} · ${r.estimatedCostUsd.toFixed(2)}
                                     </span>
                                     <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                        <button onClick={() => rate(r, 'like')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, opacity: fb === 'like' ? 1 : 0.35 }}>👍</button>
-                                        <button onClick={() => rate(r, 'dislike')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, opacity: fb === 'dislike' ? 1 : 0.35 }}>👎</button>
-                                        <button style={S.btnGhost} title="Save to Gallery" onClick={async () => { await recordSignal(r, 'save'); setNotice('✓ Saved — find it in Gallery.'); }}>★</button>
-                                        <button style={S.btnGhost} onClick={() => download(r)}>⬇</button>
+                                        <button onClick={() => rate(r, 'like')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, opacity: fb === 'like' ? 1 : 0.35 }}>+</button>
+                                        <button onClick={() => rate(r, 'dislike')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, opacity: fb === 'dislike' ? 1 : 0.35 }}>-</button>
+                                        <button style={S.btnGhost} title="Save to Gallery" onClick={async () => { await recordSignal(r, 'save'); setNotice('Saved — find it in Gallery.'); }}>Fav</button>
+                                        <button style={S.btnGhost} onClick={() => download(r)}>DL</button>
                                     </span>
                                 </div>
                             </div>

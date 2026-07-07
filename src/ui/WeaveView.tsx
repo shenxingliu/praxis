@@ -12,7 +12,7 @@ import { S, chip } from './styles';
 /**
  * WEAVE — infinite freeform canvas (Figma-Weave inspired).
  *
- * Nodes: 🛋 product · 💡 concept · 🖼 image · ⚡ facet · ✍️ prompt · 🎯 output.
+ * Nodes: product · concept · image · facet · To prompt · .output.
  * Port-drag bezier links; connected groups flow into outputs; results are
  * generated INSIDE the output nodes. Collapsed nodes show only their
  * content — click a node to expand its action buttons.
@@ -217,7 +217,7 @@ export default function WeaveView() {
         setNodes(prev => prev.map(x => x.id === target.id
             ? { ...x, images: [...nodeImages(x), ...extra] }
             : x));
-        setNotice(`✓ ${extra.length} angle${extra.length === 1 ? '' : 's'} merged into the node.`);
+        setNotice(`${extra.length} angle${extra.length === 1 ? '' : 's'} merged into the node.`);
     };
 
     // --- linking ---
@@ -325,7 +325,7 @@ export default function WeaveView() {
         try {
             const facets = await extractFacets(node.image);
             setFacetPick({ image: node.image, near: { x: node.x + 150, y: node.y }, facets });
-        } catch (err: any) { setNotice(`❌ ${err?.message || err}`); }
+        } catch (err: any) { setNotice(`${err?.message || err}`); }
         setBusy('');
     };
 
@@ -343,7 +343,7 @@ export default function WeaveView() {
             try {
                 const idea = await deriveIdea(node.image);
                 setNodes(prev => prev.map(x => x.id === node.id ? { ...x, description: idea } : x));
-            } catch (err: any) { setNotice(`❌ ${err?.message || err}`); }
+            } catch (err: any) { setNotice(`${err?.message || err}`); }
             setBusy('');
         }
     };
@@ -354,14 +354,14 @@ export default function WeaveView() {
         try {
             const text = await describeAsPrompt(node.image);
             add({ kind: 'note', text }, { x: node.x + 145, y: node.y });
-            setNotice('✓ Prompt derived — edit it freely.');
-        } catch (err: any) { setNotice(`❌ ${err?.message || err}`); }
+            setNotice('Prompt derived — edit it freely.');
+        } catch (err: any) { setNotice(`${err?.message || err}`); }
         setBusy('');
     };
 
     // --- directed analysis: note + connected image → prompt ---
     const analyzeConnected = async (noteNode: WeaveNode) => {
-        if (!noteNode.text?.trim()) { setNotice('❌ Write your analysis instruction in the note first.'); return; }
+        if (!noteNode.text?.trim()) { setNotice('Write your analysis instruction in the note first.'); return; }
         const neighborIds = edges
             .filter(e => e.from === noteNode.id || e.to === noteNode.id)
             .map(e => (e.from === noteNode.id ? e.to : e.from));
@@ -375,14 +375,14 @@ export default function WeaveView() {
                 if (a?.photos[0]) { img = a.photos[0].image.value; break; }
             }
         }
-        if (!img) { setNotice('❌ Connect this note to an image or product node first.'); return; }
+        if (!img) { setNotice('Connect this note to an image or product node first.'); return; }
         setBusy('Analyzing image…');
         setNotice('');
         try {
             const prompt = await analyzeImage(img, noteNode.text.trim());
             add({ kind: 'note', text: prompt }, { x: noteNode.x, y: noteNode.y + 160 });
-            setNotice('✓ Analysis → prompt generated.');
-        } catch (err: any) { setNotice(`❌ ${err?.message || err}`); }
+            setNotice('Analysis → prompt generated.');
+        } catch (err: any) { setNotice(`${err?.message || err}`); }
         setBusy('');
     };
 
@@ -432,7 +432,7 @@ export default function WeaveView() {
         const outputImages = pool.filter(nn => nn.kind === 'output' && nn.image).map(nn => nn.image!);
         fusionImages.push(...outputImages);
         if (boardAssets.length + boardElements.length + fusionImages.length + facets.length + adhocProductImages.length + conceptIdeas.length + viewpointImages.length === 0) {
-            setNotice('❌ Nothing usable in this group.');
+            setNotice('Nothing usable in this group.');
             return undefined;
         }
         setBusy(tier === 'pro' ? 'Weaving (pro, inspected)…' : 'Weaving (flash)…');
@@ -443,10 +443,10 @@ export default function WeaveView() {
                 setBusy
             );
             resultsRef.current.set(r.id, r);
-            setNotice('✓ Woven.');
+            setNotice('Woven.');
             return r;
         } catch (err: any) {
-            setNotice(`❌ ${err instanceof BudgetExceededError ? err.message : err?.message || err}`);
+            setNotice(`${err instanceof BudgetExceededError ? err.message : err?.message || err}`);
         } finally { setBusy(''); }
         return undefined;
     };
@@ -456,7 +456,7 @@ export default function WeaveView() {
 
     const runOutput = async (o: WeaveNode) => {
         const comp = componentOf(o.id);
-        if (comp.size <= 1) { setNotice('❌ Drag a port line from your materials to this 🎯 first.'); return; }
+        if (comp.size <= 1) { setNotice('Drag a port line from your materials to this .first.'); return; }
         const r = await weaveNodes(nodes.filter(nn => comp.has(nn.id) && nn.id !== o.id), tierSel);
         if (r) assignToOutput(o.id, r);
     };
@@ -507,22 +507,22 @@ export default function WeaveView() {
         const angle = deg ?? rn.angle ?? 90;
         const pitch = rn.pitch ?? 0;
         const imgs = rotateInputs(rn);
-        if (imgs.length === 0) { setNotice('❌ Connect an image or product to the 🔄 node first (its angles become the input).'); return; }
+        if (imgs.length === 0) { setNotice('Connect an image or product to the node first (its angles become the input).'); return; }
         setBusy(`Rotating to ${angle}°${pitch !== 0 ? ` / ${pitch > 0 ? '+' : ''}${pitch}°` : ''}…`);
         setNotice('');
         try {
             const r = await rotateView(imgs, angle, { ratio, size, tier: tierSel, pitch }, setBusy);
             resultsRef.current.set(r.id, r);
             setNodes(prev => prev.map(x => x.id === rn.id ? { ...x, image: r.image.value, resultId: r.id, angle } : x));
-            setNotice(`✓ ${angle}° view rendered.`);
-        } catch (err: any) { setNotice(`❌ ${err?.message || err}`); }
+            setNotice(`${angle}° view rendered.`);
+        } catch (err: any) { setNotice(`${err?.message || err}`); }
         setBusy('');
     };
 
     /** Full turntable: 8 views at 45° steps, laid out next to the node. */
     const run360 = async (rn: WeaveNode) => {
         const imgs = rotateInputs(rn);
-        if (imgs.length === 0) { setNotice('❌ Connect an image or product to the 🔄 node first.'); return; }
+        if (imgs.length === 0) { setNotice('Connect an image or product to the node first.'); return; }
         for (let i = 0; i < 8; i++) {
             const angle = i * 45;
             setBusy(`360° turntable — ${i + 1}/8 (${angle}°)…`);
@@ -531,17 +531,17 @@ export default function WeaveView() {
                 resultsRef.current.set(r.id, r);
                 add({ kind: 'output', image: r.image.value, resultId: r.id },
                     { x: rn.x + 160 + (i % 4) * 215, y: rn.y + Math.floor(i / 4) * 215 });
-            } catch (err: any) { setNotice(`❌ ${angle}°: ${err?.message || err}`); break; }
+            } catch (err: any) { setNotice(`${angle}°: ${err?.message || err}`); break; }
         }
         setBusy('');
-        setNotice('✓ Turntable done — 8 views on the board.');
+        setNotice('Turntable done — 8 views on the board.');
     };
 
     const saveResult = async (nn: WeaveNode) => {
         const r = nn.resultId ? resultsRef.current.get(nn.resultId) : undefined;
-        if (!r) { setNotice('❌ Result metadata not in this session — download instead.'); return; }
+        if (!r) { setNotice('Result metadata not in this session — download instead.'); return; }
         await recordSignal(r, 'save');
-        setNotice('✓ Saved to Gallery.');
+        setNotice('Saved to Gallery.');
     };
 
     const download = (nn: WeaveNode) => {
@@ -569,7 +569,7 @@ export default function WeaveView() {
         setConfigs(next);
         setShowSaveDialog(false);
         setSaveName('');
-        setNotice(`✓ Saved "${name}".`);
+        setNotice(`Saved "${name}".`);
     };
 
     const loadConfig = (cfg: WeaveConfig) => {
@@ -580,7 +580,7 @@ export default function WeaveView() {
         setTierSel(cfg.tier);
         setShowLoadMenu(false);
         setExpandedId(null);
-        setNotice(`✓ Loaded "${cfg.name}".`);
+        setNotice(`Loaded "${cfg.name}".`);
     };
 
     const deleteConfig = async (id: string) => {
@@ -605,22 +605,22 @@ export default function WeaveView() {
                     style={{
                         position: 'sticky', top: 8, zIndex: 30, fontSize: 12.5, fontWeight: 600,
                         padding: '8px 14px', borderRadius: 10,
-                        background: busy ? '#fef3c7' : notice.startsWith('❌') ? '#fef2f2' : '#ecfdf5',
-                        color: busy ? '#92400e' : notice.startsWith('❌') ? '#b91c1c' : '#047857',
+                        background: busy ? '#fef3c7' : notice.startsWith('Error') ? '#fef2f2' : '#ecfdf5',
+                        color: busy ? '#92400e' : notice.startsWith('Error') ? '#b91c1c' : '#047857',
                         border: '1px solid rgba(0,0,0,0.06)',
                     }}>
-                    {busy ? `⏳ ${busy}` : notice}
+                    {busy ? `${busy}` : notice}
                 </div>
             )}
 
             {/* Toolbar */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <button style={S.btn} onClick={() => setPicker(picker === 'product' ? null : 'product')}>🛋 + Product</button>
-                <button style={S.btn} onClick={() => setPicker(picker === 'element' ? null : 'element')}>💡 + Concept</button>
-                <button style={S.btnGhost} onClick={() => fileRef.current?.click()}>🖼 + Images</button>
-                <button style={S.btnGhost} onClick={() => add({ kind: 'note', text: '' })}>✍️ + Prompt</button>
-                <button style={S.btnGhost} onClick={() => add({ kind: 'output' })}>🎯 + Output</button>
-                <button style={S.btnGhost} onClick={() => add({ kind: 'rotate', angle: 90 })} title="Turntable: connect a subject, render it from any angle or a full 360°">🔄 + Rotate</button>
+                <button style={S.btn} onClick={() => setPicker(picker === 'product' ? null : 'product')}>+ Product</button>
+                <button style={S.btn} onClick={() => setPicker(picker === 'element' ? null : 'element')}>+ Concept</button>
+                <button style={S.btnGhost} onClick={() => fileRef.current?.click()}>+ Images</button>
+                <button style={S.btnGhost} onClick={() => add({ kind: 'note', text: '' })}>+ Prompt</button>
+                <button style={S.btnGhost} onClick={() => add({ kind: 'output' })}>.+ Output</button>
+                <button style={S.btnGhost} onClick={() => add({ kind: 'rotate', angle: 90 })} title="Turntable: connect a subject, render it from any angle or a full 360°">+ Rotate</button>
                 <input ref={fileRef} type="file" multiple accept="image/*" style={{ display: 'none' }}
                     onChange={e => { addImages(e.target.files); e.currentTarget.value = ''; }} />
                 <input ref={appendRef} type="file" multiple accept="image/*" style={{ display: 'none' }}
@@ -631,11 +631,11 @@ export default function WeaveView() {
                     <span style={{ ...S.label, marginLeft: 6 }}>MODEL</span>
                     <button style={chip(tierSel === 'flash')} onClick={() => setTierSel('flash')} title="flash · $0.04">Flash</button>
                     <button style={chip(tierSel === 'pro')} onClick={() => setTierSel('pro')} title="pro · $0.24 · consistency inspector">Pro</button>
-                    <button style={{ ...S.btn, fontWeight: 800 }} disabled={!!busy} onClick={() => weave(tierSel)}>▶ Run</button>
+                    <button style={{ ...S.btn, fontWeight: 800 }} disabled={!!busy} onClick={() => weave(tierSel)}>Run</button>
                     <span style={{ width: 1, height: 18, background: '#e4e4e7', margin: '0 2px' }} />
-                    <button style={S.btnGhost} onClick={() => { setShowSaveDialog(true); setSaveName(''); }} title="Save current canvas as a workflow">💾</button>
+                    <button style={S.btnGhost} onClick={() => { setShowSaveDialog(true); setSaveName(''); }} title="Save current canvas as a workflow">Save</button>
                     <button style={S.btnGhost} onClick={() => setShowLoadMenu(!showLoadMenu)} title="Load a saved workflow">
-                        📂 {configs.length > 0 && <span style={{ fontSize: 8, color: '#a1a1aa' }}>{configs.length}</span>}
+                        Load {configs.length > 0 && <span style={{ fontSize: 8, color: '#a1a1aa' }}>{configs.length}</span>}
                     </button>
                 </span>
             </div>
@@ -668,7 +668,7 @@ export default function WeaveView() {
             {facetPick && (
                 <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 8, border: '1.5px dashed #a1a1aa' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={S.label}>⚡ PICK DIMENSIONS · add only what you want</span>
+                        <span style={S.label}>PICK DIMENSIONS · add only what you want</span>
                         <span style={{ display: 'flex', gap: 6 }}>
                             <button style={S.btnGhost} onClick={() => { facetPick.facets.forEach((f, i) => addFacet(f, i)); setFacetPick(null); }}>Add all</button>
                             <button style={S.btnGhost} onClick={() => setFacetPick(null)}>Close</button>
@@ -678,7 +678,7 @@ export default function WeaveView() {
                         {facetPick.facets.map((f, i) => (
                             <button key={f.dimension} onClick={() => { addFacet(f, i); }}
                                 style={{ ...S.card, textAlign: 'left', cursor: 'pointer', background: '#fafafa', padding: 8 }}>
-                                <div style={{ fontSize: 10.5, fontWeight: 800 }}>⚡ {f.dimension.toUpperCase()} <span style={{ fontWeight: 400, color: '#a1a1aa' }}>· click to add</span></div>
+                                <div style={{ fontSize: 10.5, fontWeight: 800 }}>{f.dimension.toUpperCase()} <span style={{ fontWeight: 400, color: '#a1a1aa' }}>· click to add</span></div>
                                 <div style={{ fontSize: 10, color: '#71717a', marginTop: 3 }}>{f.description}</div>
                             </button>
                         ))}
@@ -689,7 +689,7 @@ export default function WeaveView() {
             {/* Save dialog */}
             {showSaveDialog && (
                 <div style={{ ...S.card, display: 'flex', gap: 8, alignItems: 'center', border: '1.5px solid #d97706', background: '#fffbeb' }}>
-                    <span style={{ ...S.label, whiteSpace: 'nowrap' }}>💾 SAVE WORKFLOW</span>
+                    <span style={{ ...S.label, whiteSpace: 'nowrap' }}>SAVE WORKFLOW</span>
                     <input
                         value={saveName}
                         onChange={e => setSaveName(e.target.value)}
@@ -707,7 +707,7 @@ export default function WeaveView() {
             {showLoadMenu && (
                 <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 6, border: '1.5px solid #d4d4d8', maxHeight: 220, overflow: 'auto' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={S.label}>📂 SAVED WORKFLOWS</span>
+                        <span style={S.label}>SAVED WORKFLOWS</span>
                         <button style={S.btnGhost} onClick={() => setShowLoadMenu(false)}>Close</button>
                     </div>
                     {configs.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No saved workflows yet.</span>}
@@ -738,7 +738,7 @@ export default function WeaveView() {
                     </div>
                     {nodes.length === 0 && (
                         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a1a1aa', fontSize: 13, pointerEvents: 'none', textAlign: 'center', padding: 20 }}>
-                            Add materials and prompts, drag ⚪ port lines between nodes, wire groups into 🎯 outputs, then ▶ Run — results appear inside the 🎯.
+                            Add materials and prompts, drag port lines between nodes, wire groups into outputs, then Run — results appear inside the output node.
                         </div>
                     )}
                     <div style={{ position: 'absolute', left: 0, top: 0, transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`, transformOrigin: '0 0' }}>
@@ -835,14 +835,14 @@ export default function WeaveView() {
                                         {a.photos[0] && <img src={a.photos[0].image.value} alt="" draggable={false}
                                             style={{ width: '100%', borderRadius: 8, display: 'block' }} />}
                                         <div style={{ fontSize: 10, fontWeight: 700, marginTop: 3 }}>
-                                            🛋 {a.name}
+                                            {a.name}
                                             {(nn.quantity ?? 1) > 1 && <span style={{ color: '#d97706', marginLeft: 4 }}>×{nn.quantity}</span>}
                                         </div>
                                     </div>
                                 )}
                                 {nn.kind === 'element' && el && (
                                     <div onClick={() => toggleExpand(nn.id)}>
-                                        <div style={{ fontSize: 9, fontWeight: 700, color: '#71717a' }}>💡 {el.type.toUpperCase()}</div>
+                                        <div style={{ fontSize: 9, fontWeight: 700, color: '#71717a' }}>{el.type.toUpperCase()}</div>
                                         <div style={{ fontSize: 11, fontWeight: 700, lineHeight: 1.3 }}>{el.concept}</div>
                                     </div>
                                 )}
@@ -860,7 +860,7 @@ export default function WeaveView() {
                                                 style={{ width: '100%', borderRadius: 8, display: 'block' }} />
                                         )}
                                         <div style={{ fontSize: 9, color: '#a1a1aa', marginTop: 2 }}>
-                                            {nn.role === 'product' ? '🛋 product (exact)' : nn.role === 'concept' ? '💡 concept' : '🖼 fusion'}
+                                            {nn.role === 'product' ? 'product (exact)' : nn.role === 'concept' ? 'concept' : 'fusion'}
                                             {nodeImages(nn).length > 1 ? ` · ${nodeImages(nn).length} angles` : ''}
                                         </div>
                                     </div>
@@ -876,7 +876,7 @@ export default function WeaveView() {
                                                 fontSize: 9, fontWeight: 800, color: '#71717a', cursor: 'grab',
                                                 background: '#f4f4f5', borderRadius: 6, padding: '3px 0', marginBottom: 4,
                                             }}>
-                                            ⠿ 🔄 Rotate — drag here to move
+                                            ⠿ Rotate — drag here to move
                                         </div>
                                         {nn.image && (
                                             <img src={nn.image} alt="" draggable={false}
@@ -902,7 +902,7 @@ export default function WeaveView() {
                                     <div onClick={() => toggleExpand(nn.id)}>
                                         <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
                                             {nn.image && <img src={nn.image} alt="" draggable={false} style={{ width: 24, height: 24, borderRadius: 5, objectFit: 'cover' }} />}
-                                            <span style={{ fontSize: 10, fontWeight: 800 }}>⚡ {nn.dimension?.toUpperCase()}</span>
+                                            <span style={{ fontSize: 10, fontWeight: 800 }}>{nn.dimension?.toUpperCase()}</span>
                                         </div>
                                         <div style={{ fontSize: 9, color: '#71717a', marginTop: 3, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{nn.description}</div>
                                     </div>
@@ -910,7 +910,7 @@ export default function WeaveView() {
                                 {nn.kind === 'note' && (
                                     <textarea
                                         value={nn.text ?? ''}
-                                        placeholder="✍️ type your prompt…"
+                                        placeholder="type your prompt…"
                                         onChange={e => setNodes(prev => prev.map(x => x.id === nn.id ? { ...x, text: e.target.value } : x))}
                                         onPointerDown={e => e.stopPropagation()}
                                         onClick={() => setExpandedId(nn.id)}
@@ -924,7 +924,7 @@ export default function WeaveView() {
                                                 style={{ width: '100%', borderRadius: 9, display: 'block' }} />
                                         ) : (
                                             <>
-                                                <div style={{ fontSize: 20 }}>🎯</div>
+                                                <div style={{ fontSize: 13, fontWeight: 800, color: '#71717a' }}>OUTPUT</div>
                                                 <div style={{ fontSize: 9, color: '#a1a1aa', margin: '3px 0 8px' }}>
                                                     {Math.max(0, componentOf(nn.id).size - 1)} linked · click for Run
                                                 </div>
@@ -939,12 +939,12 @@ export default function WeaveView() {
                                         style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 5, background: nn.kind === 'output' ? 'rgba(255,255,255,0.08)' : undefined, borderRadius: 8, padding: nn.kind === 'output' ? 4 : 0 }}>
                                         {nn.kind === 'output' && (
                                             <>
-                                                <button style={{ ...miniBtn, background: '#fff' }} disabled={!!busy} onClick={() => runOutput(nn)}>▶ Run</button>
+                                                <button style={{ ...miniBtn, background: '#fff' }} disabled={!!busy} onClick={() => runOutput(nn)}>Run</button>
                                                 {nn.image && <>
-                                                    <button style={miniBtn} onClick={() => download(nn)}>⬇ save file</button>
-                                                    <button style={miniBtn} disabled={!!busy} onClick={() => saveResult(nn)}>★ gallery</button>
-                                                    <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>🔍 zoom</button>
-                                                    <button style={miniBtn} onClick={() => add({ kind: 'image', image: nn.image!, role: 'fusion' }, { x: nn.x + W(nn) + 30, y: nn.y })}>↩ as material</button>
+                                                    <button style={miniBtn} onClick={() => download(nn)}>Save file</button>
+                                                    <button style={miniBtn} disabled={!!busy} onClick={() => saveResult(nn)}>Gallery</button>
+                                                    <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>zoom</button>
+                                                    <button style={miniBtn} onClick={() => add({ kind: 'image', image: nn.image!, role: 'fusion' }, { x: nn.x + W(nn) + 30, y: nn.y })}>As material</button>
                                                 </>}
                                             </>
                                         )}
@@ -953,30 +953,30 @@ export default function WeaveView() {
                                                 {(['fusion', 'product', 'concept'] as const).map(role => (
                                                     <button key={role} style={{ ...miniBtn, background: (nn.role ?? 'fusion') === role ? '#18181b' : '#f4f4f5', color: (nn.role ?? 'fusion') === role ? '#fff' : '#3f3f46' }}
                                                         disabled={!!busy} onClick={() => setRole(nn, role)}>
-                                                        {role === 'fusion' ? '🖼' : role === 'product' ? '🛋' : '💡'} {role}
+                                                        {role === 'fusion' ? 'img' : role === 'product' ? 'prd' : 'con'} {role}
                                                     </button>
                                                 ))}
                                                 <button style={miniBtn} disabled={!!busy} onClick={() => { appendTarget.current = nn; appendRef.current?.click(); }}
                                                     title="Merge more angles of the same subject into this node">＋ angles</button>
-                                                <button style={miniBtn} disabled={!!busy} onClick={() => decomposeNode(nn)}>⚡ facets</button>
-                                                <button style={miniBtn} disabled={!!busy} onClick={() => imageToPrompt(nn)}>✍️ prompt</button>
-                                                <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>🔍 zoom</button>
-                                                <button style={miniBtn} onClick={() => download(nn)}>⬇</button>
+                                                <button style={miniBtn} disabled={!!busy} onClick={() => decomposeNode(nn)}>Facets</button>
+                                                <button style={miniBtn} disabled={!!busy} onClick={() => imageToPrompt(nn)}>To prompt</button>
+                                                <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>zoom</button>
+                                                <button style={miniBtn} onClick={() => download(nn)}>DL</button>
                                             </>
                                         )}
                                         {nn.kind === 'rotate' && (
                                             <>
-                                                <button style={{ ...miniBtn, background: '#18181b', color: '#fff' }} disabled={!!busy} onClick={() => runRotate(nn)}>▶ Render {nn.angle ?? 90}°</button>
-                                                <button style={miniBtn} disabled={!!busy} onClick={() => run360(nn)} title="8 views at 45° steps (flash) — laid out on the board">🔄 360°</button>
+                                                <button style={{ ...miniBtn, background: '#18181b', color: '#fff' }} disabled={!!busy} onClick={() => runRotate(nn)}>Render {nn.angle ?? 90}°</button>
+                                                <button style={miniBtn} disabled={!!busy} onClick={() => run360(nn)} title="8 views at 45° steps (flash) — laid out on the board">360°</button>
                                                 {nn.image && <>
-                                                    <button style={miniBtn} onClick={() => download(nn)}>⬇</button>
-                                                    <button style={miniBtn} disabled={!!busy} onClick={() => saveResult(nn)}>★</button>
-                                                    <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>🔍</button>
+                                                    <button style={miniBtn} onClick={() => download(nn)}>DL</button>
+                                                    <button style={miniBtn} disabled={!!busy} onClick={() => saveResult(nn)}>Fav</button>
+                                                    <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>Zoom</button>
                                                 </>}
                                             </>
                                         )}
                                         {nn.kind === 'facet' && (
-                                            <button style={miniBtn} disabled={!!busy} onClick={() => runFacet(nn)}>▶ solo (flash)</button>
+                                            <button style={miniBtn} disabled={!!busy} onClick={() => runFacet(nn)}>solo (flash)</button>
                                         )}
                                         {nn.kind === 'product' && (
                                             <>
@@ -986,7 +986,7 @@ export default function WeaveView() {
                                                     <span style={{ fontSize: 10, fontWeight: 800, minWidth: 14, textAlign: 'center' }}>{nn.quantity ?? 1}</span>
                                                     <button style={miniBtn} onClick={() => setNodes(prev => prev.map(x => x.id === nn.id ? { ...x, quantity: Math.min(10, (x.quantity ?? 1) + 1) } : x))}>+</button>
                                                 </span>
-                                                {a?.photos[0] && <button style={miniBtn} onClick={() => openLightbox(a.photos[0].image.value)}>🔍 zoom</button>}
+                                                {a?.photos[0] && <button style={miniBtn} onClick={() => openLightbox(a.photos[0].image.value)}>zoom</button>}
                                             </>
                                         )}
                                         {nn.kind === 'element' && el && (
@@ -996,7 +996,7 @@ export default function WeaveView() {
                                             <button style={{ ...miniBtn, background: '#18181b', color: '#fff' }} disabled={!!busy}
                                                 onClick={() => analyzeConnected(nn)}
                                                 title="Analyze connected image per this instruction → generate a prompt">
-                                                🔍 Analyze → Prompt
+                                                Analyze / Prompt
                                             </button>
                                         )}
                                         <button style={{ ...miniBtn, color: '#b91c1c' }} onClick={() => remove(nn.id)}>✕ delete</button>

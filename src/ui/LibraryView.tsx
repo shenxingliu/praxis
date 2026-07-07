@@ -21,7 +21,7 @@ import { S, chip } from './styles';
  */
 
 const TYPE_LABEL: Record<ElementType, string> = {
-    visual: '👁 Visual', feeling: '💫 Feeling', communication: '🗣 Communication',
+    visual: 'Visual', feeling: 'Feeling', communication: 'Communication',
 };
 
 const fileToDataUrl = (f: File): Promise<string> =>
@@ -38,7 +38,7 @@ export default function LibraryView() {
     const [filter, setFilter] = useState<ElementType | 'all'>('all');
     /** busy = something is RUNNING (gates buttons). Cleared when settled. */
     const [busy, setBusy] = useState('');
-    /** notice = outcome message (✓/❌/…). Never gates anything. */
+    /** notice = outcome message. Never gates anything. */
     const [notice, setNotice] = useState('');
     const fileRef = useRef<HTMLInputElement>(null);
 
@@ -78,7 +78,7 @@ export default function LibraryView() {
             }
         }
         setBusy('');
-        setNotice('✓ Uploaded & decomposed');
+        setNotice('Uploaded & decomposed');
         refresh();
     };
 
@@ -86,8 +86,8 @@ export default function LibraryView() {
         setBusy('Decomposing…');
         try {
             const { refs: n, elements: m } = await decomposeAllPending(setBusy);
-            setNotice(n === 0 ? '✓ Nothing pending.' : `✓ Decomposed ${n} refs → ${m} elements.`);
-        } catch (err: any) { setNotice(`❌ ${err?.message || err}`); }
+            setNotice(n === 0 ? 'Nothing pending.' : `Decomposed ${n} refs → ${m} elements.`);
+        } catch (err: any) { setNotice(`${err?.message || err}`); }
         setBusy('');
         refresh();
     };
@@ -125,7 +125,7 @@ export default function LibraryView() {
             const msg = await fn();
             if (msg) setNotice(msg);
         } catch (err: any) {
-            setNotice(`❌ ${err?.message || err}`);
+            setNotice(`${err?.message || err}`);
         } finally {
             setBusy('');
             refresh();
@@ -169,12 +169,12 @@ export default function LibraryView() {
 
     const curate = () => run('Curating library…', async () => {
         const r = await curateLibrary();
-        return `🧹 Disabled ${r.disabled}, kept ${r.kept}. ${r.note}`;
+        return `Disabled ${r.disabled}, kept ${r.kept}. ${r.note}`;
     });
 
     const redo = (r: Reference) => run(`Re-decomposing ${r.name}…`, async () => {
         const els = await redecomposeReference(r);
-        return `✓ ${r.name} → ${els.length} fresh concepts`;
+        return `${r.name} → ${els.length} fresh concepts`;
     });
 
     const rebuild = () => {
@@ -182,7 +182,7 @@ export default function LibraryView() {
         run('Rebuilding…', async () => {
             const r = await rebuildLibrary(setBusy);
             setSelected(new Set());
-            return `♻️ Rebuilt: ${r.refs} refs → ${r.elements} concepts${r.curated > 0 ? ` (auto-curated ${r.curated})` : ''}`;
+            return `Rebuilt: ${r.refs} refs → ${r.elements} concepts${r.curated > 0 ? ` (auto-curated ${r.curated})` : ''}`;
         });
     };
 
@@ -196,7 +196,7 @@ export default function LibraryView() {
             recordFusionVerdict(draft, verdictElements(draft), draft.level, 'keep').catch(() => {});
             setDraft(null);
             setSelected(new Set());
-            return '✓ In the library — decomposed into new concepts · verdict remembered';
+            return 'In the library — decomposed into new concepts · verdict remembered';
         });
     };
 
@@ -204,7 +204,7 @@ export default function LibraryView() {
         if (!draft) return;
         recordFusionVerdict(draft, verdictElements(draft), draft.level, 'discard').catch(() => {});
         setDraft(null);
-        setNotice('✓ Discarded · verdict remembered — the curator won’t repeat this combo');
+        setNotice('Discarded · verdict remembered — the curator won’t repeat this combo');
         refresh();
     };
 
@@ -215,11 +215,11 @@ export default function LibraryView() {
                     style={{
                         position: 'sticky', top: 8, zIndex: 10, fontSize: 12.5, fontWeight: 600,
                         padding: '8px 14px', borderRadius: 10,
-                        background: busy ? '#fef3c7' : notice.startsWith('❌') ? '#fef2f2' : '#ecfdf5',
-                        color: busy ? '#92400e' : notice.startsWith('❌') ? '#b91c1c' : '#047857',
+                        background: busy ? '#fef3c7' : notice.startsWith('Error') ? '#fef2f2' : '#ecfdf5',
+                        color: busy ? '#92400e' : notice.startsWith('Error') ? '#b91c1c' : '#047857',
                         border: '1px solid rgba(0,0,0,0.06)',
                     }}>
-                    {busy ? `⏳ ${busy}` : notice}
+                    {busy ? `${busy}` : notice}
                 </div>
             )}
             <DropZone onFiles={upload} hint="Drop references — auto-decomposed" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -239,12 +239,12 @@ export default function LibraryView() {
                             style={{ width: '100%', display: 'block', cursor: 'zoom-in' }} />
                         <div style={{ padding: '5px 8px', fontSize: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
-                            <span>{r.source === 'synthesized' ? `🧬g${r.generation ?? 1}` : r.source === 'promoted' ? '⭐' : r.decomposed ? '🧩' : '·'}</span>
+                            <span>{r.source === 'synthesized' ? `g${r.generation ?? 1}` : r.source === 'promoted' ? '*' : r.decomposed ? 'd' : '·'}</span>
                         </div>
                         <button onClick={() => removeRef(r)} title="Delete"
                             style={{ position: 'absolute', top: 4, right: 4, border: 'none', borderRadius: 6, background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 10, cursor: 'pointer', padding: '2px 6px' }}>✕</button>
                         <button onClick={() => redo(r)} title="Re-decompose — wipe this reference's concepts and extract fresh"
-                            style={{ position: 'absolute', top: 4, left: 4, border: 'none', borderRadius: 6, background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 10, cursor: 'pointer', padding: '2px 6px' }}>🧩</button>
+                            style={{ position: 'absolute', top: 4, left: 4, border: 'none', borderRadius: 6, background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 10, cursor: 'pointer', padding: '2px 6px' }}>Decomp</button>
                     </div>
                 ))}
                 {refs.length === 0 && <p style={{ fontSize: 12, color: '#a1a1aa' }}>No references yet. Upload or drag & drop aesthetic references — each is decomposed into reusable elements.</p>}
@@ -254,7 +254,7 @@ export default function LibraryView() {
             {/* Fusion Lab */}
             <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 8, border: '1.5px dashed #a1a1aa' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={S.label}>🧪 FUSION LAB · {selected.size} concept{selected.size === 1 ? '' : 's'} selected</span>
+                    <span style={S.label}>FUSION LAB · {selected.size} concept{selected.size === 1 ? '' : 's'} selected</span>
                     <select value={level} onChange={e => setLevel(e.target.value as TransferLevel)} style={{ ...S.input, width: 250 }}>
                         {(Object.keys(LEVEL_LABEL) as TransferLevel[]).map(l => <option key={l} value={l}>{LEVEL_LABEL[l]}</option>)}
                     </select>
@@ -263,10 +263,10 @@ export default function LibraryView() {
                         Fuse → new reference
                     </button>
                     <button style={S.btn} disabled={!!busy} onClick={autoFuse} title="The curator picks 3 combinations for you — scored for productive tension, not similarity">
-                        🤖 Auto-fuse
+                        Auto-fuse
                     </button>
                     <button style={S.btn} disabled={!!busy} onClick={fullAuto} title="Zero decisions: curator picks the combo AND fuses it — you only Keep or Discard">
-                        🎲 Full auto
+                        Full auto
                     </button>
                 </div>
                 {combos.length > 0 && !draft && (
@@ -279,14 +279,14 @@ export default function LibraryView() {
                                 <div style={{ fontSize: 10.5, color: '#57534e' }}>
                                     {c.elementIds.map(id => elements.find(e => e.id === id)?.concept).filter(Boolean).map(s => `“${s}”`).join(' × ')}
                                 </div>
-                                {c.provocation && <div style={{ fontSize: 10.5, color: '#92400e' }}>⚡ {c.provocation}</div>}
+                                {c.provocation && <div style={{ fontSize: 10.5, color: '#92400e' }}>{c.provocation}</div>}
                                 <button style={{ ...S.btn, marginTop: 'auto' }} disabled={!!busy} onClick={() => runCombo(c)}>Fuse this</button>
                             </div>
                         ))}
                     </div>
                 )}
                 <div style={{ fontSize: 10, color: '#a1a1aa' }}>
-                    Select 2-4 concept cards below (☐), pick the transfer level — L1 imitates, L3/L4 creates — and breed a brand-new pure aesthetic reference (no product, flash-model cost).
+                    Select 2-4 concept cards below , pick the transfer level — L1 imitates, L3/L4 creates — and breed a brand-new pure aesthetic reference (no product, flash-model cost).
                 </div>
                 {draft && (
                     <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
@@ -296,7 +296,7 @@ export default function LibraryView() {
                             <span style={{ fontWeight: 700 }}>Generation {draft.generation}</span>
                             {draft.redline && (
                                 <span style={{ color: draft.redline.pass ? '#059669' : '#b91c1c' }}>
-                                    {draft.redline.pass ? '✓ passes brand red-lines' : '⚠ red-line risk'} — {draft.redline.note}
+                                    {draft.redline.pass ? 'passes brand red-lines' : 'red-line risk'} — {draft.redline.note}
                                 </span>
                             )}
                             <span style={{ display: 'flex', gap: 8 }}>
@@ -308,7 +308,7 @@ export default function LibraryView() {
                                     a.href = draft.image;
                                     a.download = `praxis-fusion-gen${draft.generation}.png`;
                                     a.click();
-                                }}>⬇</button>
+                                }}>DL</button>
                             </span>
                         </div>
                     </div>
@@ -318,10 +318,10 @@ export default function LibraryView() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 <span style={S.label}>ELEMENTS · {elements.length}</span>
                 <button style={S.btnGhost} disabled={!!busy} onClick={curate} title="Merge near-duplicates, disable generic filler — nothing is deleted">
-                    🧹 Curate
+                    Curate
                 </button>
                 <button style={S.btnGhost} disabled={!!busy} onClick={rebuild} title="Wipe all concepts and re-decompose every reference — lean by construction, auto-curated, zero picking">
-                    ♻️ Rebuild library
+                    Rebuild library
                 </button>
                 <button style={chip(filter === 'all')} onClick={() => setFilter('all')}>All</button>
                 {(Object.keys(TYPE_LABEL) as ElementType[]).map(t => (
@@ -345,11 +345,11 @@ export default function LibraryView() {
                                     {TYPE_LABEL[el.type]} · w{el.weight.toFixed(1)}
                                     {el.weight > 1 && <span style={{ color: '#059669' }}> ▲ rising</span>}
                                     {el.weight < 0.9 && <span style={{ color: '#b91c1c' }}> ▼ fading</span>}
-                                    {!el.lastUsedAt && Date.now() - el.createdAt > 14 * 86400_000 && <span style={{ color: '#a1a1aa' }}> 😴 sleeping</span>}
+                                    {!el.lastUsedAt && Date.now() - el.createdAt > 14 * 86400_000 && <span style={{ color: '#a1a1aa' }}> sleeping</span>}
                                 </div>
                                 <div style={{ fontSize: 12.5, fontWeight: 700, marginTop: 3 }}>{el.concept}{el.worldview && <span style={{ fontWeight: 400, color: '#a1a1aa' }}> · “{el.worldview}”</span>}</div>
                                 {el.analysis && <div style={{ fontSize: 10.5, color: '#71717a', marginTop: 2, lineHeight: 1.45 }}>{el.analysis}</div>}
-                                {el.principle && <div style={{ fontSize: 10.5, color: '#57534e', marginTop: 2, lineHeight: 1.45 }}>⚙ {el.principle}</div>}
+                                {el.principle && <div style={{ fontSize: 10.5, color: '#57534e', marginTop: 2, lineHeight: 1.45 }}>{el.principle}</div>}
                                 <div style={{ fontSize: 11, marginTop: 3, lineHeight: 1.45 }}>↳ {el.description}</div>
                                 <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                                     <button style={S.btnGhost} onClick={() => toggleElement(el)}>{el.enabled ? 'Disable' : 'Enable'}</button>

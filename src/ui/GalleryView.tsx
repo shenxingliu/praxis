@@ -46,7 +46,7 @@ export default function GalleryView() {
     const exportTrainingSet = async () => {
         const brand = await getCurrentBrand();
         const adopted = results.filter(r => r.adopted && r.image.kind === 'data');
-        if (adopted.length === 0) { setNotice('❌ Nothing saved yet — save some images first.'); return; }
+        if (adopted.length === 0) { setNotice('Nothing saved yet — save some images first.'); return; }
         setBusy(`Packing ${adopted.length} pairs…`);
         try {
             const entries = adopted.map(r => ({
@@ -67,8 +67,8 @@ export default function GalleryView() {
             a.download = `praxis-training-${brand.id}-${entries.length}.json`;
             a.click();
             URL.revokeObjectURL(a.href);
-            setNotice(`✓ Exported ${entries.length} image+prompt pairs`);
-        } catch (err: any) { setNotice(`❌ ${err?.message || err}`); }
+            setNotice(`Exported ${entries.length} image+prompt pairs`);
+        } catch (err: any) { setNotice(`${err?.message || err}`); }
         setBusy('');
     };
 
@@ -76,7 +76,7 @@ export default function GalleryView() {
         if (!window.confirm('Delete this image permanently from the cloud?')) return;
         await recordSignal(r, 'discard'); // the learning loop hears about it first
         await storage.deleteResult(r.id);
-        setNotice('✓ Deleted');
+        setNotice('Deleted');
         refresh();
     };
 
@@ -87,20 +87,20 @@ export default function GalleryView() {
                     style={{
                         position: 'sticky', top: 8, zIndex: 10, fontSize: 12.5, fontWeight: 600,
                         padding: '8px 14px', borderRadius: 10,
-                        background: busy ? '#fef3c7' : notice.startsWith('❌') ? '#fef2f2' : '#ecfdf5',
-                        color: busy ? '#92400e' : notice.startsWith('❌') ? '#b91c1c' : '#047857',
+                        background: busy ? '#fef3c7' : notice.startsWith('Error') ? '#fef2f2' : '#ecfdf5',
+                        color: busy ? '#92400e' : notice.startsWith('Error') ? '#b91c1c' : '#047857',
                         border: '1px solid rgba(0,0,0,0.06)',
                     }}>
-                    {busy ? `⏳ ${busy}` : notice}
+                    {busy ? `${busy}` : notice}
                 </div>
             )}
 
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button style={chip(view === 'saved')} onClick={() => setView('saved')}>★ Saved · {savedCount}</button>
+                <button style={chip(view === 'saved')} onClick={() => setView('saved')}>Saved · {savedCount}</button>
                 <button style={chip(view === 'all')} onClick={() => setView('all')}>All · {results.length}</button>
                 <button style={{ ...S.btn, marginLeft: 'auto' }} disabled={!!busy || savedCount === 0} onClick={exportTrainingSet}
                     title="Saved images + their exact prompts, params and concepts — ready for LoRA fine-tuning">
-                    🎓 Export training set ({savedCount})
+                    Export training set ({savedCount})
                 </button>
             </div>
 
@@ -117,9 +117,9 @@ export default function GalleryView() {
                             <span style={{ display: 'flex', gap: 6 }}>
                                 <button style={{ ...S.btnGhost, color: r.adopted ? '#d97706' : undefined }}
                                     title={r.adopted ? 'Unsave' : 'Save to the curated set'} onClick={() => toggleSave(r)}>
-                                    {r.adopted ? '★' : '☆'}
+                                    {r.adopted ? '*' : '*'}
                                 </button>
-                                <button style={S.btnGhost} onClick={() => download(r)}>⬇</button>
+                                <button style={S.btnGhost} onClick={() => download(r)}>DL</button>
                                 {r.adopted && <button style={{ ...S.btnGhost, color: '#b91c1c' }} onClick={() => remove(r)}>✕</button>}
                             </span>
                         </div>
@@ -127,7 +127,7 @@ export default function GalleryView() {
                 ))}
                 {shown.length === 0 && (
                     <p style={{ fontSize: 12, color: '#a1a1aa' }}>
-                        {view === 'saved' ? 'Nothing saved yet — hit ★ Save on results in Studio or Quick.' : 'No generations yet.'}
+                        {view === 'saved' ? 'Nothing saved yet — hit Save on results in Studio or Quick.' : 'No generations yet.'}
                     </p>
                 )}
             </div>
