@@ -103,11 +103,16 @@ export async function generate(
     const elementRefs = elementRefIds
         .map(id => allRefs.find(r => r.id === id && r.image.kind === 'data'))
         .filter((r): r is Reference => !!r);
+    // When a mood anchor is attached, competing interior imagery dilutes the
+    // product signal — cap aesthetic refs harder.
+    const aestheticCap = extraRefImages.length > 0
+        ? Math.min(2, recipe.referenceBudget.aesthetic)
+        : recipe.referenceBudget.aesthetic;
     const aesthetic = [
         ...elementRefs,
         ...allRefs.filter(r =>
             r.kind !== 'plate' && r.image.kind === 'data' && !elementRefIds.includes(r.id)),
-    ].slice(0, recipe.referenceBudget.aesthetic);
+    ].slice(0, aestheticCap);
 
     // ---- Budget gate ----
     const budget = await storage.getBudget();
@@ -132,10 +137,14 @@ export async function generate(
         a.photos.slice(0, Math.ceil(recipe.referenceBudget.assetPhotos / assets.length))
             .map(p => p.image.value)
     );
+    // Product hero repeated LAST (adjacent to the text prompt) — models
+    // attend most to the first and last images; the product bookends both.
+    const heroReminder = assetImages[0] ? [assetImages[0]] : [];
     const refImages = [
         ...extraRefImages,
         ...(plate ? [plate.image.value] : []),
         ...aesthetic.map(r => r.image.value),
+        ...heroReminder,
     ];
 
     // IMAGE MANIFEST — the model must know which attached image plays which
@@ -150,6 +159,7 @@ export async function generate(
         extraRefImages.length > 0 && `Image ${anchorIdx}${extraRefImages.length > 1 ? `-${anchorIdx + extraRefImages.length - 1}` : ''}: MOOD ANCHOR — an approved rough draft. Inherit its light, palette, atmosphere and composition energy ONLY. Its product rendering is APPROXIMATE and WRONG — never copy any object geometry from it.`,
         plate && `Image ${plateIdx}: BACKDROP PLATE — reconstruct this exact backdrop with zero drift.`,
         aesthetic.length > 0 && `Images ${aestheticStart}-${aestheticStart + aesthetic.length - 1}: AESTHETIC REFERENCES — style, light and material language only. NEVER copy their subjects or furniture.`,
+        heroReminder.length > 0 && `LAST image: the product hero photo repeated as a REMINDER — this is what the product must look like.`,
     ].filter(Boolean);
     const prompt = `${recipe.buildPrompt(ctx)}
 
@@ -201,14 +211,24 @@ Output JSON: { "pass": boolean (true only if the product is faithfully identical
             if (first.pass || first.issues.length === 0) {
                 consistency = { ...first, retried: false };
             } else {
-                onStatus?.('Consistency failed — correcting and re-rendering…');
+                // Surgical correction: EDIT the failed image instead of
+                // re-rendering. Scene, styling and light are kept; only the
+                // product is rebuilt from its photos. Far more reliable than
+                // a fresh render, which re-rolls the whole composition.
+                onStatus?.('Consistency failed — surgically correcting the product…');
                 const corrected = await generateImage({
-                    prompt: `${prompt}
+                    prompt: `EDIT the FIRST attached image. This is an image-editing task, not a new composition.
 
-### CONSISTENCY CORRECTIONS (a previous attempt FAILED product inspection — fix every item) ###
+KEEP EXACTLY: the environment, composition, camera, lighting, styling, bedding, props and mood of the first image.
+FIX ONLY THE PRODUCT: rebuild it to match the product photos (all attached images after the first) with zero deviation — silhouette, proportions, construction, material, color, hardware.
+
+Known defects to correct:
 ${first.issues.map(s => `- ${s}`).join('\n')}
-Re-render with the product EXACTLY as in its source photos.`,
-                    referenceImages: [...assetImages, ...refImages],
+
+### ATTACHED IMAGE ROLES ###
+Image 1: the image to edit (everything except the product is correct).
+Images 2-${1 + Math.min(assetImages.length, 6)}: PRODUCT SOURCE OF TRUTH.`,
+                    referenceImages: [out.image, ...assetImages.slice(0, 6)],
                     model,
                     aspectRatio: params.ratio,
                     imageSize: params.size,

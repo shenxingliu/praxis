@@ -1,0 +1,234 @@
+import { Asset, Element, GenerationParams, GenerationResult } from '../domain/types';
+import { storage } from '../storage/local';
+import { getCurrentBrand, getCurrentBrandId } from '../domain/brand';
+import { getBrandSoul } from '../brain/soul';
+import { generateImage, generateJson, MODELS, COST_ESTIMATE_USD } from './gemini';
+import { promptBlocks } from './engine';
+
+/**
+ * Weave — freeform canvas generation (the Figma-Weave-inspired mode).
+ *
+ * The user composes a board of nodes and everything on it is woven into
+ * ONE image:
+ *   product nodes  → source-of-truth pixels, fidelity + exclusivity enforced
+ *   element nodes  → abstract concepts to embody
+ *   image nodes    → fusion sources: aesthetic ideas to blend, never copy
+ *   note           → free art direction
+ *
+ * Same protections as the Studio engine: image-role manifest, mandatory
+ * styling, only-listed-furniture, soul red-lines, and (pro tier) the
+ * product-consistency inspector with one surgical correction pass.
+ */
+
+/** One extracted dimension of an image — "take ONLY its light". */
+export interface WeaveFacet {
+    image: string;      // source image data URL
+    dimension: string;  // light | palette | composition | material | texture | mood | space
+    description: string;
+}
+
+export const FACET_DIMENSIONS = ['light', 'palette', 'composition', 'material', 'texture', 'mood', 'space'] as const;
+
+/** Multi-dimensional decomposition: one vision call → all 7 facets. */
+export async function extractFacets(image: string): Promise<Array<{ dimension: string; description: string }>> {
+    const parsed = await generateJson<{ facets: Array<{ dimension: string; description: string }> }>(
+        `Decompose the attached image into its INDEPENDENT visual dimensions, so each can be transferred to a different image on its own.
+
+For each dimension output a CONCRETE, promptable description (specific hues, light direction/quality, named materials, compositional geometry — never vague):
+${FACET_DIMENSIONS.map(d => `- ${d}`).join('\n')}
+
+Output JSON: { "facets": [ { "dimension", "description" } ] }`,
+        [image]
+    );
+    const allowed = new Set<string>(FACET_DIMENSIONS);
+    return (parsed?.facets ?? [])
+        .filter(f => allowed.has(String(f.dimension)) && f.description?.trim())
+        .map(f => ({ dimension: String(f.dimension), description: String(f.description).trim() }));
+}
+
+/** Derive the transferable aesthetic idea of an image (concept role). */
+export async function deriveIdea(image: string): Promise<string> {
+    const parsed = await generateJson<{ idea: string }>(
+        `State the single most transferable AESTHETIC IDEA of the attached image in 1-2 sentences — abstract enough to apply to a different subject, concrete enough to art-direct with (light behavior, palette logic, formal energy, mood). Output JSON: { "idea": string }`,
+        [image]
+    );
+    return String(parsed?.idea ?? '').trim();
+}
+
+/** Reverse-engineer a generation prompt from an image. */
+export async function describeAsPrompt(image: string): Promise<string> {
+    const parsed = await generateJson<{ prompt: string }>(
+        `Write the image-generation prompt that would recreate the attached image's LOOK (not its exact subjects): scene type, light direction and quality, palette, materials, composition, camera feel, mood. 3-5 dense sentences, directly usable as a prompt. Output JSON: { "prompt": string }`,
+        [image]
+    );
+    return String(parsed?.prompt ?? '').trim();
+}
+
+export interface WeaveInput {
+    assets: Asset[];
+    elements: Element[];
+    /** Fusion source images (data URLs) — canvas image nodes. */
+    fusionImages: string[];
+    /** Uploaded images marked as PRODUCT — ad-hoc source-of-truth pixels. */
+    adhocProductImages: string[];
+    /** Uploaded images marked as CONCEPT — embody the idea, never copy. */
+    conceptIdeas: Array<{ image: string; idea: string }>;
+    /** Dimension-level extraction: take ONLY these facets of their sources. */
+    facets: WeaveFacet[];
+    note?: string;
+    ratio: GenerationParams['ratio'];
+    size?: GenerationParams['size'];
+    tier: 'flash' | 'pro';
+}
+
+export async function weaveGenerate(
+    input: WeaveInput,
+    onStatus?: (t: string) => void
+): Promise<GenerationResult> {
+    const brand = await getCurrentBrand().catch(() => null);
+    const soul = await getBrandSoul().catch(() => null);
+    const redlines = (soul?.fields ?? []).filter(f => f.locked && f.value.trim());
+
+    const libraryProductImages = input.assets.flatMap(a => a.photos.slice(0, Math.ceil(8 / Math.max(1, input.assets.length))).map(p => p.image.value));
+    const assetImages = [...libraryProductImages, ...input.adhocProductImages].slice(0, 10);
+    const hasProducts = assetImages.length > 0;
+    const fusion = input.fusionImages.slice(0, hasProducts ? 4 : 6);
+    const concepts = input.conceptIdeas.slice(0, 4);
+    // Facets grouped by source image — each source attached once.
+    const facetGroups = new Map<string, WeaveFacet[]>();
+    for (const f of input.facets) {
+        facetGroups.set(f.image, [...(facetGroups.get(f.image) ?? []), f]);
+    }
+    const facetImages = [...facetGroups.keys()].slice(0, 4);
+    const heroReminder = assetImages[0] ? [assetImages[0]] : [];
+
+    // ---- Budget gate ----
+    const model = input.tier === 'pro' ? MODELS.imagePro : MODELS.imageFlash;
+    const cost = COST_ESTIMATE_USD[model] ?? 0.1;
+    const month = new Date().toISOString().slice(0, 7);
+    const budget = await storage.getBudget();
+    const spent = await storage.getMonthSpend(month);
+    if (spent + cost > budget.monthlyUsd) {
+        throw new Error(`Monthly budget reached: $${spent.toFixed(2)} of $${budget.monthlyUsd.toFixed(2)}.`);
+    }
+
+    // ---- Prompt ----
+    const n = assetImages.length;
+    const fusionStart = n + 1;
+    const conceptStart = fusionStart + fusion.length;
+    const facetStart = conceptStart + concepts.length;
+    const facetManifest = facetImages.map((img, i) => {
+        const dims = (facetGroups.get(img) ?? []).map(f => f.dimension.toUpperCase()).join(' + ');
+        return `Image ${facetStart + i}: FACET SOURCE — take ONLY its ${dims} as described in the DIMENSIONAL EXTRACTION section; ignore everything else about this image (subjects, furniture, and all other dimensions).`;
+    });
+    const manifest = [
+        hasProducts && `Images 1-${n}: PRODUCT SOURCE OF TRUTH. Reconstruct the product(s) EXACTLY and ONLY from these. Their decorative styling is disposable staging — restyle it per the direction.`,
+        fusion.length > 0 && `Images ${fusionStart}-${fusionStart + fusion.length - 1}: FUSION SOURCES. Blend their aesthetic ideas — light behavior, palette logic, material language, mood, formal energy — into ONE new coherent image. NEVER copy their subjects, furniture or composition literally.`,
+        concepts.length > 0 && `Images ${conceptStart}-${conceptStart + concepts.length - 1}: CONCEPT SOURCES. Embody each one's stated idea (see CONCEPT IDEAS section); never copy its composition or subjects.`,
+        ...facetManifest,
+        hasProducts && heroReminder.length > 0 && `LAST image: product hero repeated as a REMINDER of what the product must look like.`,
+    ].filter(Boolean).join('\n');
+
+    const extractionBlock = facetImages.length > 0 ? `
+### DIMENSIONAL EXTRACTION (surgical borrowing — apply each faithfully) ###
+${facetImages.flatMap((img, i) =>
+        (facetGroups.get(img) ?? []).map(f => `- From image ${facetStart + i}, ${f.dimension.toUpperCase()}: ${f.description}`)
+    ).join('\n')}` : '';
+
+    const prompt = `You are the art director at a freeform composition canvas. Weave EVERYTHING on the board into ONE original image.
+
+${hasProducts ? promptBlocks.productFidelity(input.assets, brand) : 'No product on the board — create a pure aesthetic reference image. NO text, NO logos, NO people.'}
+${input.adhocProductImages.length > 0 ? `\nADDITIONAL PRODUCT (uploaded directly): its photos are among images 1-${n}. Same fidelity, styling and exclusivity rules apply — reconstruct it exactly, restyle only its staging.` : ''}
+${concepts.length > 0 ? `\n### CONCEPT IDEAS (one per concept source image, in order) ###\n${concepts.map((c, i) => `- Image ${conceptStart + i}: ${c.idea}`).join('\n')}` : ''}
+${promptBlocks.brand(brand)}
+${promptBlocks.elements(input.elements)}
+${extractionBlock}
+${redlines.length > 0 ? `\n### BRAND RED-LINES (never violate) ###\n${redlines.map(f => `- ${f.key}: ${f.value}`).join('\n')}` : ''}
+${input.note ? `\n### ART DIRECTION ###\n${input.note}` : ''}
+
+### ATTACHED IMAGE ROLES (obey strictly) ###
+${manifest || '(no images attached — work from the concepts and direction alone)'}
+
+### REQUIREMENTS ###
+One coherent, museum-grade image where every board input coexists and reinforces the others. 8k.${hasProducts ? `
+- The listed product(s) are the ONLY furniture in the frame — zero invented companion pieces.
+- The product(s) must be fully styled per the direction (dressed beds, curated surfaces); styling changes, the product never does.
+- FINAL: the product must be pixel-faithful to its source photos.` : ''}`;
+
+    onStatus?.(input.tier === 'pro' ? 'Weaving (pro)…' : 'Weaving (flash)…');
+    let out = await generateImage({
+        prompt,
+        referenceImages: [...assetImages, ...fusion, ...concepts.map(c => c.image), ...facetImages, ...heroReminder],
+        model,
+        aspectRatio: input.ratio,
+        imageSize: input.size,
+    });
+
+    // ---- Consistency inspector (pro + products only), surgical retry ----
+    let consistency: GenerationResult['consistency'];
+    if (input.tier === 'pro' && hasProducts) {
+        const check = async (img: string) => {
+            const parsed = await generateJson<{ pass: boolean; issues: string[] }>(
+                `The first ${Math.min(assetImages.length, 5)} attached image(s) are OFFICIAL PRODUCT PHOTOS. The LAST attached image is AI-generated.
+Check: 1) PRODUCT FIDELITY (silhouette, proportions, construction, material, color, hardware — ignore styling/environment); 2) FURNITURE EXCLUSIVITY (no furniture other than the product).
+Output JSON: { "pass": boolean, "issues": [up to 4 concrete actionable deviations] }`,
+                [...assetImages.slice(0, 5), img]
+            );
+            return { pass: !!parsed?.pass, issues: (parsed?.issues ?? []).map(String).slice(0, 4) };
+        };
+        try {
+            onStatus?.('Inspecting product consistency…');
+            const first = await check(out.image);
+            if (first.pass || first.issues.length === 0) {
+                consistency = { ...first, retried: false };
+            } else {
+                onStatus?.('Correcting the product surgically…');
+                out = await generateImage({
+                    prompt: `EDIT the FIRST attached image (image-editing task). KEEP the environment, composition, light, styling and mood EXACTLY. FIX ONLY THE PRODUCT to match the product photos (all images after the first) with zero deviation.
+Known defects:\n${first.issues.map(s => `- ${s}`).join('\n')}`,
+                    referenceImages: [out.image, ...assetImages.slice(0, 6)],
+                    model,
+                    aspectRatio: input.ratio,
+                    imageSize: input.size,
+                });
+                const second = await check(out.image).catch(() => ({ pass: true, issues: [] }));
+                consistency = { ...second, retried: true };
+            }
+        } catch { /* inspection is best-effort */ }
+    }
+
+    // ---- Record (Gallery / learning / training set all work) ----
+    const result: GenerationResult = {
+        id: crypto.randomUUID(),
+        brandId: getCurrentBrandId(),
+        params: {
+            outputType: 'scene',
+            ratio: input.ratio,
+            size: input.size,
+            note: input.note?.slice(0, 300),
+            modelTier: input.tier,
+            elementIds: input.elements.map(e => e.id),
+        },
+        assetIds: input.assets.map(a => a.id),
+        referenceIds: [],
+        elementIds: input.elements.map(e => e.id),
+        appliedRuleIds: [],
+        fullPrompt: prompt,
+        model,
+        image: { kind: 'data', value: out.image },
+        estimatedCostUsd: consistency?.retried ? cost * 2 : cost,
+        createdAt: Date.now(),
+        adopted: false,
+        consistency,
+    };
+    await storage.upsertResult(result);
+    await storage.addSpend({
+        id: crypto.randomUUID(),
+        resultId: result.id,
+        usd: result.estimatedCostUsd,
+        model,
+        month,
+        createdAt: Date.now(),
+    });
+    return result;
+}
