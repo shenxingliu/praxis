@@ -329,13 +329,13 @@ export default function StudioView() {
                                             </button>
                                             <button title="Save to Gallery" disabled={!!busy}
                                                 onClick={async () => { await recordSignal(d, 'save'); window.alert('Saved to Gallery.'); }}
-                                                style={{ ...S.btnGhost, fontSize: 10 }}>Fav</button>
+                                                style={{ ...S.btnGhost, fontSize: 10 }}>Gallery</button>
                                             <button title="Download" onClick={() => {
                                                 const a = document.createElement('a');
                                                 a.href = d.image.value;
                                                 a.download = `praxis-mood-${d.id.slice(0, 6)}.png`;
                                                 a.click();
-                                            }} style={{ ...S.btnGhost, fontSize: 10 }}>DL</button>
+                                            }} style={{ ...S.btnGhost, fontSize: 10 }}>Save</button>
                                         </div>
                                     </div>
                                 ))}
@@ -382,9 +382,9 @@ export default function StudioView() {
                                             <button onClick={() => rate(r, 'dislike')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, opacity: fb === 'dislike' ? 1 : 0.35 }}>-</button>
                                         </span>
                                         <span style={{ display: 'flex', gap: 6 }}>
-                                            <button style={S.btnGhost} title="Save to Gallery (curated set, used for training export)" onClick={async () => { await recordSignal(r, 'save'); setBusy(''); setError(null); window.alert('Saved — find it in Gallery.'); }}>Fav</button>
+                                            <button style={S.btnGhost} title="Save to Gallery (curated set, used for training export)" onClick={async () => { await recordSignal(r, 'save'); setBusy(''); setError(null); window.alert('Saved — find it in Gallery.'); }}>Gallery</button>
                                             <button style={S.btnGhost} title="Save this whole setup as a Quick preset — same look, swap products" onClick={() => toPreset(r)}>Preset</button>
-                                            <button style={S.btnGhost} onClick={() => download(r)}>DL</button>
+                                            <button style={S.btnGhost} onClick={() => download(r)}>Save</button>
                                         </span>
                                     </div>
                                 </div>

@@ -308,7 +308,7 @@ export default function LibraryView() {
                                     a.href = draft.image;
                                     a.download = `praxis-fusion-gen${draft.generation}.png`;
                                     a.click();
-                                }}>DL</button>
+                                }}>Save</button>
                             </span>
                         </div>
                     </div>

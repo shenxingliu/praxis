@@ -281,7 +281,7 @@ export default function CreateView() {
                                                         <button title="Dislike — teaches the AI" onClick={() => rate(r, 'dislike')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, opacity: fb === 'dislike' ? 1 : 0.35 }}>-</button>
                                                     </span>
                                                     <span style={{ display: 'flex', gap: 6 }}>
-                                                        <button style={S.btnGhost} onClick={() => download(r)}>DL</button>
+                                                        <button style={S.btnGhost} onClick={() => download(r)}>Save</button>
                                                         <button style={{ ...S.btnGhost, ...(adopted ? { opacity: 0.5 } : {}) }} disabled={adopted} onClick={() => save(r)}>{adopted ? 'Done' : 'Save'}</button>
                                                     </span>
                                                 </div>

@@ -278,7 +278,7 @@ const CalibratePanel: React.FC = () => {
                             style={{ position: 'relative', padding: 4, borderRadius: 14, cursor: 'pointer', border: '1px solid #e4e4e7', background: '#fff' }}>
                             <img src={me.image} alt="" style={{ width: 280, height: 280, objectFit: 'cover', borderRadius: 10, display: 'block' }} />
                             <span onClick={e => { e.stopPropagation(); openLightbox(me.image); }} title="View full size"
-                                style={{ position: 'absolute', top: 10, right: 10, background: 'rgba(0,0,0,0.45)', color: '#fff', borderRadius: 8, padding: '2px 7px', fontSize: 13, cursor: 'zoom-in' }}>Zoom</span>
+                                style={{ position: 'absolute', top: 10, right: 10, background: 'rgba(0,0,0,0.45)', color: '#fff', borderRadius: 8, padding: '2px 7px', fontSize: 13, cursor: 'zoom-in' }}>View</span>
                         </button>
                     ))}
                 </div>

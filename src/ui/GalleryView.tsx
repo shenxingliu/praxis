@@ -119,7 +119,7 @@ export default function GalleryView() {
                                     title={r.adopted ? 'Unsave' : 'Save to the curated set'} onClick={() => toggleSave(r)}>
                                     {r.adopted ? '*' : '*'}
                                 </button>
-                                <button style={S.btnGhost} onClick={() => download(r)}>DL</button>
+                                <button style={S.btnGhost} onClick={() => download(r)}>Save</button>
                                 {r.adopted && <button style={{ ...S.btnGhost, color: '#b91c1c' }} onClick={() => remove(r)}>✕</button>}
                             </span>
                         </div>

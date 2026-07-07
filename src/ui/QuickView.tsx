@@ -181,8 +181,8 @@ export default function QuickView() {
                                     <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                                         <button onClick={() => rate(r, 'like')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, opacity: fb === 'like' ? 1 : 0.35 }}>+</button>
                                         <button onClick={() => rate(r, 'dislike')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, opacity: fb === 'dislike' ? 1 : 0.35 }}>-</button>
-                                        <button style={S.btnGhost} title="Save to Gallery" onClick={async () => { await recordSignal(r, 'save'); setNotice('Saved — find it in Gallery.'); }}>Fav</button>
-                                        <button style={S.btnGhost} onClick={() => download(r)}>DL</button>
+                                        <button style={S.btnGhost} title="Save to Gallery" onClick={async () => { await recordSignal(r, 'save'); setNotice('Saved — find it in Gallery.'); }}>Gallery</button>
+                                        <button style={S.btnGhost} onClick={() => download(r)}>Save</button>
                                     </span>
                                 </div>
                             </div>

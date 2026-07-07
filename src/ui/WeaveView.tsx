@@ -12,7 +12,7 @@ import { S, chip } from './styles';
 /**
  * WEAVE — infinite freeform canvas (Figma-Weave inspired).
  *
- * Nodes: product · concept · image · facet · To prompt · .output.
+ * Nodes: product · concept · image · facet · prompt · output.
  * Port-drag bezier links; connected groups flow into outputs; results are
  * generated INSIDE the output nodes. Collapsed nodes show only their
  * content — click a node to expand its action buttons.
@@ -941,10 +941,10 @@ export default function WeaveView() {
                                             <>
                                                 <button style={{ ...miniBtn, background: '#fff' }} disabled={!!busy} onClick={() => runOutput(nn)}>Run</button>
                                                 {nn.image && <>
-                                                    <button style={miniBtn} onClick={() => download(nn)}>Save file</button>
+                                                    <button style={miniBtn} onClick={() => download(nn)}>Save</button>
                                                     <button style={miniBtn} disabled={!!busy} onClick={() => saveResult(nn)}>Gallery</button>
-                                                    <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>zoom</button>
-                                                    <button style={miniBtn} onClick={() => add({ kind: 'image', image: nn.image!, role: 'fusion' }, { x: nn.x + W(nn) + 30, y: nn.y })}>As material</button>
+                                                    <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>View</button>
+                                                    <button style={miniBtn} onClick={() => add({ kind: 'image', image: nn.image!, role: 'fusion' }, { x: nn.x + W(nn) + 30, y: nn.y })}>Material</button>
                                                 </>}
                                             </>
                                         )}
@@ -953,15 +953,15 @@ export default function WeaveView() {
                                                 {(['fusion', 'product', 'concept'] as const).map(role => (
                                                     <button key={role} style={{ ...miniBtn, background: (nn.role ?? 'fusion') === role ? '#18181b' : '#f4f4f5', color: (nn.role ?? 'fusion') === role ? '#fff' : '#3f3f46' }}
                                                         disabled={!!busy} onClick={() => setRole(nn, role)}>
-                                                        {role === 'fusion' ? 'img' : role === 'product' ? 'prd' : 'con'} {role}
+                                                        {role}
                                                     </button>
                                                 ))}
                                                 <button style={miniBtn} disabled={!!busy} onClick={() => { appendTarget.current = nn; appendRef.current?.click(); }}
                                                     title="Merge more angles of the same subject into this node">＋ angles</button>
                                                 <button style={miniBtn} disabled={!!busy} onClick={() => decomposeNode(nn)}>Facets</button>
-                                                <button style={miniBtn} disabled={!!busy} onClick={() => imageToPrompt(nn)}>To prompt</button>
-                                                <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>zoom</button>
-                                                <button style={miniBtn} onClick={() => download(nn)}>DL</button>
+                                                <button style={miniBtn} disabled={!!busy} onClick={() => imageToPrompt(nn)}>Prompt</button>
+                                                <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>View</button>
+                                                <button style={miniBtn} onClick={() => download(nn)}>Save</button>
                                             </>
                                         )}
                                         {nn.kind === 'rotate' && (
@@ -969,9 +969,9 @@ export default function WeaveView() {
                                                 <button style={{ ...miniBtn, background: '#18181b', color: '#fff' }} disabled={!!busy} onClick={() => runRotate(nn)}>Render {nn.angle ?? 90}°</button>
                                                 <button style={miniBtn} disabled={!!busy} onClick={() => run360(nn)} title="8 views at 45° steps (flash) — laid out on the board">360°</button>
                                                 {nn.image && <>
-                                                    <button style={miniBtn} onClick={() => download(nn)}>DL</button>
-                                                    <button style={miniBtn} disabled={!!busy} onClick={() => saveResult(nn)}>Fav</button>
-                                                    <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>Zoom</button>
+                                                    <button style={miniBtn} onClick={() => download(nn)}>Save</button>
+                                                    <button style={miniBtn} disabled={!!busy} onClick={() => saveResult(nn)}>Gallery</button>
+                                                    <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>View</button>
                                                 </>}
                                             </>
                                         )}
@@ -986,7 +986,7 @@ export default function WeaveView() {
                                                     <span style={{ fontSize: 10, fontWeight: 800, minWidth: 14, textAlign: 'center' }}>{nn.quantity ?? 1}</span>
                                                     <button style={miniBtn} onClick={() => setNodes(prev => prev.map(x => x.id === nn.id ? { ...x, quantity: Math.min(10, (x.quantity ?? 1) + 1) } : x))}>+</button>
                                                 </span>
-                                                {a?.photos[0] && <button style={miniBtn} onClick={() => openLightbox(a.photos[0].image.value)}>zoom</button>}
+                                                {a?.photos[0] && <button style={miniBtn} onClick={() => openLightbox(a.photos[0].image.value)}>View</button>}
                                             </>
                                         )}
                                         {nn.kind === 'element' && el && (
