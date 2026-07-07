@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Asset, Element, GenerationParams, GenerationResult } from '../domain/types';
 import { storage } from '../storage/local';
+import { brandKey } from '../domain/brand';
 import { weaveGenerate, extractFacets, deriveIdea, describeAsPrompt, rotateView, WeaveFacet } from '../engine/weave';
 import { recordSignal } from '../learning/learning';
 import { BudgetExceededError } from '../engine/engine';
@@ -36,7 +37,23 @@ interface WeaveNode {
     angle?: number;        // rotate nodes: azimuth in degrees (free, 0-359)
     pitch?: number;        // rotate nodes: camera elevation −45..+45
     w?: number;            // custom width (drag the ◢ corner handle)
+    quantity?: number;     // product nodes: how many instances (default 1)
 }
+
+/** Saved canvas configuration — persisted via brandKey KV. */
+interface WeaveConfig {
+    id: string;
+    name: string;
+    nodes: WeaveNode[];
+    edges: WeaveEdge[];
+    ratio: GenerationParams['ratio'];
+    size: NonNullable<GenerationParams['size']>;
+    tier: 'flash' | 'pro';
+    createdAt: number;
+    updatedAt: number;
+}
+
+const CONFIGS_KEY = 'weaveConfigs';
 
 const nodeImages = (nn: WeaveNode): string[] =>
     nn.images && nn.images.length > 0 ? nn.images : nn.image ? [nn.image] : [];
@@ -133,6 +150,11 @@ export default function WeaveView() {
     const [tierSel, setTierSel] = useState<'flash' | 'pro'>('pro');
     const [busy, setBusy] = useState('');
     const [notice, setNotice] = useState('');
+    // Workflow save/load
+    const [configs, setConfigs] = useState<WeaveConfig[]>([]);
+    const [showSaveDialog, setShowSaveDialog] = useState(false);
+    const [saveName, setSaveName] = useState('');
+    const [showLoadMenu, setShowLoadMenu] = useState(false);
     const resultsRef = useRef<Map<string, GenerationResult>>(new Map());
     const fileRef = useRef<HTMLInputElement>(null);
     const drag = useRef<{ id: string; dx: number; dy: number; moved: boolean } | null>(null);
@@ -148,6 +170,7 @@ export default function WeaveView() {
     useEffect(() => {
         storage.listAssets().then(setAssets);
         storage.listElements().then(es => setElements(es.filter(e => e.enabled)));
+        storage.kvGet<WeaveConfig[]>(brandKey(CONFIGS_KEY)).then(c => setConfigs(c ?? []));
     }, []);
 
     const toWorld = (clientX: number, clientY: number) => {
@@ -365,7 +388,16 @@ export default function WeaveView() {
                 viewpointImages.push(rv.image.value);
             } catch (err) { console.warn('[weave] viewpoint pre-render failed:', err); }
         }
-        const note = pool.filter(nn => nn.kind === 'note' && nn.text?.trim()).map(nn => nn.text!.trim()).join(' · ') || undefined;
+        // Product quantity instructions
+        const qtyNotes = pool
+            .filter(nn => nn.kind === 'product' && nn.assetId && (nn.quantity ?? 1) > 1)
+            .map(nn => {
+                const pa = assets.find(x => x.id === nn.assetId);
+                return pa ? `Show exactly ${nn.quantity} instances of "${pa.name}" arranged naturally in the scene.` : '';
+            })
+            .filter(Boolean);
+        const userNote = pool.filter(nn => nn.kind === 'note' && nn.text?.trim()).map(nn => nn.text!.trim()).join(' · ');
+        const note = [...qtyNotes, userNote].filter(Boolean).join(' · ') || undefined;
         // Output nodes with results also act as fusion sources when linked onward.
         const outputImages = pool.filter(nn => nn.kind === 'output' && nn.image).map(nn => nn.image!);
         fusionImages.push(...outputImages);
@@ -492,6 +524,41 @@ export default function WeaveView() {
         if (r) recordSignal(r, 'export');
     };
 
+    // --- workflow save / load / delete ---
+    const saveConfig = async () => {
+        const name = saveName.trim() || `Workflow ${configs.length + 1}`;
+        const cfg: WeaveConfig = {
+            id: crypto.randomUUID(), name,
+            nodes: nodes.map(n => ({ ...n })),
+            edges: edges.map(e => ({ ...e })),
+            ratio, size, tier: tierSel,
+            createdAt: Date.now(), updatedAt: Date.now(),
+        };
+        const next = [cfg, ...configs];
+        await storage.kvSet(brandKey(CONFIGS_KEY), next);
+        setConfigs(next);
+        setShowSaveDialog(false);
+        setSaveName('');
+        setNotice(`✓ Saved "${name}".`);
+    };
+
+    const loadConfig = (cfg: WeaveConfig) => {
+        setNodes(cfg.nodes);
+        setEdges(cfg.edges);
+        setRatio(cfg.ratio);
+        setSize(cfg.size);
+        setTierSel(cfg.tier);
+        setShowLoadMenu(false);
+        setExpandedId(null);
+        setNotice(`✓ Loaded "${cfg.name}".`);
+    };
+
+    const deleteConfig = async (id: string) => {
+        const next = configs.filter(c => c.id !== id);
+        await storage.kvSet(brandKey(CONFIGS_KEY), next);
+        setConfigs(next);
+    };
+
     const assetOf = (id?: string) => assets.find(a => a.id === id);
     const elementOf = (id?: string) => elements.find(e => e.id === id);
 
@@ -535,6 +602,11 @@ export default function WeaveView() {
                     <button style={chip(tierSel === 'flash')} onClick={() => setTierSel('flash')} title="flash · $0.04">Flash</button>
                     <button style={chip(tierSel === 'pro')} onClick={() => setTierSel('pro')} title="pro · $0.24 · consistency inspector">Pro</button>
                     <button style={{ ...S.btn, fontWeight: 800 }} disabled={!!busy} onClick={() => weave(tierSel)}>▶ Run</button>
+                    <span style={{ width: 1, height: 18, background: '#e4e4e7', margin: '0 2px' }} />
+                    <button style={S.btnGhost} onClick={() => { setShowSaveDialog(true); setSaveName(''); }} title="Save current canvas as a workflow">💾</button>
+                    <button style={S.btnGhost} onClick={() => setShowLoadMenu(!showLoadMenu)} title="Load a saved workflow">
+                        📂 {configs.length > 0 && <span style={{ fontSize: 8, color: '#a1a1aa' }}>{configs.length}</span>}
+                    </button>
                 </span>
             </div>
 
@@ -581,6 +653,45 @@ export default function WeaveView() {
                             </button>
                         ))}
                     </div>
+                </div>
+            )}
+
+            {/* Save dialog */}
+            {showSaveDialog && (
+                <div style={{ ...S.card, display: 'flex', gap: 8, alignItems: 'center', border: '1.5px solid #d97706', background: '#fffbeb' }}>
+                    <span style={{ ...S.label, whiteSpace: 'nowrap' }}>💾 SAVE WORKFLOW</span>
+                    <input
+                        value={saveName}
+                        onChange={e => setSaveName(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') saveConfig(); if (e.key === 'Escape') setShowSaveDialog(false); }}
+                        placeholder={`Workflow ${configs.length + 1}`}
+                        autoFocus
+                        style={{ flex: 1, border: '1px solid #e4e4e7', borderRadius: 6, padding: '4px 8px', fontSize: 11, outline: 'none' }}
+                    />
+                    <button style={{ ...S.btn, fontSize: 11 }} onClick={saveConfig}>Save</button>
+                    <button style={{ ...S.btnGhost, fontSize: 11 }} onClick={() => setShowSaveDialog(false)}>Cancel</button>
+                </div>
+            )}
+
+            {/* Load menu */}
+            {showLoadMenu && (
+                <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 6, border: '1.5px solid #d4d4d8', maxHeight: 220, overflow: 'auto' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={S.label}>📂 SAVED WORKFLOWS</span>
+                        <button style={S.btnGhost} onClick={() => setShowLoadMenu(false)}>Close</button>
+                    </div>
+                    {configs.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No saved workflows yet.</span>}
+                    {configs.map(cfg => (
+                        <div key={cfg.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px', background: '#fafafa', borderRadius: 8 }}>
+                            <button style={{ ...S.btnGhost, flex: 1, textAlign: 'left', fontSize: 11, fontWeight: 600 }} onClick={() => loadConfig(cfg)}>
+                                {cfg.name}
+                                <span style={{ fontSize: 9, color: '#a1a1aa', marginLeft: 6 }}>
+                                    {cfg.nodes.length}n · {cfg.edges.length}e · {cfg.ratio} · {cfg.size} · {cfg.tier}
+                                </span>
+                            </button>
+                            <button style={{ ...miniBtn, color: '#b91c1c', fontSize: 9 }} onClick={() => deleteConfig(cfg.id)}>✕</button>
+                        </div>
+                    ))}
                 </div>
             )}
 
@@ -692,7 +803,10 @@ export default function WeaveView() {
                                     <div onClick={() => toggleExpand(nn.id)}>
                                         {a.photos[0] && <img src={a.photos[0].image.value} alt="" draggable={false}
                                             style={{ width: '100%', borderRadius: 8, display: 'block' }} />}
-                                        <div style={{ fontSize: 10, fontWeight: 700, marginTop: 3 }}>🛋 {a.name}</div>
+                                        <div style={{ fontSize: 10, fontWeight: 700, marginTop: 3 }}>
+                                            🛋 {a.name}
+                                            {(nn.quantity ?? 1) > 1 && <span style={{ color: '#d97706', marginLeft: 4 }}>×{nn.quantity}</span>}
+                                        </div>
                                     </div>
                                 )}
                                 {nn.kind === 'element' && el && (
@@ -833,8 +947,16 @@ export default function WeaveView() {
                                         {nn.kind === 'facet' && (
                                             <button style={miniBtn} disabled={!!busy} onClick={() => runFacet(nn)}>▶ solo (flash)</button>
                                         )}
-                                        {nn.kind === 'product' && a?.photos[0] && (
-                                            <button style={miniBtn} onClick={() => openLightbox(a.photos[0].image.value)}>🔍 zoom</button>
+                                        {nn.kind === 'product' && (
+                                            <>
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                                    <span style={{ fontSize: 9, fontWeight: 700, color: '#71717a' }}>QTY</span>
+                                                    <button style={miniBtn} onClick={() => setNodes(prev => prev.map(x => x.id === nn.id ? { ...x, quantity: Math.max(1, (x.quantity ?? 1) - 1) } : x))}>−</button>
+                                                    <span style={{ fontSize: 10, fontWeight: 800, minWidth: 14, textAlign: 'center' }}>{nn.quantity ?? 1}</span>
+                                                    <button style={miniBtn} onClick={() => setNodes(prev => prev.map(x => x.id === nn.id ? { ...x, quantity: Math.min(10, (x.quantity ?? 1) + 1) } : x))}>+</button>
+                                                </span>
+                                                {a?.photos[0] && <button style={miniBtn} onClick={() => openLightbox(a.photos[0].image.value)}>🔍 zoom</button>}
+                                            </>
                                         )}
                                         {nn.kind === 'element' && el && (
                                             <span style={{ fontSize: 9, color: '#71717a', flexBasis: '100%' }}>{el.description}</span>
