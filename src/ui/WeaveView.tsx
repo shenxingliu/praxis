@@ -33,7 +33,8 @@ interface WeaveNode {
     description?: string;  // facet nodes / concept-role idea
     role?: 'fusion' | 'product' | 'concept';
     resultId?: string;     // output/rotate nodes: GenerationResult behind image
-    angle?: number;        // rotate nodes: target viewpoint in degrees
+    angle?: number;        // rotate nodes: azimuth in degrees (free, 0-359)
+    pitch?: number;        // rotate nodes: camera elevation −45..+45
 }
 
 const nodeImages = (nn: WeaveNode): string[] =>
@@ -74,6 +75,8 @@ export default function WeaveView() {
     const resultsRef = useRef<Map<string, GenerationResult>>(new Map());
     const fileRef = useRef<HTMLInputElement>(null);
     const drag = useRef<{ id: string; dx: number; dy: number; moved: boolean } | null>(null);
+    /** 3D orbit-drag on rotate nodes: horizontal = azimuth, vertical = pitch. */
+    const orbit = useRef<{ id: string; sx: number; sy: number; a0: number; p0: number } | null>(null);
     const boardRef = useRef<HTMLDivElement>(null);
     const [pan, setPan] = useState({ x: 40, y: 40 });
     const [scale, setScale] = useState(1);
@@ -170,6 +173,13 @@ export default function WeaveView() {
             setLinking({ ...linking, x: w.x, y: w.y });
             return;
         }
+        const o = orbit.current;
+        if (o) {
+            const az = ((Math.round(o.a0 + (e.clientX - o.sx) * 0.9) % 360) + 360) % 360;
+            const pi = Math.max(-45, Math.min(45, Math.round(o.p0 - (e.clientY - o.sy) * 0.4)));
+            setNodes(prev => prev.map(nn => nn.id === o.id ? { ...nn, angle: az, pitch: pi } : nn));
+            return;
+        }
         const d = drag.current;
         if (d) {
             const w = toWorld(e.clientX, e.clientY);
@@ -180,7 +190,7 @@ export default function WeaveView() {
         const p = panning.current;
         if (p) setPan({ x: p.px + (e.clientX - p.sx), y: p.py + (e.clientY - p.sy) });
     };
-    const onUp = () => { drag.current = null; panning.current = null; setLinking(null); };
+    const onUp = () => { drag.current = null; panning.current = null; orbit.current = null; setLinking(null); };
 
     // Zoom must use a NON-PASSIVE native wheel listener — React's synthetic
     // wheel is passive, so preventDefault() is ignored and the browser zooms
@@ -348,12 +358,13 @@ export default function WeaveView() {
 
     const runRotate = async (rn: WeaveNode, deg?: number) => {
         const angle = deg ?? rn.angle ?? 90;
+        const pitch = rn.pitch ?? 0;
         const imgs = rotateInputs(rn);
         if (imgs.length === 0) { setNotice('❌ Connect an image or product to the 🔄 node first (its angles become the input).'); return; }
-        setBusy(`Rotating to ${angle}°…`);
+        setBusy(`Rotating to ${angle}°${pitch !== 0 ? ` / ${pitch > 0 ? '+' : ''}${pitch}°` : ''}…`);
         setNotice('');
         try {
-            const r = await rotateView(imgs, angle, { ratio, size, tier: tierSel }, setBusy);
+            const r = await rotateView(imgs, angle, { ratio, size, tier: tierSel, pitch }, setBusy);
             resultsRef.current.set(r.id, r);
             setNodes(prev => prev.map(x => x.id === rn.id ? { ...x, image: r.image.value, resultId: r.id, angle } : x));
             setNotice(`✓ ${angle}° view rendered.`);
@@ -603,15 +614,48 @@ export default function WeaveView() {
                                     </div>
                                 )}
                                 {nn.kind === 'rotate' && (
-                                    <div onClick={() => toggleExpand(nn.id)} style={{ textAlign: 'center' }}>
-                                        {nn.image ? (
-                                            <img src={nn.image} alt="" draggable={false}
-                                                style={{ width: '100%', borderRadius: 8, display: 'block' }} />
-                                        ) : (
-                                            <div style={{ fontSize: 20, paddingTop: 8 }}>🔄</div>
-                                        )}
-                                        <div style={{ fontSize: 9, color: '#71717a', margin: '3px 0' }}>
-                                            Rotate · {nn.angle ?? 90}° · {rotateInputs(nn).length} input img
+                                    <div style={{ textAlign: 'center' }}>
+                                        {/* 3D orbit pad — drag to rotate: X = azimuth, Y = pitch */}
+                                        <div
+                                            onPointerDown={e => {
+                                                e.stopPropagation();
+                                                orbit.current = { id: nn.id, sx: e.clientX, sy: e.clientY, a0: nn.angle ?? 90, p0: nn.pitch ?? 0 };
+                                            }}
+                                            onClick={() => toggleExpand(nn.id)}
+                                            style={{ position: 'relative', cursor: 'grab', touchAction: 'none' }}>
+                                            {nn.image ? (
+                                                <img src={nn.image} alt="" draggable={false}
+                                                    style={{ width: '100%', borderRadius: 8, display: 'block', transform: `perspective(300px) rotateX(${(nn.pitch ?? 0) / 4}deg)` }} />
+                                            ) : (
+                                                <div style={{
+                                                    height: 78, borderRadius: 8, background: '#18181b',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                }}>
+                                                    {/* wireframe turntable gizmo */}
+                                                    <div style={{
+                                                        width: 52, height: 52, borderRadius: '50%',
+                                                        border: '1px solid rgba(255,255,255,0.35)', position: 'relative',
+                                                        transform: `perspective(140px) rotateX(${55 - (nn.pitch ?? 0) / 2}deg)`,
+                                                    }}>
+                                                        <div style={{
+                                                            position: 'absolute', width: 8, height: 8, borderRadius: '50%', background: '#fff',
+                                                            left: 22 + 24 * Math.sin(((nn.angle ?? 90) * Math.PI) / 180) - 4,
+                                                            top: 22 - 24 * Math.cos(((nn.angle ?? 90) * Math.PI) / 180) - 4,
+                                                        }} />
+                                                        <div style={{ position: 'absolute', inset: '40%', borderRadius: '50%', background: 'rgba(255,255,255,0.25)' }} />
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <div style={{
+                                                position: 'absolute', bottom: 4, left: '50%', transform: 'translateX(-50%)',
+                                                fontSize: 9, fontWeight: 800, color: '#fff', background: 'rgba(0,0,0,0.55)',
+                                                borderRadius: 999, padding: '1px 8px', whiteSpace: 'nowrap', pointerEvents: 'none',
+                                            }}>
+                                                {nn.angle ?? 90}° · {(nn.pitch ?? 0) > 0 ? '+' : ''}{nn.pitch ?? 0}°
+                                            </div>
+                                        </div>
+                                        <div style={{ fontSize: 8.5, color: '#71717a', margin: '3px 0 0' }}>
+                                            drag to orbit · {rotateInputs(nn).length} input img
                                         </div>
                                     </div>
                                 )}
@@ -683,16 +727,7 @@ export default function WeaveView() {
                                         )}
                                         {nn.kind === 'rotate' && (
                                             <>
-                                                <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap', flexBasis: '100%' }}>
-                                                    {[0, 45, 90, 135, 180, 225, 270, 315].map(deg => (
-                                                        <button key={deg} disabled={!!busy}
-                                                            style={{ ...miniBtn, background: (nn.angle ?? 90) === deg ? '#18181b' : '#f4f4f5', color: (nn.angle ?? 90) === deg ? '#fff' : '#3f3f46', padding: '2px 5px' }}
-                                                            onClick={() => setNodes(prev => prev.map(x => x.id === nn.id ? { ...x, angle: deg } : x))}>
-                                                            {deg}°
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                                <button style={{ ...miniBtn, background: '#18181b', color: '#fff' }} disabled={!!busy} onClick={() => runRotate(nn)}>▶ Rotate</button>
+                                                <button style={{ ...miniBtn, background: '#18181b', color: '#fff' }} disabled={!!busy} onClick={() => runRotate(nn)}>▶ Render {nn.angle ?? 90}°</button>
                                                 <button style={miniBtn} disabled={!!busy} onClick={() => run360(nn)} title="8 views at 45° steps (flash) — laid out on the board">🔄 360°</button>
                                                 {nn.image && <>
                                                     <button style={miniBtn} onClick={() => download(nn)}>⬇</button>

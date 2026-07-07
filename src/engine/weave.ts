@@ -72,10 +72,16 @@ export async function describeAsPrompt(image: string): Promise<string> {
 export async function rotateView(
     sourceImages: string[],
     angleDegrees: number,
-    opts: { ratio: GenerationParams['ratio']; size?: GenerationParams['size']; tier: 'flash' | 'pro' },
+    opts: { ratio: GenerationParams['ratio']; size?: GenerationParams['size']; tier: 'flash' | 'pro'; pitch?: number },
     onStatus?: (t: string) => void
 ): Promise<GenerationResult> {
     if (sourceImages.length === 0) throw new Error('Connect or add at least one image of the subject.');
+    const pitch = Math.max(-45, Math.min(45, Math.round(opts.pitch ?? 0)));
+    const pitchLine = pitch > 5
+        ? `CAMERA ELEVATION: raised camera looking DOWN at the subject by about ${pitch}°.`
+        : pitch < -5
+            ? `CAMERA ELEVATION: lowered camera looking UP at the subject by about ${Math.abs(pitch)}°.`
+            : 'CAMERA ELEVATION: eye-level, straight-on.';
     const model = opts.tier === 'pro' ? MODELS.imagePro : MODELS.imageFlash;
     const cost = COST_ESTIMATE_USD[model] ?? 0.1;
     const month = new Date().toISOString().slice(0, 7);
@@ -86,7 +92,8 @@ export async function rotateView(
     const dir = ((angleDegrees % 360) + 360) % 360;
     const prompt = `TURNTABLE TASK. The attached image(s) show ONE subject (a product, object or person) from ${sourceImages.length > 1 ? 'multiple angles' : 'one angle'}.
 
-Render the EXACT SAME subject rotated to the ${dir}° viewpoint (0° = the first image's front view; rotation is clockwise around the subject's vertical axis, camera height and distance unchanged).
+Render the EXACT SAME subject rotated to the ${dir}° viewpoint (0° = the first image's front view; rotation is clockwise around the subject's vertical axis, camera distance unchanged).
+${pitchLine}
 
 STRICT IDENTITY: same geometry, proportions, materials, textures, colors, details${sourceImages.length > 1 ? ' — reconcile all provided angles into one consistent subject' : ''}. Infer hidden sides plausibly and consistently.
 BACKDROP: clean neutral studio backdrop, soft even light, gentle grounding shadow. NOTHING else in frame. No text.`;
@@ -103,7 +110,7 @@ BACKDROP: clean neutral studio backdrop, soft even light, gentle grounding shado
     const result: GenerationResult = {
         id: crypto.randomUUID(),
         brandId: getCurrentBrandId(),
-        params: { outputType: 'silo', ratio: opts.ratio, size: opts.size, note: `turntable ${dir}°`, modelTier: opts.tier },
+        params: { outputType: 'silo', ratio: opts.ratio, size: opts.size, note: `turntable ${dir}°${pitch !== 0 ? ` / pitch ${pitch}°` : ''}`, modelTier: opts.tier },
         assetIds: [], referenceIds: [], elementIds: [], appliedRuleIds: [],
         fullPrompt: prompt, model,
         image: { kind: 'data', value: out.image },
