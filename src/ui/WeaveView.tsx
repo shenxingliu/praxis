@@ -53,27 +53,36 @@ const fileToDataUrl = (f: File): Promise<string> =>
 
 let dropCount = 0;
 
-/** 3D trackball — drag freely in any direction (az 0-359, pitch −60..+60). */
+/** 3D trackball — the striped grid SCROLLS with rotation so every degree
+ *  of movement is visible. Drag freely: az 0-359, pitch −60..+60. */
 const Ball: React.FC<{ az: number; pi: number; size: number }> = ({ az, pi, size }) => {
     const rad = Math.PI / 180;
     const r = size / 2 - 5;
     const mx = r * Math.sin(az * rad) * Math.cos(pi * rad);
     const my = -r * Math.sin(pi * rad);
     const front = Math.cos(az * rad) >= 0;
+    const stripe = Math.max(6, size / 9);
     return (
-        <div style={{
-            width: size, height: size, borderRadius: '50%', position: 'relative', flexShrink: 0,
-            background: 'radial-gradient(circle at 32% 28%, #ffffff, #d4d4d8 45%, #8a8a92 78%, #64646c)',
-            boxShadow: 'inset -4px -6px 12px rgba(0,0,0,0.28), 0 2px 6px rgba(0,0,0,0.25)',
-        }}>
-            {/* equator + meridian hints */}
-            <div style={{ position: 'absolute', left: '6%', right: '6%', top: '42%', height: '16%', borderRadius: '50%', border: '1px solid rgba(0,0,0,0.16)' }} />
-            <div style={{ position: 'absolute', top: '6%', bottom: '6%', left: '42%', width: '16%', borderRadius: '50%', border: '1px solid rgba(0,0,0,0.10)' }} />
+        <div style={{ width: size, height: size, borderRadius: '50%', position: 'relative', flexShrink: 0, overflow: 'hidden', boxShadow: 'inset -4px -6px 12px rgba(0,0,0,0.30), 0 2px 6px rgba(0,0,0,0.25)' }}>
+            {/* rotating longitude stripes — scroll horizontally with azimuth */}
+            <div style={{
+                position: 'absolute', inset: 0, borderRadius: '50%',
+                background: `repeating-linear-gradient(90deg, #c7c7cd 0 ${stripe}px, #97979f ${stripe}px ${stripe * 2}px)`,
+                backgroundPositionX: `${-az * (size / 90)}px`,
+            }} />
+            {/* latitude lines — shift vertically with pitch */}
+            <div style={{
+                position: 'absolute', inset: 0, borderRadius: '50%',
+                background: `repeating-linear-gradient(0deg, transparent 0 ${stripe * 1.4 - 1}px, rgba(0,0,0,0.22) ${stripe * 1.4 - 1}px ${stripe * 1.4}px)`,
+                backgroundPositionY: `${pi * (size / 130)}px`,
+            }} />
+            {/* sphere shading on top */}
+            <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'radial-gradient(circle at 32% 28%, rgba(255,255,255,0.85), rgba(255,255,255,0.12) 42%, rgba(0,0,0,0.18) 78%, rgba(0,0,0,0.38))' }} />
             {/* camera marker */}
             <div style={{
                 position: 'absolute', width: 9, height: 9, borderRadius: '50%',
                 left: size / 2 + mx - 4.5, top: size / 2 + my - 4.5,
-                background: front ? '#18181b' : 'rgba(24,24,27,0.3)',
+                background: front ? '#d97706' : 'rgba(217,119,6,0.35)',
                 border: '1.5px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
             }} />
         </div>
@@ -580,7 +589,16 @@ export default function WeaveView() {
                         const el = elementOf(nn.elementId);
                         const open = expandedId === nn.id;
                         return (
-                            <div key={nn.id} onPointerDown={e => onDown(e, nn)}
+                            <div key={nn.id}
+                                onPointerDown={e => {
+                                    if (nn.kind === 'rotate') {
+                                        // Rotate node body = orbit; move it via the ⠿ handle.
+                                        e.stopPropagation();
+                                        orbit.current = { id: nn.id, sx: e.clientX, sy: e.clientY, a0: nn.angle ?? 90, p0: nn.pitch ?? 0 };
+                                        return;
+                                    }
+                                    onDown(e, nn);
+                                }}
                                 onPointerUp={e => { if (linking) { e.stopPropagation(); completeLink(nn.id); } }}
                                 style={{
                                     position: 'absolute', left: nn.x, top: nn.y, width: W(nn),
@@ -643,27 +661,34 @@ export default function WeaveView() {
                                 )}
                                 {nn.kind === 'rotate' && (
                                     <div style={{ textAlign: 'center' }}>
+                                        {/* Move handle — the ONLY part that drags the node */}
+                                        <div
+                                            onPointerDown={e => { e.stopPropagation(); onDown(e, nn); }}
+                                            title="Drag here to MOVE the node"
+                                            style={{
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                                                fontSize: 9, fontWeight: 800, color: '#71717a', cursor: 'grab',
+                                                background: '#f4f4f5', borderRadius: 6, padding: '3px 0', marginBottom: 4,
+                                            }}>
+                                            ⠿ 🔄 Rotate — drag here to move
+                                        </div>
                                         {nn.image && (
                                             <img src={nn.image} alt="" draggable={false}
                                                 onClick={() => toggleExpand(nn.id)}
                                                 style={{ width: '100%', borderRadius: 8, display: 'block', marginBottom: 4 }} />
                                         )}
-                                        {/* 3D trackball — drag in ANY direction */}
+                                        {/* 3D trackball — the WHOLE body orbits; click for actions */}
                                         <div
-                                            onPointerDown={e => {
-                                                e.stopPropagation();
-                                                orbit.current = { id: nn.id, sx: e.clientX, sy: e.clientY, a0: nn.angle ?? 90, p0: nn.pitch ?? 0 };
-                                            }}
                                             onClick={() => toggleExpand(nn.id)}
-                                            style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'grab', touchAction: 'none', justifyContent: 'center', padding: '2px 0' }}>
-                                            <Ball az={nn.angle ?? 90} pi={nn.pitch ?? 0} size={nn.image ? 40 : 72} />
+                                            style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'move', touchAction: 'none', justifyContent: 'center', padding: '2px 0' }}>
+                                            <Ball az={nn.angle ?? 90} pi={nn.pitch ?? 0} size={nn.image ? 44 : 76} />
                                             <div style={{ textAlign: 'left' }}>
                                                 <div style={{ fontSize: 12, fontWeight: 800 }}>{nn.angle ?? 90}°</div>
                                                 <div style={{ fontSize: 10, fontWeight: 700, color: '#71717a' }}>{(nn.pitch ?? 0) > 0 ? '+' : ''}{nn.pitch ?? 0}°</div>
                                             </div>
                                         </div>
                                         <div style={{ fontSize: 8.5, color: '#71717a', marginTop: 2 }}>
-                                            drag ball to orbit · {rotateInputs(nn).length} input img
+                                            drag anywhere to orbit · {rotateInputs(nn).length} input img
                                         </div>
                                     </div>
                                 )}
