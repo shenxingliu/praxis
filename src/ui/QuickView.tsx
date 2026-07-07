@@ -95,8 +95,8 @@ export default function QuickView() {
                     style={{
                         position: 'sticky', top: 8, zIndex: 10, fontSize: 12.5, fontWeight: 600,
                         padding: '8px 14px', borderRadius: 10,
-                        background: busy ? '#fef3c7' : notice.startsWith('Error') ? '#fef2f2' : '#ecfdf5',
-                        color: busy ? '#92400e' : notice.startsWith('Error') ? '#b91c1c' : '#047857',
+                        background: busy ? '#f4f4f5' : notice.startsWith('Error') ? '#f4f4f5' : '#f7f7f8',
+                        color: '#18181b',
                         border: '1px solid rgba(0,0,0,0.06)',
                     }}>
                     {busy ? `${busy}` : notice}

@@ -87,8 +87,8 @@ export default function GalleryView() {
                     style={{
                         position: 'sticky', top: 8, zIndex: 10, fontSize: 12.5, fontWeight: 600,
                         padding: '8px 14px', borderRadius: 10,
-                        background: busy ? '#fef3c7' : notice.startsWith('Error') ? '#fef2f2' : '#ecfdf5',
-                        color: busy ? '#92400e' : notice.startsWith('Error') ? '#b91c1c' : '#047857',
+                        background: busy ? '#f4f4f5' : notice.startsWith('Error') ? '#f4f4f5' : '#f7f7f8',
+                        color: '#18181b',
                         border: '1px solid rgba(0,0,0,0.06)',
                     }}>
                     {busy ? `${busy}` : notice}
@@ -120,7 +120,7 @@ export default function GalleryView() {
                                     {r.adopted ? '*' : '*'}
                                 </button>
                                 <button style={S.btnGhost} onClick={() => download(r)}>Save</button>
-                                {r.adopted && <button style={{ ...S.btnGhost, color: '#b91c1c' }} onClick={() => remove(r)}>✕</button>}
+                                {r.adopted && <button style={{ ...S.btnGhost, color: '#18181b' }} onClick={() => remove(r)}>✕</button>}
                             </span>
                         </div>
                     </div>

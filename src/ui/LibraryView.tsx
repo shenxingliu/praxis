@@ -215,8 +215,8 @@ export default function LibraryView() {
                     style={{
                         position: 'sticky', top: 8, zIndex: 10, fontSize: 12.5, fontWeight: 600,
                         padding: '8px 14px', borderRadius: 10,
-                        background: busy ? '#fef3c7' : notice.startsWith('Error') ? '#fef2f2' : '#ecfdf5',
-                        color: busy ? '#92400e' : notice.startsWith('Error') ? '#b91c1c' : '#047857',
+                        background: busy ? '#f4f4f5' : notice.startsWith('Error') ? '#f4f4f5' : '#f7f7f8',
+                        color: '#18181b',
                         border: '1px solid rgba(0,0,0,0.06)',
                     }}>
                     {busy ? `${busy}` : notice}
@@ -295,7 +295,7 @@ export default function LibraryView() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12 }}>
                             <span style={{ fontWeight: 700 }}>Generation {draft.generation}</span>
                             {draft.redline && (
-                                <span style={{ color: draft.redline.pass ? '#059669' : '#b91c1c' }}>
+                                <span style={{ color: draft.redline.pass ? '#3f3f46' : '#18181b' }}>
                                     {draft.redline.pass ? 'passes brand red-lines' : 'red-line risk'} — {draft.redline.note}
                                 </span>
                             )}
@@ -344,7 +344,7 @@ export default function LibraryView() {
                                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: '#71717a' }}>
                                     {TYPE_LABEL[el.type]} · w{el.weight.toFixed(1)}
                                     {el.weight > 1 && <span style={{ color: '#059669' }}> ▲ rising</span>}
-                                    {el.weight < 0.9 && <span style={{ color: '#b91c1c' }}> ▼ fading</span>}
+                                    {el.weight < 0.9 && <span style={{ color: '#52525b' }}> ▼ fading</span>}
                                     {!el.lastUsedAt && Date.now() - el.createdAt > 14 * 86400_000 && <span style={{ color: '#a1a1aa' }}> sleeping</span>}
                                 </div>
                                 <div style={{ fontSize: 12.5, fontWeight: 700, marginTop: 3 }}>{el.concept}{el.worldview && <span style={{ fontWeight: 400, color: '#a1a1aa' }}> · “{el.worldview}”</span>}</div>

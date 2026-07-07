@@ -73,7 +73,7 @@ const fileToDataUrl = (f: File): Promise<string> =>
 let dropCount = 0;
 
 /** 3D cube with colored faces — much easier to identify angle than a sphere.
- *  Front=blue, Back=red, Left=green, Right=yellow, Top=white, Bottom=dark.
+ *  Front=blue, Back=slate, Left=green, Right=yellow, Top=white, Bottom=dark.
  *  Orange dot marks the hero-front (0° azimuth). */
 const Ball: React.FC<{ az: number; pi: number; size: number }> = ({ az, pi, size }) => {
     const rad = Math.PI / 180;
@@ -105,7 +105,7 @@ const Ball: React.FC<{ az: number; pi: number; size: number }> = ({ az, pi, size
     // 6 faces: [vertex indices, base color, label]
     const faces: [number[], string, string][] = [
         [[0, 1, 2, 3], '#4a90d9', 'F'],  // Front  — blue
-        [[5, 4, 7, 6], '#d94a4a', 'B'],  // Back   — red
+        [[5, 4, 7, 6], '#6b7280', 'B'],  // Back
         [[4, 0, 3, 7], '#4aad6a', 'L'],  // Left   — green
         [[1, 5, 6, 2], '#d9a84a', 'R'],  // Right  — yellow
         [[3, 2, 6, 7], '#c8c8d0', 'T'],  // Top    — light
@@ -153,14 +153,14 @@ const Ball: React.FC<{ az: number; pi: number; size: number }> = ({ az, pi, size
                 );
             })}
             {fz > 0 && <circle cx={fx} cy={fy} r={size >= 60 ? 4.5 : 3}
-                fill="#D14836" stroke="#fff" strokeWidth={1.2} />}
+                fill="#18181b" stroke="#fff" strokeWidth={1.2} />}
         </svg>
     );
 };
 
 const miniBtn: React.CSSProperties = {
     border: 'none', background: '#f4f4f5', borderRadius: 6, fontSize: 9.5,
-    fontWeight: 700, cursor: 'pointer', padding: '3px 7px', color: '#3f3f46',
+    fontWeight: 680, cursor: 'pointer', padding: '3px 7px', color: '#3f3f46',
 };
 
 const fitImage = (fixed: boolean, extra: React.CSSProperties = {}): React.CSSProperties => ({
@@ -679,8 +679,8 @@ export default function WeaveView() {
                     style={{
                         position: 'sticky', top: 8, zIndex: 30, fontSize: 12.5, fontWeight: 600,
                         padding: '8px 14px', borderRadius: 10,
-                        background: busy ? '#fef3c7' : notice.startsWith('Error') ? '#fef2f2' : '#ecfdf5',
-                        color: busy ? '#92400e' : notice.startsWith('Error') ? '#b91c1c' : '#047857',
+                        background: busy ? '#f4f4f5' : notice.startsWith('Error') ? '#f4f4f5' : '#f7f7f8',
+                        color: '#18181b',
                         border: '1px solid rgba(0,0,0,0.06)',
                     }}>
                     {busy ? `${busy}` : notice}
@@ -762,7 +762,7 @@ export default function WeaveView() {
 
             {/* Save dialog */}
             {showSaveDialog && (
-                <div style={{ ...S.card, display: 'flex', gap: 8, alignItems: 'center', border: '1.5px solid #D14836', background: '#fff1f0' }}>
+                <div style={{ ...S.card, display: 'flex', gap: 8, alignItems: 'center', border: '1px solid #c9c9cf', background: 'rgba(255,255,255,0.82)' }}>
                     <span style={{ ...S.label, whiteSpace: 'nowrap' }}>SAVE WORKFLOW</span>
                     <input
                         value={saveName}
@@ -793,7 +793,7 @@ export default function WeaveView() {
                                     {cfg.nodes.length}n · {cfg.edges.length}e · {cfg.ratio} · {cfg.size} · {cfg.tier}
                                 </span>
                             </button>
-                            <button style={{ ...miniBtn, color: '#b91c1c', fontSize: 9 }} onClick={() => deleteConfig(cfg.id)}>✕</button>
+                            <button style={{ ...miniBtn, color: '#18181b', fontSize: 9 }} onClick={() => deleteConfig(cfg.id)}>✕</button>
                         </div>
                     ))}
                 </div>
@@ -844,7 +844,7 @@ export default function WeaveView() {
                             const a = nodes.find(nn => nn.id === linking.from);
                             if (!a) return null;
                             return <path d={bezier(a.x + W(a), anchorY(a), linking.x, linking.y)}
-                                stroke="#D14836" strokeWidth={1.8} fill="none" strokeDasharray="5 4" />;
+                                stroke="#18181b" strokeWidth={1.8} fill="none" strokeDasharray="5 4" />;
                         })()}
                     </svg>
                     {nodes.map(nn => {
@@ -869,8 +869,8 @@ export default function WeaveView() {
                                     ...(H(nn) ? { height: H(nn) } : {}),
                                     background: nn.kind === 'output' ? '#18181b' : '#fff',
                                     borderRadius: 12,
-                                    border: linking?.from === nn.id ? '2px solid #D14836'
-                                        : linking ? '2px dashed #D14836'
+                                    border: linking?.from === nn.id ? '2px solid #18181b'
+                                        : linking ? '2px dashed #52525b'
                                         : open ? '2px solid #18181b' : '1px solid #d4d4d8',
                                     boxShadow: open ? '0 8px 24px rgba(0,0,0,0.16)' : '0 3px 10px rgba(0,0,0,0.08)',
                                     cursor: 'grab', userSelect: 'none', padding: 6, zIndex: open ? 5 : 1,
@@ -925,7 +925,7 @@ export default function WeaveView() {
                                             style={fitImage(fixed)} />}
                                         <div style={{ fontSize: 10, fontWeight: 700, marginTop: 3, display: fixed ? 'none' : undefined }}>
                                             {a.name}
-                                            {(nn.quantity ?? 1) > 1 && <span style={{ color: '#D14836', marginLeft: 4 }}>×{nn.quantity}</span>}
+                                            {(nn.quantity ?? 1) > 1 && <span style={{ color: '#52525b', marginLeft: 4 }}>×{nn.quantity}</span>}
                                         </div>
                                     </div>
                                 )}
@@ -1103,7 +1103,7 @@ export default function WeaveView() {
                                                 Analyze / Prompt
                                             </button>
                                         )}
-                                        <button style={{ ...miniBtn, color: '#b91c1c' }} onClick={() => remove(nn.id)}>✕ delete</button>
+                                        <button style={{ ...miniBtn, color: '#18181b' }} onClick={() => remove(nn.id)}>✕ delete</button>
                                     </div>
                                 )}
                                 </div>

@@ -103,8 +103,8 @@ export default function KnowledgeView() {
                     <div key={rule.id} style={{ ...S.card, display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', opacity: rule.enabled ? 1 : 0.5 }}>
                         <span style={{
                             fontSize: 9, fontWeight: 800, letterSpacing: 1, padding: '3px 8px', borderRadius: 999, flexShrink: 0,
-                            background: rule.polarity === 'must' ? '#ecfdf5' : '#fef2f2',
-                            color: rule.polarity === 'must' ? '#047857' : '#b91c1c',
+                            background: rule.polarity === 'must' ? '#f7f7f8' : '#f4f4f5',
+                            color: '#18181b',
                         }}>
                             {rule.polarity.toUpperCase()}
                         </span>
@@ -113,7 +113,7 @@ export default function KnowledgeView() {
                             <span style={{ fontSize: 10, color: '#a1a1aa' }}>scope: {scopeText(rule)} · evidence: {rule.confidence} signal{rule.confidence === 1 ? '' : 's'}</span>
                         </span>
                         <button style={S.btnGhost} onClick={() => toggleRule(rule)}>{rule.enabled ? 'Disable' : 'Enable'}</button>
-                        <button style={{ ...S.btnGhost, color: '#b91c1c' }} onClick={() => deleteRule(rule)}>Delete</button>
+                        <button style={{ ...S.btnGhost, color: '#18181b' }} onClick={() => deleteRule(rule)}>Delete</button>
                     </div>
                 ))}
             </div>

@@ -1,15 +1,13 @@
 import { CSSProperties } from 'react';
 
-const ACCENT = '#D14836';
-
 /** Minimal shared inline styles — no CSS framework in 2.0 yet. */
 export const S: Record<string, CSSProperties> = {
     page: {
-        fontFamily: '"Space Grotesk", "Satoshi", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif',
         height: '100vh',
         display: 'flex',
         overflow: 'hidden',
-        background: 'radial-gradient(circle at 18% 0%, rgba(209,72,54,0.24) 0, rgba(18,18,18,0.96) 34%, #050505 100%)',
+        background: 'radial-gradient(circle at 18% 0%, rgba(255,255,255,0.16) 0, rgba(18,18,18,0.96) 34%, #050505 100%)',
         color: '#0b0b0b',
     },
     sidebar: {
@@ -27,7 +25,7 @@ export const S: Record<string, CSSProperties> = {
         boxSizing: 'border-box',
     },
     brandBlock: { display: 'flex', flexDirection: 'column', gap: 3, padding: '6px 6px 2px' },
-    brand: { fontWeight: 800, fontSize: 15, letterSpacing: -0.1, color: '#fff' },
+    brand: { fontWeight: 760, fontSize: 15, letterSpacing: 0, color: '#fff' },
     brandSubtle: { fontSize: 11, color: 'rgba(255,255,255,0.48)' },
     nav: { display: 'flex', flexDirection: 'column', gap: 3 },
     tab: {
@@ -42,12 +40,12 @@ export const S: Record<string, CSSProperties> = {
         border: '1px solid transparent',
         background: 'transparent',
         fontSize: 13,
-        fontWeight: 650,
+        fontWeight: 640,
         color: 'rgba(255,255,255,0.66)',
         cursor: 'pointer',
         textAlign: 'left',
     },
-    tabActive: { background: 'rgba(209,72,54,0.18)', color: '#fff', border: '1px solid rgba(209,72,54,0.72)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 1px rgba(209,72,54,0.12)' },
+    tabActive: { background: 'rgba(255,255,255,0.12)', color: '#fff', border: '1px solid rgba(255,255,255,0.18)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1)' },
     shell: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: 'rgba(248,248,248,0.88)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)' },
     topbar: {
         minHeight: 48,
@@ -77,12 +75,12 @@ export const S: Record<string, CSSProperties> = {
         backdropFilter: 'blur(12px) saturate(1.15)',
         WebkitBackdropFilter: 'blur(12px) saturate(1.15)',
         fontSize: 12,
-        fontWeight: 650,
+        fontWeight: 640,
         color: '#222',
         cursor: 'pointer',
         boxSizing: 'border-box',
     },
-    chipOn: { background: 'rgba(209,72,54,0.94)', color: '#fff', border: '1px solid rgba(209,72,54,0.94)' },
+    chipOn: { background: 'rgba(7,7,8,0.94)', color: '#fff', border: '1px solid rgba(7,7,8,0.94)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)' },
     card: {
         background: 'rgba(255,255,255,0.72)',
         border: '1px solid rgba(0,0,0,0.09)',
@@ -104,7 +102,7 @@ export const S: Record<string, CSSProperties> = {
         background: 'rgba(5,5,5,0.94)',
         color: '#fff',
         fontSize: 12.5,
-        fontWeight: 800,
+        fontWeight: 720,
         cursor: 'pointer',
         boxSizing: 'border-box',
         whiteSpace: 'nowrap',
@@ -122,7 +120,7 @@ export const S: Record<string, CSSProperties> = {
         backdropFilter: 'blur(10px) saturate(1.12)',
         WebkitBackdropFilter: 'blur(10px) saturate(1.12)',
         fontSize: 12,
-        fontWeight: 650,
+        fontWeight: 640,
         color: '#222',
         cursor: 'pointer',
         boxSizing: 'border-box',
@@ -146,7 +144,7 @@ export const S: Record<string, CSSProperties> = {
         borderRadius: 8,
         padding: '0 10px',
         fontSize: 12.5,
-        fontWeight: 650,
+        fontWeight: 640,
         outline: 'none',
         background: 'rgba(255,255,255,0.07)',
         backdropFilter: 'blur(12px)',
@@ -154,7 +152,7 @@ export const S: Record<string, CSSProperties> = {
         color: '#f4f4f5',
         boxSizing: 'border-box',
     },
-    err: { background: '#fff1f0', border: `1px solid ${ACCENT}`, color: '#a93225', borderRadius: 8, padding: '10px 14px', fontSize: 12 },
+    err: { background: 'rgba(255,255,255,0.82)', border: '1px solid #d4d4d8', color: '#18181b', borderRadius: 8, padding: '10px 14px', fontSize: 12 },
 };
 
 export const chip = (on: boolean): CSSProperties => ({ ...S.chip, ...(on ? S.chipOn : {}) });

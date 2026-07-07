@@ -71,7 +71,7 @@ export default function App() {
                 button:not(:disabled):hover { opacity: .86; }
                 button:not(:disabled):active { transform: scale(.96); }
                 button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible {
-                    outline: 2px solid rgba(209, 72, 54, 0.72);
+                    outline: 2px solid rgba(24, 24, 27, 0.62);
                     outline-offset: 2px;
                 }
                 button:disabled { cursor: progress; }

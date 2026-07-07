@@ -126,8 +126,8 @@ export default function HeroView() {
                     style={{
                         position: 'sticky', top: 8, zIndex: 10, fontSize: 12.5, fontWeight: 600,
                         padding: '8px 14px', borderRadius: 10,
-                        background: busy ? '#fef3c7' : notice.startsWith('Error') ? '#fef2f2' : '#ecfdf5',
-                        color: busy ? '#92400e' : notice.startsWith('Error') ? '#b91c1c' : '#047857',
+                        background: busy ? '#f4f4f5' : notice.startsWith('Error') ? '#f4f4f5' : '#f7f7f8',
+                        color: '#18181b',
                         border: '1px solid rgba(0,0,0,0.06)',
                     }}>
                     {busy ? `${busy}` : notice}
@@ -164,7 +164,7 @@ export default function HeroView() {
                         <div style={{ display: 'flex', gap: 6, marginTop: 'auto' }}>
                             <button style={S.btnGhost} disabled={!!busy} onClick={() => { setAddTarget(a); addRef.current?.click(); }}>＋ Photos</button>
                             <button style={S.btnGhost} disabled={!!busy} onClick={() => rename(a)}>Rename</button>
-                            <button style={{ ...S.btnGhost, color: '#b91c1c', marginLeft: 'auto' }} disabled={!!busy} onClick={() => remove(a)}>Delete</button>
+                            <button style={{ ...S.btnGhost, color: '#18181b', marginLeft: 'auto' }} disabled={!!busy} onClick={() => remove(a)}>Delete</button>
                         </div>
                     </div>
                     </DropZone>
