@@ -1,4 +1,4 @@
-import { Asset, Element, GenerationParams, GenerationResult } from '../domain/types';
+import { Asset, Element, GenerationParams, GenerationResult, KnowledgeRule } from '../domain/types';
 import { storage } from '../storage/local';
 import { getCurrentBrand, getCurrentBrandId } from '../domain/brand';
 import { getBrandSoul } from '../brain/soul';
@@ -322,4 +322,84 @@ Known defects:\n${first.issues.map(s => `- ${s}`).join('\n')}`,
         createdAt: Date.now(),
     });
     return result;
+}
+
+// ---------------------------------------------------------------------------
+// Distill approach — extract the creative strategy from a completed
+// generation and persist it as knowledge rules so the brain learns.
+// ---------------------------------------------------------------------------
+
+export interface WeaveApproachContext {
+    /** Board description: what nodes were connected and their content. */
+    boardSummary: string;
+    /** The generation result (prompt, image, params). */
+    result: GenerationResult;
+}
+
+/**
+ * Analyze a completed Weave generation, extract the creative approach,
+ * and save actionable rules into the knowledge base for future use.
+ */
+export async function distillWeaveApproach(ctx: WeaveApproachContext): Promise<{ rules: KnowledgeRule[]; summary: string }> {
+    const brand = await getCurrentBrand().catch(() => null);
+    const existingRules = await storage.listRules();
+
+    const prompt = `You are a brand art director extracting REUSABLE creative rules from a successful image generation session.
+
+BRAND: "${brand?.name ?? 'the brand'}" — ${brand?.description ?? 'a product brand'}
+
+### BOARD COMPOSITION (what the user assembled) ###
+${ctx.boardSummary}
+
+### FULL GENERATION PROMPT (what was sent to the model) ###
+${ctx.result.fullPrompt.slice(0, 3000)}
+
+### EXISTING RULES (do not duplicate) ###
+${existingRules.slice(0, 30).map(r => `- [${r.polarity}] ${r.rule}`).join('\n') || '(none)'}
+
+### TASK ###
+Analyze the attached generated image together with the board composition and prompt. Extract 2-5 ACTIONABLE creative rules that capture the approach's key insights — what made this image work. Rules must be:
+1. Concrete and promptable (usable inside a future image prompt)
+2. Generalizable beyond this specific scene (not tied to one product)
+3. Non-redundant with existing rules
+4. Scoped appropriately (scene / silo / general)
+
+Also provide a one-line summary of the overall creative approach.
+
+Output JSON: {
+  "summary": "one line describing the overall creative approach",
+  "rules": [
+    { "rule": "imperative directive", "polarity": "must", "scope": { "outputType"?: "scene"|"silo" }, "rationale": "why this matters" }
+  ]
+}`;
+
+    const parsed = await generateJson<{
+        summary: string;
+        rules: Array<{ rule: string; polarity: 'must' | 'avoid'; scope?: { outputType?: string }; rationale?: string }>;
+    }>(prompt, [ctx.result.image.value]);
+
+    const summary = String(parsed?.summary ?? 'Approach distilled.').trim();
+    const now = Date.now();
+    const brandId = getCurrentBrandId();
+    const savedRules: KnowledgeRule[] = [];
+
+    for (const r of (parsed?.rules ?? []).slice(0, 5)) {
+        if (!r.rule?.trim()) continue;
+        const rule: KnowledgeRule = {
+            id: crypto.randomUUID(),
+            brandId,
+            scope: { outputType: r.scope?.outputType as any },
+            rule: r.rule.trim(),
+            polarity: r.polarity === 'avoid' ? 'avoid' : 'must',
+            confidence: 1,
+            sources: [ctx.result.id],
+            enabled: true,
+            createdAt: now,
+            updatedAt: now,
+        };
+        await storage.upsertRule(rule);
+        savedRules.push(rule);
+    }
+
+    return { rules: savedRules, summary };
 }

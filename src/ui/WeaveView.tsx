@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Asset, Element, GenerationParams, GenerationResult } from '../domain/types';
 import { storage } from '../storage/local';
 import { brandKey } from '../domain/brand';
-import { weaveGenerate, extractFacets, deriveIdea, describeAsPrompt, analyzeImage, rotateView, WeaveFacet } from '../engine/weave';
+import { weaveGenerate, extractFacets, deriveIdea, describeAsPrompt, analyzeImage, rotateView, distillWeaveApproach, WeaveFacet } from '../engine/weave';
 import { recordSignal } from '../learning/learning';
 import { BudgetExceededError } from '../engine/engine';
 import { openLightbox } from './lightbox';
@@ -554,6 +554,45 @@ export default function WeaveView() {
         if (r) recordSignal(r, 'export');
     };
 
+    /** Distill the creative approach of a generated output into knowledge rules. */
+    const distillApproach = async (nn: WeaveNode) => {
+        const r = nn.resultId ? resultsRef.current.get(nn.resultId) : undefined;
+        if (!r) { setNotice('Result metadata not in this session.'); return; }
+
+        // Build a summary of what was on the board for this output.
+        const comp = componentOf(nn.id);
+        const pool = nodes.filter(n => comp.has(n.id) && n.id !== nn.id);
+        const lines: string[] = [];
+        for (const n of pool) {
+            if (n.kind === 'product') {
+                const pa = assets.find(x => x.id === n.assetId);
+                lines.push(`Product: "${pa?.name ?? 'unknown'}" (qty ${n.quantity ?? 1})`);
+            } else if (n.kind === 'element') {
+                const el = elements.find(x => x.id === n.elementId);
+                lines.push(`Concept element: ${el?.concept ?? 'unknown'} — ${el?.description?.slice(0, 80) ?? ''}`);
+            } else if (n.kind === 'image') {
+                lines.push(`Image (${n.role ?? 'fusion'})${n.description ? ': ' + n.description.slice(0, 80) : ''}`);
+            } else if (n.kind === 'facet') {
+                lines.push(`Facet: ${n.dimension} — ${n.description?.slice(0, 80) ?? ''}`);
+            } else if (n.kind === 'note' && n.text?.trim()) {
+                lines.push(`Art direction: "${n.text.trim().slice(0, 120)}"`);
+            } else if (n.kind === 'rotate') {
+                lines.push(`Viewpoint: ${n.angle ?? 90}° azimuth, ${n.pitch ?? 0}° pitch`);
+            }
+        }
+        const boardSummary = lines.join('\n') || '(minimal board — few nodes)';
+
+        setBusy('Distilling approach...');
+        setNotice('');
+        try {
+            const { rules, summary } = await distillWeaveApproach({ boardSummary, result: r });
+            setNotice(`${rules.length} rules distilled: ${summary}`);
+        } catch (err: any) {
+            setNotice(`${err?.message || err}`);
+        }
+        setBusy('');
+    };
+
     // --- workflow save / load / delete ---
     const saveConfig = async () => {
         const name = saveName.trim() || `Workflow ${configs.length + 1}`;
@@ -945,6 +984,9 @@ export default function WeaveView() {
                                                     <button style={miniBtn} disabled={!!busy} onClick={() => saveResult(nn)}>Gallery</button>
                                                     <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>View</button>
                                                     <button style={miniBtn} onClick={() => add({ kind: 'image', image: nn.image!, role: 'fusion' }, { x: nn.x + W(nn) + 30, y: nn.y })}>Material</button>
+                                                    <button style={{ ...miniBtn, background: '#18181b', color: '#fff' }} disabled={!!busy}
+                                                        onClick={() => distillApproach(nn)}
+                                                        title="Extract the creative approach into reusable knowledge rules">Distill</button>
                                                 </>}
                                             </>
                                         )}
