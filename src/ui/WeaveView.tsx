@@ -37,6 +37,7 @@ interface WeaveNode {
     angle?: number;        // rotate nodes: azimuth in degrees (free, 0-359)
     pitch?: number;        // rotate nodes: camera elevation −45..+45
     w?: number;            // custom width (drag the ◢ corner handle)
+    h?: number;            // custom height (drag the ◢ corner handle)
     quantity?: number;     // product nodes: how many instances (default 1)
 }
 
@@ -161,7 +162,7 @@ export default function WeaveView() {
     /** 3D orbit-drag on rotate nodes: horizontal = azimuth, vertical = pitch. */
     const orbit = useRef<{ id: string; sx: number; sy: number; a0: number; p0: number } | null>(null);
     /** Corner-handle resizing. */
-    const resizing = useRef<{ id: string; sx: number; w0: number } | null>(null);
+    const resizing = useRef<{ id: string; sx: number; sy: number; w0: number; h0: number } | null>(null);
     const boardRef = useRef<HTMLDivElement>(null);
     const [pan, setPan] = useState({ x: 40, y: 40 });
     const [scale, setScale] = useState(1);
@@ -262,7 +263,8 @@ export default function WeaveView() {
         const rs = resizing.current;
         if (rs) {
             const w = Math.max(90, Math.min(520, Math.round(rs.w0 + (e.clientX - rs.sx) / scale)));
-            setNodes(prev => prev.map(nn => nn.id === rs.id ? { ...nn, w } : nn));
+            const h = Math.max(60, Math.min(600, Math.round(rs.h0 + (e.clientY - rs.sy) / scale)));
+            setNodes(prev => prev.map(nn => nn.id === rs.id ? { ...nn, w, h } : nn));
             return;
         }
         const o = orbit.current;
@@ -308,6 +310,7 @@ export default function WeaveView() {
     }, []);
 
     const W = (nn: WeaveNode) => nn.w ?? (nn.kind === 'note' ? 200 : nn.kind === 'output' ? (nn.image ? 200 : 110) : 130);
+    const H = (nn: WeaveNode) => nn.h;
     const anchorY = (nn: WeaveNode) => nn.y + 46;
     const bezier = (x1: number, y1: number, x2: number, y2: number) => {
         const dx = Math.max(40, Math.abs(x2 - x1) / 2);
@@ -788,6 +791,7 @@ export default function WeaveView() {
                                 onPointerUp={e => { if (linking) { e.stopPropagation(); completeLink(nn.id); } }}
                                 style={{
                                     position: 'absolute', left: nn.x, top: nn.y, width: W(nn),
+                                    ...(H(nn) ? { height: H(nn) } : {}),
                                     background: nn.kind === 'output' ? '#18181b' : '#fff',
                                     borderRadius: 12,
                                     border: linking?.from === nn.id ? '2px solid #d97706'
@@ -800,7 +804,7 @@ export default function WeaveView() {
                                 <div
                                     onPointerDown={e => {
                                         e.stopPropagation();
-                                        resizing.current = { id: nn.id, sx: e.clientX, w0: W(nn) };
+                                        resizing.current = { id: nn.id, sx: e.clientX, sy: e.clientY, w0: W(nn), h0: H(nn) ?? e.currentTarget.parentElement!.offsetHeight };
                                     }}
                                     title="Drag to resize"
                                     style={{
@@ -910,7 +914,7 @@ export default function WeaveView() {
                                         onChange={e => setNodes(prev => prev.map(x => x.id === nn.id ? { ...x, text: e.target.value } : x))}
                                         onPointerDown={e => e.stopPropagation()}
                                         onClick={() => setExpandedId(nn.id)}
-                                        style={{ width: '100%', minHeight: 64, border: 'none', outline: 'none', resize: 'vertical', fontSize: 11, fontFamily: 'inherit', background: '#fffbeb', borderRadius: 8, padding: 6, boxSizing: 'border-box' }}
+                                        style={{ width: '100%', minHeight: 64, height: H(nn) ? 'calc(100% - 4px)' : undefined, border: 'none', outline: 'none', resize: 'none', fontSize: 11, fontFamily: 'inherit', background: '#fffbeb', borderRadius: 8, padding: 6, boxSizing: 'border-box' }}
                                     />
                                 )}
                                 {nn.kind === 'output' && (
