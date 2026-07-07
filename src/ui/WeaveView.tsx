@@ -72,62 +72,88 @@ const fileToDataUrl = (f: File): Promise<string> =>
 
 let dropCount = 0;
 
-/** TRUE 3D trackball — a checkered globe rendered with real spherical
- *  projection: the lat/long patches rotate in 3D with az (0-359) and
- *  pitch (−60..+60), so every degree of rotation is visibly geometric. */
+/** 3D cube with colored faces — much easier to identify angle than a sphere.
+ *  Front=blue, Back=red, Left=green, Right=yellow, Top=white, Bottom=dark.
+ *  Orange dot marks the product-front (0° azimuth). */
 const Ball: React.FC<{ az: number; pi: number; size: number }> = ({ az, pi, size }) => {
     const rad = Math.PI / 180;
-    const r = size / 2 - 3;
-    const c = size / 2;
+    const cx = size / 2;
+    const cy = size / 2;
+    const s = size * 0.32; // half-edge length
     const azR = az * rad;
     const piR = pi * rad;
 
-    /** Project a (lat φ, long λ) sphere point → screen [x, y, depth z]. */
-    const proj = (latDeg: number, lonDeg: number): [number, number, number] => {
-        const φ = latDeg * rad;
-        const λ = lonDeg * rad + azR;
-        const x = Math.cos(φ) * Math.sin(λ);
-        const y = Math.sin(φ);
-        const z = Math.cos(φ) * Math.cos(λ);
-        // camera elevation: rotate around the x-axis
-        const y2 = y * Math.cos(piR) - z * Math.sin(piR);
-        const z2 = y * Math.sin(piR) + z * Math.cos(piR);
-        return [c + x * r, c - y2 * r, z2];
+    // 3D→2D projection: rotate by azimuth (Y-axis) then pitch (X-axis).
+    const project = (x: number, y: number, z: number): [number, number, number] => {
+        // Y-axis rotation (azimuth)
+        const x1 = x * Math.cos(azR) + z * Math.sin(azR);
+        const z1 = -x * Math.sin(azR) + z * Math.cos(azR);
+        const y1 = y;
+        // X-axis rotation (pitch)
+        const y2 = y1 * Math.cos(piR) - z1 * Math.sin(piR);
+        const z2 = y1 * Math.sin(piR) + z1 * Math.cos(piR);
+        return [cx + x1 * 0.9, cy - y2 * 0.9, z2];
     };
 
-    const STEP = 30;
-    const patches: React.ReactNode[] = [];
-    for (let lat = -90; lat < 90; lat += STEP) {
-        for (let lon = 0; lon < 360; lon += STEP) {
-            const corners = [proj(lat, lon), proj(lat, lon + STEP), proj(lat + STEP, lon + STEP), proj(lat + STEP, lon)];
-            const depth = corners.reduce((s, p) => s + p[2], 0) / 4;
-            if (depth <= 0.02) continue; // back-facing — hidden
-            const dark = ((lat / STEP + lon / STEP) % 2 + 2) % 2 === 0;
-            patches.push(
-                <polygon key={`${lat}-${lon}`}
-                    points={corners.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')}
-                    fill={dark ? '#8e8e97' : '#d6d6db'} stroke="#6f6f78" strokeWidth={0.4} />
-            );
-        }
-    }
-    // Subject-front marker (lat 0, long 0) — where the product's face points.
-    const [fx, fy, fz] = proj(0, 0);
+    // 8 cube vertices (centered at origin, half-edge = s)
+    const v: [number, number, number][] = [
+        [-s, -s,  s], [ s, -s,  s], [ s,  s,  s], [-s,  s,  s], // front face
+        [-s, -s, -s], [ s, -s, -s], [ s,  s, -s], [-s,  s, -s], // back face
+    ];
+    const pv = v.map(([x, y, z]) => project(x, y, z));
+
+    // 6 faces: [vertex indices, base color, label]
+    const faces: [number[], string, string][] = [
+        [[0, 1, 2, 3], '#4a90d9', 'F'],  // Front  — blue
+        [[5, 4, 7, 6], '#d94a4a', 'B'],  // Back   — red
+        [[4, 0, 3, 7], '#4aad6a', 'L'],  // Left   — green
+        [[1, 5, 6, 2], '#d9a84a', 'R'],  // Right  — yellow
+        [[3, 2, 6, 7], '#c8c8d0', 'T'],  // Top    — light
+        [[4, 5, 1, 0], '#5a5a64', 'Bt'], // Bottom — dark
+    ];
+
+    // Sort by average z-depth (painter's algorithm)
+    const sorted = faces
+        .map(([idx, color, label]) => {
+            const pts = idx.map(i => pv[i]);
+            const avgZ = pts.reduce((sum, p) => sum + p[2], 0) / 4;
+            return { idx, color, label, pts, avgZ };
+        })
+        .sort((a, b) => a.avgZ - b.avgZ);
+
+    // Darken faces based on depth for pseudo-lighting
+    const darken = (hex: string, factor: number): string => {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        const f = Math.max(0.3, Math.min(1, factor));
+        return `rgb(${Math.round(r * f)},${Math.round(g * f)},${Math.round(b * f)})`;
+    };
+
+    // Front-center marker (0,0,s) projected
+    const [fx, fy, fz] = project(0, 0, s * 1.05);
 
     return (
         <svg width={size} height={size} style={{ flexShrink: 0, display: 'block' }}>
-            <circle cx={c} cy={c} r={r} fill="#7c7c85" />
-            {patches}
-            {/* sphere shading */}
-            <defs>
-                <radialGradient id="ballshade" cx="0.32" cy="0.28" r="0.9">
-                    <stop offset="0%" stopColor="rgba(255,255,255,0.75)" />
-                    <stop offset="45%" stopColor="rgba(255,255,255,0.08)" />
-                    <stop offset="80%" stopColor="rgba(0,0,0,0.20)" />
-                    <stop offset="100%" stopColor="rgba(0,0,0,0.42)" />
-                </radialGradient>
-            </defs>
-            <circle cx={c} cy={c} r={r} fill="url(#ballshade)" />
-            {fz > 0 && <circle cx={fx} cy={fy} r={4.5} fill="#d97706" stroke="#fff" strokeWidth={1.5} />}
+            {sorted.map(({ idx, color, label, pts, avgZ }) => {
+                const brightness = 0.55 + 0.45 * ((avgZ / s + 1) / 2);
+                const points = pts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+                // Face center for label
+                const lcx = pts.reduce((a, p) => a + p[0], 0) / 4;
+                const lcy = pts.reduce((a, p) => a + p[1], 0) / 4;
+                return (
+                    <g key={label}>
+                        <polygon points={points}
+                            fill={darken(color, brightness)} stroke="#3f3f46" strokeWidth={0.7}
+                            strokeLinejoin="round" />
+                        {size >= 60 && <text x={lcx} y={lcy + 3.5} textAnchor="middle"
+                            fontSize={9} fontWeight={800} fill="rgba(255,255,255,0.7)"
+                            style={{ pointerEvents: 'none' }}>{label}</text>}
+                    </g>
+                );
+            })}
+            {fz > 0 && <circle cx={fx} cy={fy} r={size >= 60 ? 4.5 : 3}
+                fill="#d97706" stroke="#fff" strokeWidth={1.2} />}
         </svg>
     );
 };
