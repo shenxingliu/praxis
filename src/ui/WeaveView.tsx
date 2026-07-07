@@ -160,16 +160,29 @@ export default function WeaveView() {
         if (p) setPan({ x: p.px + (e.clientX - p.sx), y: p.py + (e.clientY - p.sy) });
     };
     const onUp = () => { drag.current = null; panning.current = null; setLinking(null); };
-    const onWheel = (e: React.WheelEvent) => {
-        e.preventDefault();
-        const rect = boardRef.current?.getBoundingClientRect();
-        if (!rect) return;
-        const next = Math.max(0.35, Math.min(2.2, scale * (e.deltaY > 0 ? 0.92 : 1.08)));
-        const cx = e.clientX - rect.left;
-        const cy = e.clientY - rect.top;
-        setPan({ x: cx - ((cx - pan.x) / scale) * next, y: cy - ((cy - pan.y) / scale) * next });
-        setScale(next);
-    };
+
+    // Zoom must use a NON-PASSIVE native wheel listener — React's synthetic
+    // wheel is passive, so preventDefault() is ignored and the browser zooms
+    // the whole page instead of the canvas.
+    const viewRef = useRef({ pan, scale });
+    useEffect(() => { viewRef.current = { pan, scale }; }, [pan, scale]);
+    useEffect(() => {
+        const el = boardRef.current;
+        if (!el) return;
+        const handler = (e: WheelEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const rect = el.getBoundingClientRect();
+            const { pan: p, scale: s } = viewRef.current;
+            const next = Math.max(0.35, Math.min(2.2, s * (e.deltaY > 0 ? 0.92 : 1.08)));
+            const cx = e.clientX - rect.left;
+            const cy = e.clientY - rect.top;
+            setPan({ x: cx - ((cx - p.x) / s) * next, y: cy - ((cy - p.y) / s) * next });
+            setScale(next);
+        };
+        el.addEventListener('wheel', handler, { passive: false });
+        return () => el.removeEventListener('wheel', handler);
+    }, []);
 
     const W = (nn: WeaveNode) => nn.kind === 'note' ? 200 : nn.kind === 'output' ? (nn.image ? 200 : 110) : 130;
     const anchorY = (nn: WeaveNode) => nn.y + 46;
@@ -399,7 +412,7 @@ export default function WeaveView() {
 
             {/* Infinite canvas — fills the whole remaining viewport */}
             <DropZone onFiles={addImages} hint="Drop images — fusion sources" style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-                <div ref={boardRef} onPointerDown={onBoardDown} onPointerMove={onMove} onPointerUp={onUp} onWheel={onWheel}
+                <div ref={boardRef} onPointerDown={onBoardDown} onPointerMove={onMove} onPointerUp={onUp}
                     style={{
                         position: 'relative', flex: 1, minHeight: 0, borderRadius: 16,
                         background: 'repeating-linear-gradient(0deg, #fafafa, #fafafa 23px, #f0f0f1 24px), repeating-linear-gradient(90deg, #fafafa, #fafafa 23px, #f0f0f1 24px)',
@@ -421,14 +434,20 @@ export default function WeaveView() {
                             if (!a || !b) return null;
                             const [l, r2] = a.x <= b.x ? [a, b] : [b, a];
                             const d = bezier(l.x + W(l), anchorY(l), r2.x, anchorY(r2));
+                            const mx = (l.x + W(l) + r2.x) / 2;
+                            const my = (anchorY(l) + anchorY(r2)) / 2;
                             return (
                                 <g key={e.id}>
-                                    <path d={d} stroke="transparent" strokeWidth={14} fill="none"
-                                        style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
-                                        onClick={() => setEdges(prev => prev.filter(x => x.id !== e.id))} />
                                     <path d={d} stroke="#a1a1aa" strokeWidth={1.6} fill="none" />
                                     <circle cx={l.x + W(l)} cy={anchorY(l)} r={4} fill="#fff" stroke="#a1a1aa" strokeWidth={1.5} />
                                     <circle cx={r2.x} cy={anchorY(r2)} r={4} fill="#fff" stroke="#a1a1aa" strokeWidth={1.5} />
+                                    {/* Midpoint ✕ — always-visible disconnect handle */}
+                                    <g style={{ pointerEvents: 'all', cursor: 'pointer' }}
+                                        onPointerDown={ev => ev.stopPropagation()}
+                                        onClick={ev => { ev.stopPropagation(); setEdges(prev => prev.filter(x => x.id !== e.id)); }}>
+                                        <circle cx={mx} cy={my} r={9} fill="#fff" stroke="#a1a1aa" strokeWidth={1.3} />
+                                        <text x={mx} y={my + 3.5} textAnchor="middle" fontSize={10} fontWeight={700} fill="#71717a">✕</text>
+                                    </g>
                                 </g>
                             );
                         })}
