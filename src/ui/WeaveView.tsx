@@ -53,39 +53,63 @@ const fileToDataUrl = (f: File): Promise<string> =>
 
 let dropCount = 0;
 
-/** 3D trackball — the striped grid SCROLLS with rotation so every degree
- *  of movement is visible. Drag freely: az 0-359, pitch −60..+60. */
+/** TRUE 3D trackball — a checkered globe rendered with real spherical
+ *  projection: the lat/long patches rotate in 3D with az (0-359) and
+ *  pitch (−60..+60), so every degree of rotation is visibly geometric. */
 const Ball: React.FC<{ az: number; pi: number; size: number }> = ({ az, pi, size }) => {
     const rad = Math.PI / 180;
-    const r = size / 2 - 5;
-    const mx = r * Math.sin(az * rad) * Math.cos(pi * rad);
-    const my = -r * Math.sin(pi * rad);
-    const front = Math.cos(az * rad) >= 0;
-    const stripe = Math.max(6, size / 9);
+    const r = size / 2 - 3;
+    const c = size / 2;
+    const azR = az * rad;
+    const piR = pi * rad;
+
+    /** Project a (lat φ, long λ) sphere point → screen [x, y, depth z]. */
+    const proj = (latDeg: number, lonDeg: number): [number, number, number] => {
+        const φ = latDeg * rad;
+        const λ = lonDeg * rad + azR;
+        const x = Math.cos(φ) * Math.sin(λ);
+        const y = Math.sin(φ);
+        const z = Math.cos(φ) * Math.cos(λ);
+        // camera elevation: rotate around the x-axis
+        const y2 = y * Math.cos(piR) - z * Math.sin(piR);
+        const z2 = y * Math.sin(piR) + z * Math.cos(piR);
+        return [c + x * r, c - y2 * r, z2];
+    };
+
+    const STEP = 30;
+    const patches: React.ReactNode[] = [];
+    for (let lat = -90; lat < 90; lat += STEP) {
+        for (let lon = 0; lon < 360; lon += STEP) {
+            const corners = [proj(lat, lon), proj(lat, lon + STEP), proj(lat + STEP, lon + STEP), proj(lat + STEP, lon)];
+            const depth = corners.reduce((s, p) => s + p[2], 0) / 4;
+            if (depth <= 0.02) continue; // back-facing — hidden
+            const dark = ((lat / STEP + lon / STEP) % 2 + 2) % 2 === 0;
+            patches.push(
+                <polygon key={`${lat}-${lon}`}
+                    points={corners.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')}
+                    fill={dark ? '#8e8e97' : '#d6d6db'} stroke="#6f6f78" strokeWidth={0.4} />
+            );
+        }
+    }
+    // Subject-front marker (lat 0, long 0) — where the product's face points.
+    const [fx, fy, fz] = proj(0, 0);
+
     return (
-        <div style={{ width: size, height: size, borderRadius: '50%', position: 'relative', flexShrink: 0, overflow: 'hidden', boxShadow: 'inset -4px -6px 12px rgba(0,0,0,0.30), 0 2px 6px rgba(0,0,0,0.25)' }}>
-            {/* rotating longitude stripes — scroll horizontally with azimuth */}
-            <div style={{
-                position: 'absolute', inset: 0, borderRadius: '50%',
-                background: `repeating-linear-gradient(90deg, #c7c7cd 0 ${stripe}px, #97979f ${stripe}px ${stripe * 2}px)`,
-                backgroundPositionX: `${-az * (size / 90)}px`,
-            }} />
-            {/* latitude lines — shift vertically with pitch */}
-            <div style={{
-                position: 'absolute', inset: 0, borderRadius: '50%',
-                background: `repeating-linear-gradient(0deg, transparent 0 ${stripe * 1.4 - 1}px, rgba(0,0,0,0.22) ${stripe * 1.4 - 1}px ${stripe * 1.4}px)`,
-                backgroundPositionY: `${pi * (size / 130)}px`,
-            }} />
-            {/* sphere shading on top */}
-            <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'radial-gradient(circle at 32% 28%, rgba(255,255,255,0.85), rgba(255,255,255,0.12) 42%, rgba(0,0,0,0.18) 78%, rgba(0,0,0,0.38))' }} />
-            {/* camera marker */}
-            <div style={{
-                position: 'absolute', width: 9, height: 9, borderRadius: '50%',
-                left: size / 2 + mx - 4.5, top: size / 2 + my - 4.5,
-                background: front ? '#d97706' : 'rgba(217,119,6,0.35)',
-                border: '1.5px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
-            }} />
-        </div>
+        <svg width={size} height={size} style={{ flexShrink: 0, display: 'block' }}>
+            <circle cx={c} cy={c} r={r} fill="#7c7c85" />
+            {patches}
+            {/* sphere shading */}
+            <defs>
+                <radialGradient id="ballshade" cx="0.32" cy="0.28" r="0.9">
+                    <stop offset="0%" stopColor="rgba(255,255,255,0.75)" />
+                    <stop offset="45%" stopColor="rgba(255,255,255,0.08)" />
+                    <stop offset="80%" stopColor="rgba(0,0,0,0.20)" />
+                    <stop offset="100%" stopColor="rgba(0,0,0,0.42)" />
+                </radialGradient>
+            </defs>
+            <circle cx={c} cy={c} r={r} fill="url(#ballshade)" />
+            {fz > 0 && <circle cx={fx} cy={fy} r={4.5} fill="#d97706" stroke="#fff" strokeWidth={1.5} />}
+        </svg>
     );
 };
 
