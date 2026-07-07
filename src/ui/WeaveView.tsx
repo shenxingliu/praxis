@@ -318,7 +318,7 @@ export default function WeaveView() {
     };
 
     return (
-        <div style={{ maxWidth: 1160, margin: '0 auto', padding: '18px 28px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 14px', boxSizing: 'border-box' }}>
             {(busy || notice) && (
                 <div className={busy ? 'praxis-running' : undefined}
                     style={{
@@ -397,11 +397,11 @@ export default function WeaveView() {
                 </div>
             )}
 
-            {/* Infinite canvas */}
-            <DropZone onFiles={addImages} hint="Drop images — fusion sources">
+            {/* Infinite canvas — fills the whole remaining viewport */}
+            <DropZone onFiles={addImages} hint="Drop images — fusion sources" style={{ flex: 1, minHeight: 0, display: 'flex' }}>
                 <div ref={boardRef} onPointerDown={onBoardDown} onPointerMove={onMove} onPointerUp={onUp} onWheel={onWheel}
                     style={{
-                        position: 'relative', height: 580, borderRadius: 16,
+                        position: 'relative', flex: 1, minHeight: 0, borderRadius: 16,
                         background: 'repeating-linear-gradient(0deg, #fafafa, #fafafa 23px, #f0f0f1 24px), repeating-linear-gradient(90deg, #fafafa, #fafafa 23px, #f0f0f1 24px)',
                         border: '1px solid #e4e4e7', overflow: 'hidden', touchAction: 'none', cursor: 'grab',
                     }}>
