@@ -65,6 +65,30 @@ export async function describeAsPrompt(image: string): Promise<string> {
 }
 
 /**
+ * Directed analysis — analyze an image per a specific user instruction,
+ * then produce a concrete, promptable generation prompt capturing what
+ * the analysis reveals. Unlike describeAsPrompt (generic), this follows
+ * an arbitrary user question: "analyze the background materials", "what
+ * lighting setup is used", "describe the color palette", etc.
+ */
+export async function analyzeImage(image: string, instruction: string): Promise<string> {
+    const parsed = await generateJson<{ prompt: string }>(
+        `You are an expert visual analyst and art director. Analyze the attached image according to this SPECIFIC instruction:
+
+"${instruction}"
+
+Based on your analysis, write a DETAILED, actionable image-generation prompt that captures EXACTLY what the analysis reveals. The prompt must be directly usable to recreate or incorporate the analyzed aspects into a new AI-generated image.
+
+Be concrete and specific: name exact materials (e.g. "quarter-sawn white oak with honey-toned oil finish"), colors with approximate hex codes, textures, lighting direction and quality, spatial geometry, proportions, and any other visually relevant properties the instruction asks about.
+
+Output 3-6 dense, promptable sentences — no preamble, no bullet points, no labels.
+Output JSON: { "prompt": string }`,
+        [image]
+    );
+    return String(parsed?.prompt ?? '').trim();
+}
+
+/**
  * Turntable rotation — render the SAME subject (product, object or person)
  * from a new viewpoint, using one or more reference angles. Geometry,
  * materials, colors and identity are preserved exactly; neutral backdrop.

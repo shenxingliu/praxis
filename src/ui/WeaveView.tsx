@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Asset, Element, GenerationParams, GenerationResult } from '../domain/types';
 import { storage } from '../storage/local';
 import { brandKey } from '../domain/brand';
-import { weaveGenerate, extractFacets, deriveIdea, describeAsPrompt, rotateView, WeaveFacet } from '../engine/weave';
+import { weaveGenerate, extractFacets, deriveIdea, describeAsPrompt, analyzeImage, rotateView, WeaveFacet } from '../engine/weave';
 import { recordSignal } from '../learning/learning';
 import { BudgetExceededError } from '../engine/engine';
 import { openLightbox } from './lightbox';
@@ -352,6 +352,33 @@ export default function WeaveView() {
             const text = await describeAsPrompt(node.image);
             add({ kind: 'note', text }, { x: node.x + 145, y: node.y });
             setNotice('✓ Prompt derived — edit it freely.');
+        } catch (err: any) { setNotice(`❌ ${err?.message || err}`); }
+        setBusy('');
+    };
+
+    // --- directed analysis: note + connected image → prompt ---
+    const analyzeConnected = async (noteNode: WeaveNode) => {
+        if (!noteNode.text?.trim()) { setNotice('❌ Write your analysis instruction in the note first.'); return; }
+        const neighborIds = edges
+            .filter(e => e.from === noteNode.id || e.to === noteNode.id)
+            .map(e => (e.from === noteNode.id ? e.to : e.from));
+        let img: string | undefined;
+        for (const id of neighborIds) {
+            const n = nodes.find(x => x.id === id);
+            if (!n) continue;
+            if ((n.kind === 'image' || n.kind === 'output' || n.kind === 'rotate') && n.image) { img = n.image; break; }
+            if (n.kind === 'product' && n.assetId) {
+                const a = assets.find(x => x.id === n.assetId);
+                if (a?.photos[0]) { img = a.photos[0].image.value; break; }
+            }
+        }
+        if (!img) { setNotice('❌ Connect this note to an image or product node first.'); return; }
+        setBusy('Analyzing image…');
+        setNotice('');
+        try {
+            const prompt = await analyzeImage(img, noteNode.text.trim());
+            add({ kind: 'note', text: prompt }, { x: noteNode.x, y: noteNode.y + 160 });
+            setNotice('✓ Analysis → prompt generated.');
         } catch (err: any) { setNotice(`❌ ${err?.message || err}`); }
         setBusy('');
     };
@@ -960,6 +987,13 @@ export default function WeaveView() {
                                         )}
                                         {nn.kind === 'element' && el && (
                                             <span style={{ fontSize: 9, color: '#71717a', flexBasis: '100%' }}>{el.description}</span>
+                                        )}
+                                        {nn.kind === 'note' && nn.text?.trim() && (
+                                            <button style={{ ...miniBtn, background: '#18181b', color: '#fff' }} disabled={!!busy}
+                                                onClick={() => analyzeConnected(nn)}
+                                                title="Analyze connected image per this instruction → generate a prompt">
+                                                🔍 Analyze → Prompt
+                                            </button>
                                         )}
                                         <button style={{ ...miniBtn, color: '#b91c1c' }} onClick={() => remove(nn.id)}>✕ delete</button>
                                     </div>
