@@ -58,6 +58,87 @@ export const toInlinePart = (dataUrl: string): ImagePart => {
     return { inlineData: { mimeType, data } };
 };
 
+const imageResizeCache = new Map<string, string>();
+
+const dataChars = (dataUrl: string): number => dataUrl.split(',')[1]?.length ?? dataUrl.length;
+
+const canResizeInBrowser = (): boolean =>
+    typeof document !== 'undefined' && typeof Image !== 'undefined';
+
+const loadDataUrlImage = (src: string): Promise<HTMLImageElement> =>
+    new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Could not read reference image.'));
+        img.src = src;
+    });
+
+async function shrinkDataUrl(dataUrl: string, opts: {
+    maxEdge: number;
+    quality: number;
+    maxDataChars: number;
+}): Promise<string> {
+    if (!dataUrl.startsWith('data:image/') || !canResizeInBrowser()) return dataUrl;
+
+    const cacheKey = `${dataUrl.length}:${opts.maxEdge}:${opts.quality}:${opts.maxDataChars}`;
+    const cached = imageResizeCache.get(cacheKey);
+    if (cached) return cached;
+
+    try {
+        const img = await loadDataUrlImage(dataUrl);
+        let edge = opts.maxEdge;
+        let quality = opts.quality;
+        let best = dataUrl;
+
+        for (let attempt = 0; attempt < 6; attempt++) {
+            const scale = Math.min(1, edge / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height));
+            const width = Math.max(1, Math.round((img.naturalWidth || img.width) * scale));
+            const height = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) break;
+            ctx.drawImage(img, 0, 0, width, height);
+            best = canvas.toDataURL('image/jpeg', quality);
+            if (dataChars(best) <= opts.maxDataChars || edge <= 520) break;
+            edge = Math.round(edge * 0.78);
+            quality = Math.max(0.52, quality - 0.08);
+        }
+
+        const out = dataChars(best) < dataChars(dataUrl) ? best : dataUrl;
+        if (imageResizeCache.size > 80) imageResizeCache.clear();
+        imageResizeCache.set(cacheKey, out);
+        return out;
+    } catch {
+        return dataUrl;
+    }
+}
+
+async function prepareInlineParts(images: string[], mode: 'image' | 'json'): Promise<ImagePart[]> {
+    const maxImages = mode === 'image' ? 14 : 8;
+    const totalBudget = isProxyMode()
+        ? mode === 'image' ? 2_800_000 : 1_900_000
+        : mode === 'image' ? 7_000_000 : 3_500_000;
+    const perImageBudget = mode === 'image' ? 520_000 : 380_000;
+    const maxEdge = mode === 'image' ? 1280 : 960;
+    const quality = mode === 'image' ? 0.74 : 0.7;
+    const parts: ImagePart[] = [];
+    let used = 0;
+
+    for (const img of images.slice(0, maxImages)) {
+        const resized = await shrinkDataUrl(img, { maxEdge, quality, maxDataChars: perImageBudget });
+        const part = toInlinePart(resized);
+        const size = part.inlineData.data.length;
+        if (parts.length > 0 && used + size > totalBudget) continue;
+        parts.push(part);
+        used += size;
+        if (used >= totalBudget) break;
+    }
+
+    return parts;
+}
+
 /**
  * REST call to Gemini generateContent.
  *
@@ -100,7 +181,12 @@ async function restGenerate(model: string, body: unknown): Promise<any> {
         clearTimeout(timer);
     }
     const text = await resp.text();
-    if (!resp.ok) throw new Error(`Gemini ${resp.status}: ${text.slice(0, 300)}`);
+    if (!resp.ok) {
+        const hint = resp.status === 413
+            ? ' Payload too large after compression; try fewer/lower-resolution reference images.'
+            : '';
+        throw new Error(`Gemini ${resp.status}: ${text.slice(0, 300)}${hint}`);
+    }
     return JSON.parse(text);
 }
 
@@ -116,8 +202,9 @@ export async function generateImage(opts: {
     /** '1K' | '2K' | '4K' — silently dropped if the model rejects it. */
     imageSize?: string;
 }): Promise<{ image: string; model: string }> {
+    const imageParts = await prepareInlineParts(opts.referenceImages, 'image');
     const parts: Array<ImagePart | { text: string }> = [
-        ...opts.referenceImages.slice(0, 14).map(toInlinePart),
+        ...imageParts,
         { text: opts.prompt },
     ];
     const makeBody = (withSize: boolean) => ({
@@ -165,8 +252,9 @@ export async function generateImage(opts: {
 /** Text generation (JSON mode). Optional image data-URLs enable vision
  *  tasks — decomposition, review scoring, visual archaeology. */
 export async function generateJson<T>(prompt: string, images: string[] = []): Promise<T> {
+    const imageParts = await prepareInlineParts(images, 'json');
     const data = await restGenerate(MODELS.text, {
-        contents: [{ parts: [...images.slice(0, 8).map(toInlinePart), { text: prompt }] }],
+        contents: [{ parts: [...imageParts, { text: prompt }] }],
         generationConfig: { responseMimeType: 'application/json' },
     });
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? 'null';
