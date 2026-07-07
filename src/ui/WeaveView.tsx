@@ -54,7 +54,8 @@ export default function WeaveView() {
     const [elements, setElements] = useState<Element[]>([]);
     const [nodes, setNodes] = useState<WeaveNode[]>([]);
     const [edges, setEdges] = useState<WeaveEdge[]>([]);
-    const [linkFrom, setLinkFrom] = useState<string | null>(null);
+    /** Port-drag linking: from node id + live cursor position on the board. */
+    const [linking, setLinking] = useState<{ from: string; x: number; y: number } | null>(null);
     const [picker, setPicker] = useState<'product' | 'element' | null>(null);
     const [ratio, setRatio] = useState<GenerationParams['ratio']>('4:3');
     const [size, setSize] = useState<NonNullable<GenerationParams['size']>>('1K');
@@ -77,21 +78,18 @@ export default function WeaveView() {
     const remove = (id: string) => {
         setNodes(prev => prev.filter(nn => nn.id !== id));
         setEdges(prev => prev.filter(e => e.from !== id && e.to !== id));
-        if (linkFrom === id) setLinkFrom(null);
+        if (linking?.from === id) setLinking(null);
     };
 
-    /** Click ⚭ on node A, then ⚭ on node B → edge (click again to unlink). */
-    const link = (id: string) => {
-        if (!linkFrom) { setLinkFrom(id); return; }
-        if (linkFrom === id) { setLinkFrom(null); return; }
+    /** Complete a port-drag on a target node → create edge (or remove dup). */
+    const completeLink = (targetId: string) => {
+        const l = linking;
+        setLinking(null);
+        if (!l || l.from === targetId) return;
         const exists = edges.find(e =>
-            (e.from === linkFrom && e.to === id) || (e.from === id && e.to === linkFrom));
-        if (exists) {
-            setEdges(prev => prev.filter(e => e.id !== exists.id));
-        } else {
-            setEdges(prev => [...prev, { id: crypto.randomUUID(), from: linkFrom, to: id }]);
-        }
-        setLinkFrom(null);
+            (e.from === l.from && e.to === targetId) || (e.from === targetId && e.to === l.from));
+        if (exists) setEdges(prev => prev.filter(e => e.id !== exists.id));
+        else setEdges(prev => [...prev, { id: crypto.randomUUID(), from: l.from, to: targetId }]);
     };
 
     /** Undirected connected component containing `startId`. */
@@ -171,14 +169,27 @@ export default function WeaveView() {
         (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     };
     const onMove = (e: React.PointerEvent) => {
-        const d = drag.current;
         const rect = boardRef.current?.getBoundingClientRect();
-        if (!d || !rect) return;
+        if (!rect) return;
+        if (linking) {
+            setLinking({ ...linking, x: e.clientX - rect.left, y: e.clientY - rect.top });
+            return;
+        }
+        const d = drag.current;
+        if (!d) return;
         const x = Math.max(0, Math.min(rect.width - 130, e.clientX - rect.left - d.dx));
         const y = Math.max(0, Math.min(rect.height - 110, e.clientY - rect.top - d.dy));
         setNodes(prev => prev.map(nn => nn.id === d.id ? { ...nn, x, y } : nn));
     };
-    const onUp = () => { drag.current = null; };
+    const onUp = () => { drag.current = null; setLinking(null); };
+
+    // --- geometry for edges (Weave-style horizontal beziers) ---
+    const W = (nn: WeaveNode) => nn.kind === 'note' ? 200 : nn.kind === 'output' ? 110 : 130;
+    const anchorY = (nn: WeaveNode) => nn.y + 46;
+    const bezier = (x1: number, y1: number, x2: number, y2: number) => {
+        const dx = Math.max(40, Math.abs(x2 - x1) / 2);
+        return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+    };
 
     /** Weave a specific set of nodes (a connected group, or the whole board). */
     const weaveNodes = async (pool: WeaveNode[], tier: 'flash' | 'pro') => {
@@ -257,7 +268,7 @@ export default function WeaveView() {
                 <button style={S.btn} onClick={() => setPicker(picker === 'product' ? null : 'product')}>🛋 + Product</button>
                 <button style={S.btn} onClick={() => setPicker(picker === 'element' ? null : 'element')}>💡 + Concept</button>
                 <button style={S.btnGhost} onClick={() => fileRef.current?.click()}>🖼 + Images</button>
-                <button style={S.btnGhost} onClick={() => add({ kind: 'note', text: '' })}>📝 + Note</button>
+                <button style={S.btnGhost} onClick={() => add({ kind: 'note', text: '' })}>✍️ + Prompt</button>
                 <button style={S.btnGhost} onClick={() => add({ kind: 'output' })} title="An output collects connected materials into ONE image — several outputs = several images from one board">🎯 + Output</button>
                 <input ref={fileRef} type="file" multiple accept="image/*" style={{ display: 'none' }}
                     onChange={e => { addImages(e.target.files); e.currentTarget.value = ''; }} />
@@ -305,47 +316,69 @@ export default function WeaveView() {
                     }}>
                     {nodes.length === 0 && (
                         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a1a1aa', fontSize: 13, pointerEvents: 'none', textAlign: 'center', padding: 20 }}>
-                            The board is empty — add materials, link them with ⚭ into groups (optionally toward 🎯 outputs), then ▶ Run.
+                            The board is empty — add materials and prompts, drag from a node's ⚪ port to another node to link, wire groups into 🎯 outputs, then ▶ Run.
                         </div>
                     )}
-                    {/* Edges */}
+                    {/* Edges — Weave-style beziers; click a curve to unlink */}
                     <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
                         {edges.map(e => {
                             const a = nodes.find(nn => nn.id === e.from);
                             const b = nodes.find(nn => nn.id === e.to);
                             if (!a || !b) return null;
-                            const cx = (nn: WeaveNode) => nn.x + (nn.kind === 'note' ? 100 : nn.kind === 'output' ? 55 : 65);
-                            const cy = (nn: WeaveNode) => nn.y + 42;
+                            const [l, r2] = a.x <= b.x ? [a, b] : [b, a];
+                            const d = bezier(l.x + W(l), anchorY(l), r2.x, anchorY(r2));
                             return (
-                                <line key={e.id}
-                                    x1={cx(a)} y1={cy(a)} x2={cx(b)} y2={cy(b)}
-                                    stroke="#18181b" strokeWidth={2} strokeOpacity={0.35} strokeDasharray="6 4" />
+                                <g key={e.id}>
+                                    <path d={d} stroke="transparent" strokeWidth={14} fill="none"
+                                        style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+                                        onClick={() => setEdges(prev => prev.filter(x => x.id !== e.id))} />
+                                    <path d={d} stroke="#a1a1aa" strokeWidth={1.6} fill="none" />
+                                    <circle cx={l.x + W(l)} cy={anchorY(l)} r={4} fill="#fff" stroke="#a1a1aa" strokeWidth={1.5} />
+                                    <circle cx={r2.x} cy={anchorY(r2)} r={4} fill="#fff" stroke="#a1a1aa" strokeWidth={1.5} />
+                                </g>
                             );
                         })}
+                        {linking && (() => {
+                            const a = nodes.find(nn => nn.id === linking.from);
+                            if (!a) return null;
+                            return <path d={bezier(a.x + W(a), anchorY(a), linking.x, linking.y)}
+                                stroke="#d97706" strokeWidth={1.8} fill="none" strokeDasharray="5 4" />;
+                        })()}
                     </svg>
                     {nodes.map(nn => {
                         const a = assetOf(nn.assetId);
                         const el = elementOf(nn.elementId);
                         return (
                             <div key={nn.id} onPointerDown={e => onDown(e, nn)}
+                                onPointerUp={e => { if (linking) { e.stopPropagation(); completeLink(nn.id); } }}
                                 style={{
                                     position: 'absolute', left: nn.x, top: nn.y,
                                     width: nn.kind === 'note' ? 200 : nn.kind === 'output' ? 110 : 130,
                                     background: nn.kind === 'output' ? '#18181b' : '#fff',
                                     borderRadius: 12,
-                                    border: linkFrom === nn.id ? '2.5px solid #d97706' : '1px solid #d4d4d8',
+                                    border: linking?.from === nn.id ? '2px solid #d97706'
+                                        : linking ? '2px dashed #d97706' : '1px solid #d4d4d8',
                                     boxShadow: '0 3px 10px rgba(0,0,0,0.08)', cursor: 'grab', userSelect: 'none',
                                     padding: 6,
                                 }}>
                                 <button onClick={() => remove(nn.id)}
                                     style={{ position: 'absolute', top: 2, right: 2, zIndex: 2, border: 'none', borderRadius: 5, background: 'rgba(0,0,0,0.4)', color: '#fff', fontSize: 9, cursor: 'pointer', padding: '1px 5px' }}>✕</button>
-                                <button onClick={e => { e.stopPropagation(); link(nn.id); }} onPointerDown={e => e.stopPropagation()}
-                                    title={linkFrom ? (linkFrom === nn.id ? 'Cancel linking' : 'Link to this node') : 'Start a link from this node'}
-                                    style={{
-                                        position: 'absolute', top: 2, left: 2, zIndex: 2, border: 'none', borderRadius: 5,
-                                        background: linkFrom === nn.id ? '#d97706' : 'rgba(0,0,0,0.4)',
-                                        color: '#fff', fontSize: 9, fontWeight: 800, cursor: 'pointer', padding: '1px 5px',
-                                    }}>⚭</button>
+                                {/* Ports — drag from a dot to another node, Weave-style */}
+                                {(['left', 'right'] as const).map(side => (
+                                    <div key={side}
+                                        onPointerDown={e => {
+                                            e.stopPropagation();
+                                            const rect = boardRef.current?.getBoundingClientRect();
+                                            if (!rect) return;
+                                            setLinking({ from: nn.id, x: e.clientX - rect.left, y: e.clientY - rect.top });
+                                        }}
+                                        title="Drag to another node to link"
+                                        style={{
+                                            position: 'absolute', [side]: -7, top: 38, width: 13, height: 13,
+                                            borderRadius: '50%', background: '#fff', border: '2px solid #a1a1aa',
+                                            cursor: 'crosshair', zIndex: 3,
+                                        }} />
+                                ))}
                                 {nn.kind === 'output' && (
                                     <div style={{ textAlign: 'center', paddingTop: 12 }}>
                                         <div style={{ fontSize: 20 }}>🎯</div>
@@ -417,7 +450,7 @@ export default function WeaveView() {
                                 {nn.kind === 'note' && (
                                     <textarea
                                         value={nn.text ?? ''}
-                                        placeholder="📝 art direction…"
+                                        placeholder="✍️ type your prompt / art direction…"
                                         onChange={e => setNodes(prev => prev.map(x => x.id === nn.id ? { ...x, text: e.target.value } : x))}
                                         onPointerDown={e => e.stopPropagation()}
                                         style={{ width: '100%', minHeight: 64, border: 'none', outline: 'none', resize: 'vertical', fontSize: 11, fontFamily: 'inherit', background: '#fffbeb', borderRadius: 8, padding: 6, boxSizing: 'border-box' }}
