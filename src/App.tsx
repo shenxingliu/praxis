@@ -3,7 +3,7 @@ import StudioView from './ui/StudioView';
 import WeaveView from './ui/WeaveView';
 import QuickView from './ui/QuickView';
 import GalleryView from './ui/GalleryView';
-import ProductsView from './ui/ProductsView';
+import HeroView from './ui/HeroView';
 import LibraryView from './ui/LibraryView';
 import KnowledgeView from './ui/KnowledgeView';
 import SystemView from './ui/SystemView';
@@ -14,7 +14,7 @@ import {
     listBrands, getCurrentBrandId, setCurrentBrandId, createBrand,
 } from './domain/brand';
 
-type Tab = 'studio' | 'weave' | 'quick' | 'gallery' | 'products' | 'library' | 'knowledge' | 'system';
+type Tab = 'studio' | 'weave' | 'quick' | 'gallery' | 'heroes' | 'library' | 'knowledge' | 'system';
 
 export default function App() {
     const [tab, setTab] = useState<Tab>('studio');
@@ -28,7 +28,7 @@ export default function App() {
             const name = window.prompt('New brand name:')?.trim();
             if (!name) return;
             const description = window.prompt('One line — category + positioning (drives every prompt):')?.trim() ?? '';
-            const essence = window.prompt('Product fidelity essentials (what must never change):')?.trim() ?? '';
+            const essence = window.prompt('Hero fidelity essentials (what must never change):')?.trim() ?? '';
             createBrand(name, description, essence).then(b => {
                 setCurrentBrandId(b.id);
                 window.location.reload();
@@ -61,9 +61,9 @@ export default function App() {
                     {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                     <option value="__new__">＋ New brand…</option>
                 </select>
-                {(['studio', 'weave', 'quick', 'gallery', 'products', 'library', 'knowledge', 'system'] as Tab[]).map(t => (
+                {(['studio', 'weave', 'quick', 'gallery', 'heroes', 'library', 'knowledge', 'system'] as Tab[]).map(t => (
                     <button key={t} onClick={() => setTab(t)} style={{ ...S.tab, ...(tab === t ? S.tabActive : {}) }}>
-                        {t === 'studio' ? 'Studio' : t === 'weave' ? 'Weave' : t === 'quick' ? 'Quick' : t === 'gallery' ? 'Gallery' : t === 'products' ? 'Products' : t === 'library' ? 'Library' : t === 'knowledge' ? 'Brain' : 'System'}
+                        {t === 'studio' ? 'Studio' : t === 'weave' ? 'Weave' : t === 'quick' ? 'Quick' : t === 'gallery' ? 'Gallery' : t === 'heroes' ? 'Heroes' : t === 'library' ? 'Library' : t === 'knowledge' ? 'Brain' : 'System'}
                     </button>
                 ))}
             </div>
@@ -72,7 +72,7 @@ export default function App() {
                 {tab === 'weave' && <WeaveView />}
                 {tab === 'quick' && <QuickView />}
                 {tab === 'gallery' && <GalleryView />}
-                {tab === 'products' && <ProductsView />}
+                {tab === 'heroes' && <HeroView />}
                 {tab === 'library' && <LibraryView />}
                 {tab === 'knowledge' && <KnowledgeView />}
                 {tab === 'system' && <SystemView />}

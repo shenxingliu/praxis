@@ -4,7 +4,7 @@
  *   Collect → Classify → Decompose → Recombine → Create → Learn
  *
  *   Brand (workspace)         the client. soul + context modes + libraries
- *   Asset (product truth)     zero-deviation source pixels
+ *   Asset (hero truth)        zero-deviation source pixels
  *   Reference (aesthetics)    uploaded / promoted imagery
  *   Element (decomposed)      reusable semantic fragments of references
  *   Job (studio workflow)     brief → concepts → plan → execute → review
@@ -13,7 +13,7 @@
  * Design notes:
  * - Multi-brand from day one: every record carries brandId; storage
  *   providers filter reads by the active brand.
- * - Single user (per product decision) — ids are UUIDs so multi-user can
+ * - Single user (per hero decision) — ids are UUIDs so multi-user can
  *   be added without migration pain.
  * - LoRA door left open: Result + FeedbackSignal carry full generation
  *   metadata so liked results can be exported as a training set later.
@@ -54,15 +54,15 @@ export interface Brand {
     name: string;
     /** One line: category + positioning. The domain variable of every prompt. */
     description: string;
-    /** Product-fidelity essentials, e.g. 'solid bamboo grain, joinery, finish'. */
-    productEssence: string;
+    /** Hero-fidelity essentials, e.g. 'solid bamboo grain, joinery, finish'. */
+    heroEssence: string;
     contextModes: ContextMode[];
     createdAt: number;
     updatedAt: number;
 }
 
 // ---------------------------------------------------------------------------
-// 1. Asset — product truth (zero-deviation source for generation)
+// 1. Asset — hero truth (zero-deviation source for generation)
 // ---------------------------------------------------------------------------
 
 export type PhotoRole = 'hero' | 'detail' | 'side' | 'back';
@@ -211,7 +211,7 @@ export interface GenerationParams {
     camera?: string;    // e.g. 'Hero Front' | '3/4 View' | 'Full Room' | 'Low Angle'
     lens?: string;      // e.g. '55mm' | '85mm' | '100mm' | '120mm'
     lighting?: string;  // e.g. 'Soft Morning' | 'Golden Hour' | 'Overcast' | 'Studio' | 'Night Lamps'
-    margin?: number;    // silo: product edge distance %, default 10
+    margin?: number;    // silo: hero edge distance %, default 10
     bedding?: string;   // silo: 'none' | 'minimal' | 'styled'
     plateId?: string;   // silo: anchor backdrop plate (Reference id, kind 'plate')
 }
@@ -236,7 +236,7 @@ export interface GenerationResult {
     adopted: boolean;
     /** Studio job that produced this, when run through the workflow. */
     jobId?: string;
-    /** Product-consistency enforcement outcome (pro generations only). */
+    /** Hero-consistency enforcement outcome (pro generations only). */
     consistency?: { pass: boolean; issues: string[]; retried: boolean };
 }
 

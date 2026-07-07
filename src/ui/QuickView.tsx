@@ -10,7 +10,7 @@ import { openLightbox } from './lightbox';
 import { S, chip } from './styles';
 
 /**
- * QUICK — preset-based generation: same approved look, different product.
+ * QUICK — preset-based generation: same approved look, different hero.
  * Two steps by design: DRAFT (flash, cheap) → EXECUTE (pro, final).
  * Presets are saved from Studio results (Save as preset).
  */
@@ -47,7 +47,7 @@ export default function QuickView() {
 
     const runTier = async (tier: 'flash' | 'pro') => {
         if (!preset) { setNotice('Pick a preset first.'); return; }
-        if (selectedAssets.size === 0) { setNotice('Pick at least one product.'); return; }
+        if (selectedAssets.size === 0) { setNotice('Pick at least one hero.'); return; }
         setBusy(tier === 'flash' ? 'Draft (flash)…' : 'Executing (pro)…');
         setNotice('');
         try {
@@ -129,7 +129,7 @@ export default function QuickView() {
             </div>
 
             <div>
-                <div style={{ ...S.label, marginBottom: 6 }}>2 · PRODUCTS · {selectedAssets.size} selected</div>
+                <div style={{ ...S.label, marginBottom: 6 }}>2 · HEROES · {selectedAssets.size} selected</div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {assets.map(a => {
                         const on = selectedAssets.has(a.id);

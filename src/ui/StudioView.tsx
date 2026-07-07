@@ -53,7 +53,7 @@ export default function StudioView() {
     };
 
     const begin = () => guard('Concept agent thinking…', async () => {
-        if (selectedAssets.size === 0) throw new Error('Pick at least one product.');
+        if (selectedAssets.size === 0) throw new Error('Pick at least one hero.');
         const j = await startJob(brief.trim()); // empty brief = open exploration
         setJob(await proposeConcepts(j));
     });
@@ -172,7 +172,7 @@ export default function StudioView() {
         await recordSignal(r, 'export');
     };
 
-    /** Freeze this result's whole setup as a Quick preset (product-free). */
+    /** Freeze this result's whole setup as a Quick preset (hero-free). */
     const toPreset = async (r: GenerationResult) => {
         if (!job?.plan) return;
         const name = window.prompt('Preset name:',
@@ -181,7 +181,7 @@ export default function StudioView() {
         await savePreset(name, job.plan.params, job.plan.elementIds, r.image.value);
         setError(null);
         setBusy('');
-        window.alert(`Preset "${name}" saved — use it in the Quick tab: pick products, draft, execute.`);
+        window.alert(`Preset "${name}" saved — use it in the Quick tab: pick heroes, draft, execute.`);
     };
 
     const stage = job?.stage ?? 'brief';
@@ -222,7 +222,7 @@ export default function StudioView() {
                         placeholder='Optional — leave blank for open exploration (the studio proposes what the brand should make next). Or e.g. "Spring campaign hero image — fresh, optimistic, website banner"'
                         value={brief} onChange={e => setBrief(e.target.value)}
                     />
-                    <span style={S.label}>PRODUCTS · {selectedAssets.size} selected</span>
+                    <span style={S.label}>HEROES · {selectedAssets.size} selected</span>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {assets.map(a => {
                             const on = selectedAssets.has(a.id);
@@ -237,7 +237,7 @@ export default function StudioView() {
                                 </button>
                             );
                         })}
-                        {assets.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No products yet — import them in System.</span>}
+                        {assets.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No heroes yet — import them in System.</span>}
                     </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         <button style={S.btn} disabled={!!busy} onClick={begin}>
@@ -250,7 +250,7 @@ export default function StudioView() {
                     </div>
                     {competitorNote && (
                         <div style={{ fontSize: 11, color: '#92400e', lineHeight: 1.5 }}>
-                            Their argument: {competitorNote} — counter-brief drafted above; edit it, pick products, then Start.
+                            Their argument: {competitorNote} — counter-brief drafted above; edit it, pick heroes, then Start.
                         </div>
                     )}
                 </div>
@@ -365,7 +365,7 @@ export default function StudioView() {
                                         style={{ width: '100%', display: 'block', cursor: 'zoom-in' }} />
                                     {r.consistency && (
                                         <span title={r.consistency.pass
-                                            ? `Product inspection passed${r.consistency.retried ? ' (after 1 correction pass)' : ''}`
+                                            ? `Hero inspection passed${r.consistency.retried ? ' (after 1 correction pass)' : ''}`
                                             : `Still off after correction: ${r.consistency.issues.join('; ')}`}
                                             style={{
                                                 position: 'absolute', top: 6, left: 6, fontSize: 10, fontWeight: 800,
@@ -383,7 +383,7 @@ export default function StudioView() {
                                         </span>
                                         <span style={{ display: 'flex', gap: 6 }}>
                                             <button style={S.btnGhost} title="Save to Gallery (curated set, used for training export)" onClick={async () => { await recordSignal(r, 'save'); setBusy(''); setError(null); window.alert('Saved — find it in Gallery.'); }}>Gallery</button>
-                                            <button style={S.btnGhost} title="Save this whole setup as a Quick preset — same look, swap products" onClick={() => toPreset(r)}>Preset</button>
+                                            <button style={S.btnGhost} title="Save this whole setup as a Quick preset — same look, swap heroes" onClick={() => toPreset(r)}>Preset</button>
                                             <button style={S.btnGhost} onClick={() => download(r)}>Save</button>
                                         </span>
                                     </div>

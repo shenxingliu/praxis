@@ -286,7 +286,7 @@ export default function LibraryView() {
                     </div>
                 )}
                 <div style={{ fontSize: 10, color: '#a1a1aa' }}>
-                    Select 2-4 concept cards below , pick the transfer level — L1 imitates, L3/L4 creates — and breed a brand-new pure aesthetic reference (no product, flash-model cost).
+                    Select 2-4 concept cards below , pick the transfer level — L1 imitates, L3/L4 creates — and breed a brand-new pure aesthetic reference (no hero, flash-model cost).
                 </div>
                 {draft && (
                     <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>

@@ -31,7 +31,7 @@ const seedGreenington = (): Brand => ({
     id: DEFAULT_BRAND_ID,
     name: 'Greenington',
     description: 'Premium solid-bamboo furniture brand — modern, sustainable, crafted; sold through dealers and direct.',
-    productEssence: 'Exact silhouette, joinery, bamboo grain direction, finish color and hardware of each piece.',
+    heroEssence: 'Exact silhouette, joinery, bamboo grain direction, finish color and hardware of each piece.',
     contextModes: [
         { id: 'bedroom', label: 'Bedroom', directive: 'A believable, lived-in bedroom interior appropriate to the brand.', realism: 'photographic' },
         { id: 'living', label: 'Living Room', directive: 'A believable living room interior appropriate to the brand.', realism: 'photographic' },
@@ -70,12 +70,12 @@ export async function saveBrand(brand: Brand): Promise<void> {
 export async function createBrand(
     name: string,
     description: string,
-    productEssence: string,
+    heroEssence: string,
     contextModes: ContextMode[] = []
 ): Promise<Brand> {
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || crypto.randomUUID().slice(0, 8);
     const brand: Brand = {
-        id, name, description, productEssence, contextModes,
+        id, name, description, heroEssence, contextModes,
         createdAt: Date.now(), updatedAt: Date.now(),
     };
     await saveBrand(brand);

@@ -10,14 +10,14 @@ import { promptBlocks } from './engine';
  *
  * The user composes a board of nodes and everything on it is woven into
  * ONE image:
- *   product nodes  → source-of-truth pixels, fidelity + exclusivity enforced
+ *   hero nodes  → source-of-truth pixels, fidelity + exclusivity enforced
  *   element nodes  → abstract concepts to embody
  *   image nodes    → fusion sources: aesthetic ideas to blend, never copy
  *   note           → free art direction
  *
  * Same protections as the Studio engine: image-role manifest, mandatory
  * styling, only-listed-furniture, soul red-lines, and (pro tier) the
- * product-consistency inspector with one surgical correction pass.
+ * hero-consistency inspector with one surgical correction pass.
  */
 
 /** One extracted dimension of an image — "take ONLY its light". */
@@ -89,7 +89,7 @@ Output JSON: { "prompt": string }`,
 }
 
 /**
- * Turntable rotation — render the SAME subject (product, object or person)
+ * Turntable rotation — render the SAME subject (hero, object or person)
  * from a new viewpoint, using one or more reference angles. Geometry,
  * materials, colors and identity are preserved exactly; neutral backdrop.
  */
@@ -114,7 +114,7 @@ export async function rotateView(
     if (spent + cost > budget.monthlyUsd) throw new Error(`Monthly budget reached: $${spent.toFixed(2)} of $${budget.monthlyUsd.toFixed(2)}.`);
 
     const dir = ((angleDegrees % 360) + 360) % 360;
-    const prompt = `TURNTABLE TASK. The attached image(s) show ONE subject (a product, object or person) from ${sourceImages.length > 1 ? 'multiple angles' : 'one angle'}.
+    const prompt = `TURNTABLE TASK. The attached image(s) show ONE subject (a hero, object or person) from ${sourceImages.length > 1 ? 'multiple angles' : 'one angle'}.
 
 Render the EXACT SAME subject rotated to the ${dir}° viewpoint (0° = the first image's front view; rotation is clockwise around the subject's vertical axis, camera distance unchanged).
 ${pitchLine}
@@ -152,9 +152,9 @@ export interface WeaveInput {
     elements: Element[];
     /** Fusion source images (data URLs) — canvas image nodes. */
     fusionImages: string[];
-    /** Uploaded images marked as PRODUCT — ad-hoc source-of-truth pixels. */
-    adhocProductImages: string[];
-    /** Rotate-node views: the product must appear from EXACTLY these angles. */
+    /** Uploaded images marked as HERO — ad-hoc source-of-truth pixels. */
+    adhocHeroImages: string[];
+    /** Rotate-node views: the hero must appear from EXACTLY these angles. */
     viewpointImages?: string[];
     /** Numeric camera viewpoint from a rotate node — obeyed even without pixels. */
     viewpoint?: { azimuth: number; pitch: number };
@@ -176,11 +176,11 @@ export async function weaveGenerate(
     const soul = await getBrandSoul().catch(() => null);
     const redlines = (soul?.fields ?? []).filter(f => f.locked && f.value.trim());
 
-    const libraryProductImages = input.assets.flatMap(a => a.photos.slice(0, Math.ceil(8 / Math.max(1, input.assets.length))).map(p => p.image.value));
+    const libraryHeroImages = input.assets.flatMap(a => a.photos.slice(0, Math.ceil(8 / Math.max(1, input.assets.length))).map(p => p.image.value));
     const viewpoints = (input.viewpointImages ?? []).slice(0, 2);
-    const assetImages = [...libraryProductImages, ...input.adhocProductImages].slice(0, 10 - viewpoints.length);
-    const hasProducts = assetImages.length > 0 || viewpoints.length > 0;
-    const fusion = input.fusionImages.slice(0, hasProducts ? 4 : 6);
+    const assetImages = [...libraryHeroImages, ...input.adhocHeroImages].slice(0, 10 - viewpoints.length);
+    const hasHeroes = assetImages.length > 0 || viewpoints.length > 0;
+    const fusion = input.fusionImages.slice(0, hasHeroes ? 4 : 6);
     const concepts = input.conceptIdeas.slice(0, 4);
     // Facets grouped by source image — each source attached once.
     const facetGroups = new Map<string, WeaveFacet[]>();
@@ -211,12 +211,12 @@ export async function weaveGenerate(
         return `Image ${facetStart + i}: FACET SOURCE — take ONLY its ${dims} as described in the DIMENSIONAL EXTRACTION section; ignore everything else about this image (subjects, furniture, and all other dimensions).`;
     });
     const manifest = [
-        n > 0 && `Images 1-${n}: PRODUCT SOURCE OF TRUTH. Reconstruct the product(s) EXACTLY and ONLY from these. Their decorative styling is disposable staging — restyle it per the direction.`,
-        viewpoints.length > 0 && `Image${viewpoints.length > 1 ? `s ${vpStart}-${vpStart + viewpoints.length - 1}` : ` ${vpStart}`}: VIEWPOINT TRUTH — the user chose this exact camera angle on the product. The product MUST appear in the final image from EXACTLY this viewpoint (same rotation, same camera elevation). ${n > 0 ? 'Use images 1-' + n + ' only for material and detail fidelity;' : ''} the viewpoint image defines HOW the product faces the camera.`,
+        n > 0 && `Images 1-${n}: HERO SOURCE OF TRUTH. Reconstruct the hero(es) EXACTLY and ONLY from these. Their decorative styling is disposable staging — restyle it per the direction.`,
+        viewpoints.length > 0 && `Image${viewpoints.length > 1 ? `s ${vpStart}-${vpStart + viewpoints.length - 1}` : ` ${vpStart}`}: VIEWPOINT TRUTH — the user chose this exact camera angle on the hero. The hero MUST appear in the final image from EXACTLY this viewpoint (same rotation, same camera elevation). ${n > 0 ? 'Use images 1-' + n + ' only for material and detail fidelity;' : ''} the viewpoint image defines HOW the hero faces the camera.`,
         fusion.length > 0 && `Images ${fusionStart}-${fusionStart + fusion.length - 1}: FUSION SOURCES. Blend their aesthetic ideas — light behavior, palette logic, material language, mood, formal energy — into ONE new coherent image. NEVER copy their subjects, furniture or composition literally.`,
         concepts.length > 0 && `Images ${conceptStart}-${conceptStart + concepts.length - 1}: CONCEPT SOURCES. Embody each one's stated idea (see CONCEPT IDEAS section); never copy its composition or subjects.`,
         ...facetManifest,
-        hasProducts && heroReminder.length > 0 && `LAST image: product hero repeated as a REMINDER of what the product must look like.`,
+        hasHeroes && heroReminder.length > 0 && `LAST image: hero repeated as a REMINDER of what the hero must look like.`,
     ].filter(Boolean).join('\n');
 
     const extractionBlock = facetImages.length > 0 ? `
@@ -227,24 +227,24 @@ ${facetImages.flatMap((img, i) =>
 
     const prompt = `You are the art director at a freeform composition canvas. Weave EVERYTHING on the board into ONE original image.
 
-${hasProducts ? promptBlocks.productFidelity(input.assets, brand) : 'No product on the board — create a pure aesthetic reference image. NO text, NO logos, NO people.'}
-${input.adhocProductImages.length > 0 ? `\nADDITIONAL PRODUCT (uploaded directly): its photos are among images 1-${n}. Same fidelity, styling and exclusivity rules apply — reconstruct it exactly, restyle only its staging.` : ''}
+${hasHeroes ? promptBlocks.heroFidelity(input.assets, brand) : 'No hero on the board — create a pure aesthetic reference image. NO text, NO logos, NO people.'}
+${input.adhocHeroImages.length > 0 ? `\nADDITIONAL HERO (uploaded directly): its photos are among images 1-${n}. Same fidelity, styling and exclusivity rules apply — reconstruct it exactly, restyle only its staging.` : ''}
 ${concepts.length > 0 ? `\n### CONCEPT IDEAS (one per concept source image, in order) ###\n${concepts.map((c, i) => `- Image ${conceptStart + i}: ${c.idea}`).join('\n')}` : ''}
 ${promptBlocks.brand(brand)}
 ${promptBlocks.elements(input.elements)}
 ${extractionBlock}
 ${redlines.length > 0 ? `\n### BRAND RED-LINES (never violate) ###\n${redlines.map(f => `- ${f.key}: ${f.value}`).join('\n')}` : ''}
-${input.viewpoint ? `\n### CAMERA VIEWPOINT (user-selected on the 3D trackball — obey EXACTLY) ###\nShow the product from azimuth ${Math.round(input.viewpoint.azimuth)}° (0° = the product's front, rotating clockwise around its vertical axis) with camera elevation ${Math.round(input.viewpoint.pitch)}° (positive = camera raised, looking down). This viewpoint overrides any angle suggested by the product photos.` : ''}
+${input.viewpoint ? `\n### CAMERA VIEWPOINT (user-selected on the 3D trackball — obey EXACTLY) ###\nShow the hero from azimuth ${Math.round(input.viewpoint.azimuth)}° (0° = the hero's front, rotating clockwise around its vertical axis) with camera elevation ${Math.round(input.viewpoint.pitch)}° (positive = camera raised, looking down). This viewpoint overrides any angle suggested by the hero photos.` : ''}
 ${input.note ? `\n### ART DIRECTION ###\n${input.note}` : ''}
 
 ### ATTACHED IMAGE ROLES (obey strictly) ###
 ${manifest || '(no images attached — work from the concepts and direction alone)'}
 
 ### REQUIREMENTS ###
-One coherent, museum-grade image where every board input coexists and reinforces the others. 8k.${hasProducts ? `
-- The listed product(s) are the ONLY furniture in the frame — zero invented companion pieces.
-- The product(s) must be fully styled per the direction (dressed beds, curated surfaces); styling changes, the product never does.
-- FINAL: the product must be pixel-faithful to its source photos.` : ''}`;
+One coherent, museum-grade image where every board input coexists and reinforces the others. 8k.${hasHeroes ? `
+- The listed hero(s) are the ONLY furniture in the frame — zero invented companion pieces.
+- The hero(es) must be fully styled per the direction (dressed beds, curated surfaces); styling changes, the hero never does.
+- FINAL: the hero must be pixel-faithful to its source photos.` : ''}`;
 
     onStatus?.(input.tier === 'pro' ? 'Weaving (pro)…' : 'Weaving (flash)…');
     let out = await generateImage({
@@ -255,27 +255,27 @@ One coherent, museum-grade image where every board input coexists and reinforces
         imageSize: input.size,
     });
 
-    // ---- Consistency inspector (pro + products only), surgical retry ----
+    // ---- Consistency inspector (pro + heroes only), surgical retry ----
     let consistency: GenerationResult['consistency'];
-    if (input.tier === 'pro' && hasProducts) {
+    if (input.tier === 'pro' && hasHeroes) {
         const check = async (img: string) => {
             const parsed = await generateJson<{ pass: boolean; issues: string[] }>(
-                `The first ${Math.min(assetImages.length, 5)} attached image(s) are OFFICIAL PRODUCT PHOTOS. The LAST attached image is AI-generated.
-Check: 1) PRODUCT FIDELITY (silhouette, proportions, construction, material, color, hardware — ignore styling/environment); 2) FURNITURE EXCLUSIVITY (no furniture other than the product).
+                `The first ${Math.min(assetImages.length, 5)} attached image(s) are OFFICIAL HERO PHOTOS. The LAST attached image is AI-generated.
+Check: 1) HERO FIDELITY (silhouette, proportions, construction, material, color, hardware — ignore styling/environment); 2) FURNITURE EXCLUSIVITY (no furniture other than the hero).
 Output JSON: { "pass": boolean, "issues": [up to 4 concrete actionable deviations] }`,
                 [...assetImages.slice(0, 5), img]
             );
             return { pass: !!parsed?.pass, issues: (parsed?.issues ?? []).map(String).slice(0, 4) };
         };
         try {
-            onStatus?.('Inspecting product consistency…');
+            onStatus?.('Inspecting hero consistency…');
             const first = await check(out.image);
             if (first.pass || first.issues.length === 0) {
                 consistency = { ...first, retried: false };
             } else {
-                onStatus?.('Correcting the product surgically…');
+                onStatus?.('Correcting the hero surgically…');
                 out = await generateImage({
-                    prompt: `EDIT the FIRST attached image (image-editing task). KEEP the environment, composition, light, styling and mood EXACTLY. FIX ONLY THE PRODUCT to match the product photos (all images after the first) with zero deviation.
+                    prompt: `EDIT the FIRST attached image (image-editing task). KEEP the environment, composition, light, styling and mood EXACTLY. FIX ONLY THE HERO to match the hero photos (all images after the first) with zero deviation.
 Known defects:\n${first.issues.map(s => `- ${s}`).join('\n')}`,
                     referenceImages: [out.image, ...assetImages.slice(0, 6)],
                     model,
@@ -346,7 +346,7 @@ export async function distillWeaveApproach(ctx: WeaveApproachContext): Promise<{
 
     const prompt = `You are a brand art director extracting REUSABLE creative rules from a successful image generation session.
 
-BRAND: "${brand?.name ?? 'the brand'}" — ${brand?.description ?? 'a product brand'}
+BRAND: "${brand?.name ?? 'the brand'}" — ${brand?.description ?? 'a hero brand'}
 
 ### BOARD COMPOSITION (what the user assembled) ###
 ${ctx.boardSummary}
@@ -360,7 +360,7 @@ ${existingRules.slice(0, 30).map(r => `- [${r.polarity}] ${r.rule}`).join('\n') 
 ### TASK ###
 Analyze the attached generated image together with the board composition and prompt. Extract 2-5 ACTIONABLE creative rules that capture the approach's key insights — what made this image work. Rules must be:
 1. Concrete and promptable (usable inside a future image prompt)
-2. Generalizable beyond this specific scene (not tied to one product)
+2. Generalizable beyond this specific scene (not tied to one hero)
 3. Non-redundant with existing rules
 4. Scoped appropriately (scene / silo / general)
 

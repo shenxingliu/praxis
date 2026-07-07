@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * V1 → 2.0 data migration.
+ * Legacy data migration.
  *
- * Reads the V1 repo data (this project lives inside it as ./lumina-2.0):
+ * Reads a legacy repo layout from the parent directory:
  *   ../data/inventory/*.json        → assets.json
  *   ../data/bulk/brand-profile.json → brand-profile.json
  *   ../src/constants/feedback.json  → signals.json (like/dislike history)
@@ -10,7 +10,7 @@
  *
  * Writes normalized JSON to ./migration-out/. The app's Import button (or
  * the Supabase seeder later) loads these via storage.importBulk().
- * READ-ONLY on V1 data — nothing in ../ is modified.
+ * READ-ONLY on legacy data — nothing in ../ is modified.
  */
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname, basename, extname } from 'node:path';

@@ -8,9 +8,9 @@ import { DropZone, imageFiles } from './dropzone';
 import { S } from './styles';
 
 /**
- * PRODUCTS — the product-truth library (zero-deviation source pixels).
- * Upload photos to create products; add more photos to existing ones.
- * References (aesthetics) live in Library; products live here.
+ * HEROES — the hero-truth library (zero-deviation source pixels).
+ * Upload photos to create heroes; add more photos to existing ones.
+ * References (aesthetics) live in Library; heroes live here.
  */
 
 const fileToDataUrl = (f: File): Promise<string> =>
@@ -21,7 +21,7 @@ const fileToDataUrl = (f: File): Promise<string> =>
         r.readAsDataURL(f);
     });
 
-export default function ProductsView() {
+export default function HeroView() {
     const [assets, setAssets] = useState<Asset[]>([]);
     const [busy, setBusy] = useState('');
     const [notice, setNotice] = useState('');
@@ -34,10 +34,10 @@ export default function ProductsView() {
 
     const announce = () => window.dispatchEvent(new CustomEvent(INVENTORY_CHANGED_EVENT));
 
-    const createProduct = async (input: FileList | File[] | null) => {
+    const createHero = async (input: FileList | File[] | null) => {
         const files = imageFiles(input);
         if (files.length === 0) return;
-        const name = window.prompt('Product name:', files[0].name.replace(/\.[^.]+$/, ''))?.trim();
+        const name = window.prompt('Hero name:', files[0].name.replace(/\.[^.]+$/, ''))?.trim();
         if (!name) return;
         const category = window.prompt('Category (optional — e.g. Bed, Desk, Bottle):')?.trim() || undefined;
         setBusy(`Uploading ${files.length} photo${files.length === 1 ? '' : 's'}…`);
@@ -97,14 +97,14 @@ export default function ProductsView() {
     };
 
     const removePhoto = async (a: Asset, photoId: string) => {
-        if (a.photos.length <= 1) { setNotice('A product needs at least one photo — delete the product instead.'); return; }
+        if (a.photos.length <= 1) { setNotice('A hero needs at least one photo — delete the hero instead.'); return; }
         await storage.upsertAsset({ ...a, photos: a.photos.filter(p => p.id !== photoId), updatedAt: Date.now() });
         announce();
         refresh();
     };
 
     const rename = async (a: Asset) => {
-        const name = window.prompt('Product name:', a.name)?.trim();
+        const name = window.prompt('Hero name:', a.name)?.trim();
         if (!name) return;
         await storage.upsertAsset({ ...a, name, updatedAt: Date.now() });
         announce();
@@ -112,7 +112,7 @@ export default function ProductsView() {
     };
 
     const remove = async (a: Asset) => {
-        if (!window.confirm(`Delete product "${a.name}" and its ${a.photos.length} photo${a.photos.length === 1 ? '' : 's'}?`)) return;
+        if (!window.confirm(`Delete hero "${a.name}" and its ${a.photos.length} photo${a.photos.length === 1 ? '' : 's'}?`)) return;
         await storage.deleteAsset(a.id);
         setNotice(`"${a.name}" deleted`);
         announce();
@@ -135,14 +135,14 @@ export default function ProductsView() {
             )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={S.label}>PRODUCTS · {assets.length}</span>
-                <button style={S.btn} disabled={!!busy} onClick={() => newRef.current?.click()}>＋ New product (upload photos)</button>
-                <span style={{ fontSize: 10, color: '#a1a1aa' }}>Source of truth — or drag & drop photos: onto the page = new product, onto a card = add to that product.</span>
-                <input ref={newRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={e => { createProduct(e.target.files); e.target.value = ''; }} />
+                <span style={S.label}>HEROES · {assets.length}</span>
+                <button style={S.btn} disabled={!!busy} onClick={() => newRef.current?.click()}>＋ New hero (upload photos)</button>
+                <span style={{ fontSize: 10, color: '#a1a1aa' }}>Source of truth — or drag & drop photos: onto the page = new hero, onto a card = add to that hero.</span>
+                <input ref={newRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={e => { createHero(e.target.files); e.target.value = ''; }} />
                 <input ref={addRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={e => { addPhotos(e.target.files); e.target.value = ''; }} />
             </div>
 
-            <DropZone onFiles={createProduct} hint="Drop photos — creates a new product">
+            <DropZone onFiles={createHero} hint="Drop photos — creates a new hero">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12, minHeight: 120 }}>
                 {assets.map(a => (
                     <DropZone key={a.id} onFiles={fs => addPhotosTo(a, fs)} hint={`Add to ${a.name}`}>
@@ -171,7 +171,7 @@ export default function ProductsView() {
                 ))}
                 {assets.length === 0 && (
                     <p style={{ fontSize: 12, color: '#a1a1aa' }}>
-                        No products yet. Upload or drag & drop product photos here, or import Greenington in System.
+                        No heroes yet. Upload or drag & drop hero photos here, or import Greenington in System.
                     </p>
                 )}
             </div>

@@ -12,13 +12,13 @@ import { S, chip } from './styles';
 /**
  * WEAVE — infinite freeform canvas (Figma-Weave inspired).
  *
- * Nodes: product · concept · image · facet · prompt · output.
+ * Nodes: hero · concept · image · facet · prompt · output.
  * Port-drag bezier links; connected groups flow into outputs; results are
  * generated INSIDE the output nodes. Collapsed nodes show only their
  * content — click a node to expand its action buttons.
  */
 
-type NodeKind = 'product' | 'element' | 'image' | 'note' | 'facet' | 'output' | 'rotate';
+type NodeKind = 'hero' | 'element' | 'image' | 'note' | 'facet' | 'output' | 'rotate';
 interface WeaveEdge { id: string; from: string; to: string }
 interface WeaveNode {
     id: string;
@@ -32,13 +32,13 @@ interface WeaveNode {
     text?: string;         // prompt nodes
     dimension?: string;    // facet nodes
     description?: string;  // facet nodes / concept-role idea
-    role?: 'fusion' | 'product' | 'concept';
+    role?: 'fusion' | 'hero' | 'concept';
     resultId?: string;     // output/rotate nodes: GenerationResult behind image
     angle?: number;        // rotate nodes: azimuth in degrees (free, 0-359)
     pitch?: number;        // rotate nodes: camera elevation −45..+45
     w?: number;            // custom width (drag the ◢ corner handle)
     h?: number;            // custom height (drag the ◢ corner handle)
-    quantity?: number;     // product nodes: how many instances (default 1)
+    quantity?: number;     // hero nodes: how many instances (default 1)
 }
 
 /** Saved canvas configuration — persisted via brandKey KV. */
@@ -74,7 +74,7 @@ let dropCount = 0;
 
 /** 3D cube with colored faces — much easier to identify angle than a sphere.
  *  Front=blue, Back=red, Left=green, Right=yellow, Top=white, Bottom=dark.
- *  Orange dot marks the product-front (0° azimuth). */
+ *  Orange dot marks the hero-front (0° azimuth). */
 const Ball: React.FC<{ az: number; pi: number; size: number }> = ({ az, pi, size }) => {
     const rad = Math.PI / 180;
     const cx = size / 2;
@@ -170,7 +170,7 @@ export default function WeaveView() {
     const [edges, setEdges] = useState<WeaveEdge[]>([]);
     const [linking, setLinking] = useState<{ from: string; x: number; y: number } | null>(null);
     const [expandedId, setExpandedId] = useState<string | null>(null);
-    const [picker, setPicker] = useState<'product' | 'element' | null>(null);
+    const [picker, setPicker] = useState<'hero' | 'element' | null>(null);
     const [facetPick, setFacetPick] = useState<{ image: string; near: { x: number; y: number }; facets: Array<{ dimension: string; description: string }> } | null>(null);
     const [ratio, setRatio] = useState<GenerationParams['ratio']>('4:3');
     const [size, setSize] = useState<NonNullable<GenerationParams['size']>>('1K');
@@ -362,7 +362,7 @@ export default function WeaveView() {
     };
 
     // --- role / prompt derivation ---
-    const setRole = async (node: WeaveNode, role: 'fusion' | 'product' | 'concept') => {
+    const setRole = async (node: WeaveNode, role: 'fusion' | 'hero' | 'concept') => {
         setNodes(prev => prev.map(x => x.id === node.id ? { ...x, role } : x));
         if (role === 'concept' && !node.description && node.image) {
             setBusy('Deriving the idea…');
@@ -396,12 +396,12 @@ export default function WeaveView() {
             const n = nodes.find(x => x.id === id);
             if (!n) continue;
             if ((n.kind === 'image' || n.kind === 'output' || n.kind === 'rotate') && n.image) { img = n.image; break; }
-            if (n.kind === 'product' && n.assetId) {
+            if (n.kind === 'hero' && n.assetId) {
                 const a = assets.find(x => x.id === n.assetId);
                 if (a?.photos[0]) { img = a.photos[0].image.value; break; }
             }
         }
-        if (!img) { setNotice('Connect this note to an image or product node first.'); return; }
+        if (!img) { setNotice('Connect this note to an image or hero node first.'); return; }
         setBusy('Analyzing image…');
         setNotice('');
         try {
@@ -414,15 +414,15 @@ export default function WeaveView() {
 
     // --- generation: results ALWAYS land inside an output node ---
     const weaveNodes = async (pool: WeaveNode[], tier: 'flash' | 'pro'): Promise<GenerationResult | undefined> => {
-        const boardAssets = assets.filter(a => pool.some(nn => nn.kind === 'product' && nn.assetId === a.id));
+        const boardAssets = assets.filter(a => pool.some(nn => nn.kind === 'hero' && nn.assetId === a.id));
         const boardElements = elements.filter(el => pool.some(nn => nn.kind === 'element' && nn.elementId === el.id));
         const facets: WeaveFacet[] = pool
             .filter(nn => nn.kind === 'facet' && nn.image && nn.dimension && nn.description)
             .map(nn => ({ image: nn.image!, dimension: nn.dimension!, description: nn.description! }));
         const imageNodes = pool.filter(nn => nn.kind === 'image' && nn.image);
         const fusionImages = imageNodes.filter(nn => (nn.role ?? 'fusion') === 'fusion').map(nn => nn.image!);
-        // Product-role nodes contribute ALL their merged angles as truth.
-        const adhocProductImages = imageNodes.filter(nn => nn.role === 'product').flatMap(nodeImages);
+        // Hero-role nodes contribute ALL their merged angles as truth.
+        const adhocHeroImages = imageNodes.filter(nn => nn.role === 'hero').flatMap(nodeImages);
         const conceptIdeas = imageNodes
             .filter(nn => nn.role === 'concept')
             .map(nn => ({ image: nn.image!, idea: nn.description?.trim() || 'the transferable aesthetic idea of this image' }));
@@ -444,9 +444,9 @@ export default function WeaveView() {
                 viewpointImages.push(rv.image.value);
             } catch (err) { console.warn('[weave] viewpoint pre-render failed:', err); }
         }
-        // Product quantity instructions
+        // Hero quantity instructions
         const qtyNotes = pool
-            .filter(nn => nn.kind === 'product' && nn.assetId && (nn.quantity ?? 1) > 1)
+            .filter(nn => nn.kind === 'hero' && nn.assetId && (nn.quantity ?? 1) > 1)
             .map(nn => {
                 const pa = assets.find(x => x.id === nn.assetId);
                 return pa ? `Show exactly ${nn.quantity} instances of "${pa.name}" arranged naturally in the scene.` : '';
@@ -457,7 +457,7 @@ export default function WeaveView() {
         // Output nodes with results also act as fusion sources when linked onward.
         const outputImages = pool.filter(nn => nn.kind === 'output' && nn.image).map(nn => nn.image!);
         fusionImages.push(...outputImages);
-        if (boardAssets.length + boardElements.length + fusionImages.length + facets.length + adhocProductImages.length + conceptIdeas.length + viewpointImages.length === 0) {
+        if (boardAssets.length + boardElements.length + fusionImages.length + facets.length + adhocHeroImages.length + conceptIdeas.length + viewpointImages.length === 0) {
             setNotice('Nothing usable in this group.');
             return undefined;
         }
@@ -465,7 +465,7 @@ export default function WeaveView() {
         setNotice('');
         try {
             const r = await weaveGenerate(
-                { assets: boardAssets, elements: boardElements, fusionImages, adhocProductImages, viewpointImages, viewpoint, conceptIdeas, facets, note, ratio, size, tier },
+                { assets: boardAssets, elements: boardElements, fusionImages, adhocHeroImages, viewpointImages, viewpoint, conceptIdeas, facets, note, ratio, size, tier },
                 setBusy
             );
             resultsRef.current.set(r.id, r);
@@ -521,7 +521,7 @@ export default function WeaveView() {
             const nb = nodes.find(x => x.id === id);
             if (!nb) continue;
             if (nb.kind === 'image' || nb.kind === 'output' || nb.kind === 'rotate') imgs.push(...nodeImages(nb));
-            if (nb.kind === 'product') {
+            if (nb.kind === 'hero') {
                 const a = assets.find(x => x.id === nb.assetId);
                 if (a) imgs.push(...a.photos.slice(0, 4).map(p => p.image.value));
             }
@@ -533,7 +533,7 @@ export default function WeaveView() {
         const angle = deg ?? rn.angle ?? 90;
         const pitch = rn.pitch ?? 0;
         const imgs = rotateInputs(rn);
-        if (imgs.length === 0) { setNotice('Connect an image or product to the node first (its angles become the input).'); return; }
+        if (imgs.length === 0) { setNotice('Connect an image or hero to the node first (its angles become the input).'); return; }
         setBusy(`Rotating to ${angle}°${pitch !== 0 ? ` / ${pitch > 0 ? '+' : ''}${pitch}°` : ''}…`);
         setNotice('');
         try {
@@ -548,7 +548,7 @@ export default function WeaveView() {
     /** Full turntable: 8 views at 45° steps, laid out next to the node. */
     const run360 = async (rn: WeaveNode) => {
         const imgs = rotateInputs(rn);
-        if (imgs.length === 0) { setNotice('Connect an image or product to the node first.'); return; }
+        if (imgs.length === 0) { setNotice('Connect an image or hero to the node first.'); return; }
         for (let i = 0; i < 8; i++) {
             const angle = i * 45;
             setBusy(`360° turntable — ${i + 1}/8 (${angle}°)…`);
@@ -590,9 +590,9 @@ export default function WeaveView() {
         const pool = nodes.filter(n => comp.has(n.id) && n.id !== nn.id);
         const lines: string[] = [];
         for (const n of pool) {
-            if (n.kind === 'product') {
+            if (n.kind === 'hero') {
                 const pa = assets.find(x => x.id === n.assetId);
-                lines.push(`Product: "${pa?.name ?? 'unknown'}" (qty ${n.quantity ?? 1})`);
+                lines.push(`Hero: "${pa?.name ?? 'unknown'}" (qty ${n.quantity ?? 1})`);
             } else if (n.kind === 'element') {
                 const el = elements.find(x => x.id === n.elementId);
                 lines.push(`Concept element: ${el?.concept ?? 'unknown'} — ${el?.description?.slice(0, 80) ?? ''}`);
@@ -680,7 +680,7 @@ export default function WeaveView() {
 
             {/* Toolbar */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <button style={S.btn} onClick={() => setPicker(picker === 'product' ? null : 'product')}>+ Product</button>
+                <button style={S.btn} onClick={() => setPicker(picker === 'hero' ? null : 'hero')}>+ Hero</button>
                 <button style={S.btn} onClick={() => setPicker(picker === 'element' ? null : 'element')}>+ Concept</button>
                 <button style={S.btnGhost} onClick={() => fileRef.current?.click()}>+ Images</button>
                 <button style={S.btnGhost} onClick={() => add({ kind: 'note', text: '' })}>+ Prompt</button>
@@ -706,15 +706,15 @@ export default function WeaveView() {
             </div>
 
             {/* Pickers */}
-            {picker === 'product' && (
+            {picker === 'hero' && (
                 <div style={{ ...S.card, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {assets.map(a => (
-                        <button key={a.id} style={chip(false)} onClick={() => { add({ kind: 'product', assetId: a.id }); setPicker(null); }}>
+                        <button key={a.id} style={chip(false)} onClick={() => { add({ kind: 'hero', assetId: a.id }); setPicker(null); }}>
                             {a.photos[0] && <img src={a.photos[0].image.value} alt="" style={{ width: 20, height: 20, borderRadius: 4, objectFit: 'cover', marginRight: 5, verticalAlign: 'middle' }} />}
                             {a.name}
                         </button>
                     ))}
-                    {assets.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No products — add them in Products.</span>}
+                    {assets.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No heroes — add them in Heroes.</span>}
                 </div>
             )}
             {picker === 'element' && (
@@ -895,7 +895,7 @@ export default function WeaveView() {
                                 ))}
 
                                 {/* --- content (collapsed = content only, no buttons) --- */}
-                                {nn.kind === 'product' && a && (
+                                {nn.kind === 'hero' && a && (
                                     <div onClick={() => toggleExpand(nn.id)}>
                                         {a.photos[0] && <img src={a.photos[0].image.value} alt="" draggable={false}
                                             style={{ width: '100%', borderRadius: 8, display: 'block' }} />}
@@ -925,7 +925,7 @@ export default function WeaveView() {
                                                 style={{ width: '100%', borderRadius: 8, display: 'block' }} />
                                         )}
                                         <div style={{ fontSize: 9, color: '#a1a1aa', marginTop: 2 }}>
-                                            {nn.role === 'product' ? 'product (exact)' : nn.role === 'concept' ? 'concept' : 'fusion'}
+                                            {nn.role === 'hero' ? 'hero (exact)' : nn.role === 'concept' ? 'concept' : 'fusion'}
                                             {nodeImages(nn).length > 1 ? ` · ${nodeImages(nn).length} angles` : ''}
                                         </div>
                                     </div>
@@ -1018,7 +1018,7 @@ export default function WeaveView() {
                                         )}
                                         {nn.kind === 'image' && (
                                             <>
-                                                {(['fusion', 'product', 'concept'] as const).map(role => (
+                                                {(['fusion', 'hero', 'concept'] as const).map(role => (
                                                     <button key={role} style={{ ...miniBtn, background: (nn.role ?? 'fusion') === role ? '#18181b' : '#f4f4f5', color: (nn.role ?? 'fusion') === role ? '#fff' : '#3f3f46' }}
                                                         disabled={!!busy} onClick={() => setRole(nn, role)}>
                                                         {role}
@@ -1046,7 +1046,7 @@ export default function WeaveView() {
                                         {nn.kind === 'facet' && (
                                             <button style={miniBtn} disabled={!!busy} onClick={() => runFacet(nn)}>solo (flash)</button>
                                         )}
-                                        {nn.kind === 'product' && (
+                                        {nn.kind === 'hero' && (
                                             <>
                                                 <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                                     <span style={{ fontSize: 9, fontWeight: 700, color: '#71717a' }}>QTY</span>

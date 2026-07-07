@@ -4,7 +4,7 @@ import { generateJson, appApiHeaders } from '../engine/gemini';
 
 /**
  * Brand Soul — the persistent N/S/I semantic baseline, per brand.
- * Ported from Lumina V1.3 (proven in production), generalized: no domain
+ * Ported from the legacy production app, generalized: no domain
  * words in the schema; the brand's own description drives derivation.
  *
  * Axes:
@@ -46,7 +46,7 @@ export const SOUL_SCHEMA: SoulFieldSpec[] = [
     // --- Sensation ---
     { key: 'sensation.palette', axis: 'sensation', label: 'Palette', hint: 'Concrete color language: hues, contrast level, density' },
     { key: 'sensation.light', axis: 'sensation', label: 'Light', hint: 'warm/cool, hard/soft, directional/diffuse — the brand default light character' },
-    { key: 'sensation.tactile_implied', axis: 'sensation', label: 'Implied touch', hint: "How the image suggests touch: hardness, texture, weight, temperature — the product's signature material is core here" },
+    { key: 'sensation.tactile_implied', axis: 'sensation', label: 'Implied touch', hint: "How the image suggests touch: hardness, texture, weight, temperature — the hero's signature material is core here" },
     { key: 'sensation.atmosphere', axis: 'sensation', label: 'Atmosphere', hint: 'Composite environmental feel: temperature, humidity, openness, time-of-day evocation' },
     { key: 'sensation.scale_to_body', axis: 'sensation', label: 'Body scale', hint: 'Relationship to the body: intimate / human / monumental + posture invitation' },
     { key: 'sensation.meta', axis: 'sensation', label: 'Sensory meta', hint: 'sensory density (sparse↔rich), foregrounded modality, cross-modal coherence — the overall "key" of the image' },
@@ -101,7 +101,7 @@ export async function deriveBrandSoul(): Promise<BrandSoul> {
     ].join('\n\n');
 
     const prompt = `You are a brand semiotician. Derive the visual BRAND SOUL of "${brand.name}" — ${brand.description}
-Product fidelity essentials: ${brand.productEssence || '(not specified)'}
+Hero fidelity essentials: ${brand.heroEssence || '(not specified)'}
 
 ${approvedImages.length > 0 ? 'APPROVED BRAND IMAGERY is attached — derive the sensation axis (palette, light, implied touch, atmosphere) primarily from those pixels, not from words.' : ''}
 
@@ -180,7 +180,7 @@ ${SOUL_SCHEMA.map(f => `- ${f.key} (${f.label}): ${f.hint}`).join('\n')}
 ### TASK ###
 1. For every schema key output value (concrete, promptable, 1-2 sentences, specific to THIS brand) + rationale (one line citing site evidence).
 2. suggestedDescription: one line — category + positioning, as this site presents itself.
-3. suggestedEssence: one line — the product-fidelity essentials (materials, signatures that must never change in imagery).
+3. suggestedEssence: one line — the hero-fidelity essentials (materials, signatures that must never change in imagery).
 
 Output JSON: { "fields": [ { "key", "value", "rationale" } ], "suggestedDescription": string, "suggestedEssence": string }`;
 
@@ -209,7 +209,7 @@ Output JSON: { "fields": [ { "key", "value", "rationale" } ], "suggestedDescript
     return {
         soul: { version: 1, updatedAt: Date.now(), fields },
         suggestedDescription: String(parsed?.suggestedDescription ?? '').trim() || brand.description,
-        suggestedEssence: String(parsed?.suggestedEssence ?? '').trim() || brand.productEssence,
+        suggestedEssence: String(parsed?.suggestedEssence ?? '').trim() || brand.heroEssence,
     };
 }
 

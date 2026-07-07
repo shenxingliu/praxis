@@ -57,7 +57,7 @@ export async function exportBrandBook(): Promise<void> {
 <header>
   <h1>${esc(brand.name)}</h1>
   <p class="sub">${esc(brand.description)}</p>
-  ${brand.productEssence ? `<p class="sub">Product truth: ${esc(brand.productEssence)}</p>` : ''}
+  ${brand.heroEssence ? `<p class="sub">Hero truth: ${esc(brand.heroEssence)}</p>` : ''}
 </header>
 ${axisBlock('narrative', 'Narrative — what we say')}
 ${axisBlock('sensation', 'Sensation — what it feels like')}

@@ -19,7 +19,7 @@ import { generateJson } from './gemini';
  *
  * Each concept carries a concrete MANIFESTATION so generation still gets
  * something obeyable. Abstraction is what makes recombination transferable
- * across contexts, products and even realisms.
+ * across contexts, heroes and even realisms.
  */
 
 const LENSES: ElementType[] = ['visual', 'feeling', 'communication'];

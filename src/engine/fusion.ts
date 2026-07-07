@@ -10,7 +10,7 @@ import { decomposeReference } from './decompose';
  *
  *   pick concept cards (across references, lenses, generations)
  *   → choose the TRANSFER LEVEL (percept / principle / concept / worldview)
- *   → synthesize a brand-new PURE AESTHETIC reference (no product)
+ *   → synthesize a brand-new PURE AESTHETIC reference (no hero)
  *   → red-line check vs locked soul fields
  *   → keep → enters the library as source 'synthesized', gen N+1
  *   → gets decomposed like any reference — new vocabulary for the next round
@@ -195,7 +195,7 @@ export async function synthesizeReference(
 
     const prompt = `Create a single, original AESTHETIC REFERENCE IMAGE for the brand "${brand.name}" — ${brand.description}
 
-This is NOT a product shot. NO product, NO furniture staging requirement, NO text, NO logos. It is a pure piece of visual language — a mood/world the brand could live in.
+This is NOT a hero shot. NO hero, NO furniture staging requirement, NO text, NO logos. It is a pure piece of visual language — a mood/world the brand could live in.
 
 ### FUSE THESE IDEAS (transfer level: ${LEVEL_LABEL[level]}) ###
 ${elements.map((e, i) => `${i + 1}. [${e.type}] ${levelText(e, level)}`).join('\n')}

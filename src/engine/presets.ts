@@ -4,11 +4,11 @@ import { brandKey } from '../domain/brand';
 import { generate } from './engine';
 
 /**
- * Quick presets — "same look, different product".
+ * Quick presets — "same look, different hero".
  * A preset freezes everything about an approved generation EXCEPT the
- * product: params (context mode, purpose, note, camera…), the concept
+ * hero: params (context mode, purpose, note, camera…), the concept
  * cards, and the approved image itself as a STYLE ANCHOR whose pixels
- * lead the mood (the image-role manifest keeps product truth separate).
+ * lead the mood (the image-role manifest keeps hero truth separate).
  *
  * Quick flow is two-step by design: DRAFT (flash, cheap) → EXECUTE (pro).
  */
@@ -53,7 +53,7 @@ export async function deletePreset(id: string): Promise<void> {
     await storage.kvSet(KEY(), all.filter(p => p.id !== id));
 }
 
-/** Run a preset with new products. tier 'flash' = draft, 'pro' = final. */
+/** Run a preset with new heroes. tier 'flash' = draft, 'pro' = final. */
 export async function runPreset(
     preset: QuickPreset,
     assetIds: string[],

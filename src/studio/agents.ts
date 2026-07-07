@@ -197,7 +197,7 @@ BRIEF: ${job.brief.trim() || '(open exploration — judge against the brand soul
 CHOSEN CONCEPT: ${concept.title} — ${concept.rationale}
 N/S/I: ${concept.nsiSummary}
 REALISM: ${concept.realism}
-PRODUCTS: ${assets.map(a => `${a.name}${a.category ? ` (${a.category})` : ''}`).join('; ') || '(none picked)'}
+HEROES: ${assets.map(a => `${a.name}${a.category ? ` (${a.category})` : ''}`).join('; ') || '(none picked)'}
 CONCEPTS TO RECOMBINE: ${elements.map(e => `[${e.type}] "${e.concept}" (${e.description.slice(0, 80)})`).join('; ') || '(none)'}
 
 ### TASK ###
@@ -251,7 +251,7 @@ export async function makeMoodboard(
         onStatus?.(`Moodboard draft ${i + 1}/3 (flash)…`);
         try {
             const r = await generate(
-                { ...job.plan.params, modelTier: 'flash', note: `${job.plan.params.note ?? ''} — mood study variant ${i + 1}, prioritize atmosphere over product perfection.` },
+                { ...job.plan.params, modelTier: 'flash', note: `${job.plan.params.note ?? ''} — mood study variant ${i + 1}, prioritize atmosphere over hero perfection.` },
                 job.plan.assetIds, onStatus
             );
             await storage.upsertResult({ ...r, jobId: job.id });

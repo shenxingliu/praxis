@@ -116,7 +116,7 @@ export async function distill(): Promise<{ newRules: number; consumed: number }>
     const existingRules = await storage.listRules();
     const brand = await getCurrentBrand().catch(() => null);
 
-    const prompt = `You maintain a knowledge base of image-generation rules for the brand "${brand?.name ?? 'the client'}" — ${brand?.description ?? 'a product brand'}.
+    const prompt = `You maintain a knowledge base of image-generation rules for the brand "${brand?.name ?? 'the client'}" — ${brand?.description ?? 'a hero brand'}.
 
 EXISTING RULES (do not duplicate):
 ${existingRules.map(r => `- [${r.polarity}] (${JSON.stringify(r.scope)}) ${r.rule}`).join('\n') || '(none)'}

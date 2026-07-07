@@ -82,7 +82,7 @@ export async function generate(
         getCurrentBrand().catch(() => null),
     ]);
     const assets = allAssets.filter(a => assetIds.includes(a.id) && a.photos.length > 0);
-    if (assets.length === 0) throw new Error('Pick at least one product with photos.');
+    if (assets.length === 0) throw new Error('Pick at least one hero with photos.');
 
     const rules = allRules.filter(r => scopeMatches(r, params, assets));
 
@@ -104,7 +104,7 @@ export async function generate(
         .map(id => allRefs.find(r => r.id === id && r.image.kind === 'data'))
         .filter((r): r is Reference => !!r);
     // When a mood anchor is attached, competing interior imagery dilutes the
-    // product signal — cap aesthetic refs harder.
+    // hero signal — cap aesthetic refs harder.
     const aestheticCap = extraRefImages.length > 0
         ? Math.min(2, recipe.referenceBudget.aesthetic)
         : recipe.referenceBudget.aesthetic;
@@ -137,8 +137,8 @@ export async function generate(
         a.photos.slice(0, Math.ceil(recipe.referenceBudget.assetPhotos / assets.length))
             .map(p => p.image.value)
     );
-    // Product hero repeated LAST (adjacent to the text prompt) — models
-    // attend most to the first and last images; the product bookends both.
+    // Hero repeated LAST (adjacent to the text prompt) — models
+    // attend most to the first and last images; the hero bookends both.
     const heroReminder = assetImages[0] ? [assetImages[0]] : [];
     const refImages = [
         ...extraRefImages,
@@ -148,18 +148,18 @@ export async function generate(
     ];
 
     // IMAGE MANIFEST — the model must know which attached image plays which
-    // role, or it will copy the product from a mood anchor / style ref
-    // instead of the true product photos (the classic consistency killer).
+    // role, or it will copy the hero from a mood anchor / style ref
+    // instead of the true hero photos (the classic consistency killer).
     const n = assetImages.length;
     const anchorIdx = n + 1;
     const plateIdx = anchorIdx + extraRefImages.length;
     const aestheticStart = plateIdx + (plate ? 1 : 0);
     const manifestLines = [
-        `Images 1-${n}: PRODUCT SOURCE OF TRUTH. Reconstruct the product EXACTLY and ONLY from these — silhouette, geometry, color, material, hardware. If any other attached image shows a similar product, IGNORE that rendering completely. The decorative styling in these photos (bedding, props, dressing) is NOT part of the product — restyle it per the creative direction.`,
-        extraRefImages.length > 0 && `Image ${anchorIdx}${extraRefImages.length > 1 ? `-${anchorIdx + extraRefImages.length - 1}` : ''}: MOOD ANCHOR — an approved rough draft. Inherit its light, palette, atmosphere and composition energy ONLY. Its product rendering is APPROXIMATE and WRONG — never copy any object geometry from it.`,
+        `Images 1-${n}: HERO SOURCE OF TRUTH. Reconstruct the hero EXACTLY and ONLY from these — silhouette, geometry, color, material, hardware. If any other attached image shows a similar hero, IGNORE that rendering completely. The decorative styling in these photos (bedding, props, dressing) is NOT part of the hero — restyle it per the creative direction.`,
+        extraRefImages.length > 0 && `Image ${anchorIdx}${extraRefImages.length > 1 ? `-${anchorIdx + extraRefImages.length - 1}` : ''}: MOOD ANCHOR — an approved rough draft. Inherit its light, palette, atmosphere and composition energy ONLY. Its hero rendering is APPROXIMATE and WRONG — never copy any object geometry from it.`,
         plate && `Image ${plateIdx}: BACKDROP PLATE — reconstruct this exact backdrop with zero drift.`,
         aesthetic.length > 0 && `Images ${aestheticStart}-${aestheticStart + aesthetic.length - 1}: AESTHETIC REFERENCES — style, light and material language only. NEVER copy their subjects or furniture.`,
-        heroReminder.length > 0 && `LAST image: the product hero photo repeated as a REMINDER — this is what the product must look like.`,
+        heroReminder.length > 0 && `LAST image: the hero photo repeated as a REMINDER — this is what the hero must look like.`,
     ].filter(Boolean);
     const prompt = `${recipe.buildPrompt(ctx)}
 
@@ -167,9 +167,9 @@ export async function generate(
 ${manifestLines.join('\n')}
 
 ### FINAL, NON-NEGOTIABLE ###
-1. The product must be pixel-faithful to images 1-${n}: same silhouette, proportions, construction, material, color, hardware.
-2. The listed product(s) are the ONLY furniture in the image — zero invented companion pieces.
-3. The product must be fully styled per the direction (dressed bed, curated surfaces) — styling changes, the product never does.`;
+1. The hero must be pixel-faithful to images 1-${n}: same silhouette, proportions, construction, material, color, hardware.
+2. The listed hero(s) are the ONLY furniture in the image — zero invented companion pieces.
+3. The hero must be fully styled per the direction (dressed bed, curated surfaces) — styling changes, the hero never does.`;
 
     // Concept half-life: touch lastUsedAt on every concept used.
     for (const el of elements) {
@@ -186,48 +186,48 @@ ${manifestLines.join('\n')}
         imageSize: params.size,
     });
 
-    // ---- Product-consistency enforcement (pro generations only) ----
-    // An inspector agent compares the render against the product photos.
+    // ---- Hero-consistency enforcement (pro generations only) ----
+    // An inspector agent compares the render against the hero photos.
     // On failure it regenerates ONCE with the concrete deviations injected —
     // prompt persuasion plus after-the-fact enforcement.
     let consistency: GenerationResult['consistency'];
     if (model === MODELS.imagePro && assetImages.length > 0) {
         const check = async (img: string) => {
             const parsed = await generateJson<{ pass: boolean; issues: string[] }>(
-                `The first ${Math.min(assetImages.length, 5)} attached image(s) are OFFICIAL PRODUCT PHOTOS. The LAST attached image is an AI-generated marketing image featuring this product.
+                `The first ${Math.min(assetImages.length, 5)} attached image(s) are OFFICIAL HERO PHOTOS. The LAST attached image is an AI-generated marketing image featuring this hero.
 
 Check TWO things:
-1. PRODUCT FIDELITY: silhouette, proportions, structure/construction, material and grain, color/finish, hardware. IGNORE styling (bedding, props, dressing), environment, lighting and camera angle — those are allowed to differ.
-2. FURNITURE EXCLUSIVITY: the generated image must contain NO furniture other than the product(s) shown in the official photos. Extra nightstands, chairs, tables, dressers or other beds are violations. Rugs, curtains, plants, wall art, lighting and small decor are fine.
+1. HERO FIDELITY: silhouette, proportions, structure/construction, material and grain, color/finish, hardware. IGNORE styling (bedding, props, dressing), environment, lighting and camera angle — those are allowed to differ.
+2. FURNITURE EXCLUSIVITY: the generated image must contain NO furniture other than the hero(s) shown in the official photos. Extra nightstands, chairs, tables, dressers or other beds are violations. Rugs, curtains, plants, wall art, lighting and small decor are fine.
 
-Output JSON: { "pass": boolean (true only if the product is faithfully identical AND no extra furniture exists), "issues": [up to 4 CONCRETE deviations, each one actionable, e.g. "headboard slats are vertical but should be horizontal" or "remove the invented nightstand on the left"] }`,
+Output JSON: { "pass": boolean (true only if the hero is faithfully identical AND no extra furniture exists), "issues": [up to 4 CONCRETE deviations, each one actionable, e.g. "headboard slats are vertical but should be horizontal" or "remove the invented nightstand on the left"] }`,
                 [...assetImages.slice(0, 5), img]
             );
             return { pass: !!parsed?.pass, issues: (parsed?.issues ?? []).map(String).slice(0, 4) };
         };
         try {
-            onStatus?.('Inspecting product consistency…');
+            onStatus?.('Inspecting hero consistency…');
             const first = await check(out.image);
             if (first.pass || first.issues.length === 0) {
                 consistency = { ...first, retried: false };
             } else {
                 // Surgical correction: EDIT the failed image instead of
                 // re-rendering. Scene, styling and light are kept; only the
-                // product is rebuilt from its photos. Far more reliable than
+                // hero is rebuilt from its photos. Far more reliable than
                 // a fresh render, which re-rolls the whole composition.
-                onStatus?.('Consistency failed — surgically correcting the product…');
+                onStatus?.('Consistency failed — surgically correcting the hero…');
                 const corrected = await generateImage({
                     prompt: `EDIT the FIRST attached image. This is an image-editing task, not a new composition.
 
 KEEP EXACTLY: the environment, composition, camera, lighting, styling, bedding, props and mood of the first image.
-FIX ONLY THE PRODUCT: rebuild it to match the product photos (all attached images after the first) with zero deviation — silhouette, proportions, construction, material, color, hardware.
+FIX ONLY THE HERO: rebuild it to match the hero photos (all attached images after the first) with zero deviation — silhouette, proportions, construction, material, color, hardware.
 
 Known defects to correct:
 ${first.issues.map(s => `- ${s}`).join('\n')}
 
 ### ATTACHED IMAGE ROLES ###
-Image 1: the image to edit (everything except the product is correct).
-Images 2-${1 + Math.min(assetImages.length, 6)}: PRODUCT SOURCE OF TRUTH.`,
+Image 1: the image to edit (everything except the hero is correct).
+Images 2-${1 + Math.min(assetImages.length, 6)}: HERO SOURCE OF TRUTH.`,
                     referenceImages: [out.image, ...assetImages.slice(0, 6)],
                     model,
                     aspectRatio: params.ratio,
@@ -279,24 +279,24 @@ export const REALISM_SKELETON: Record<Realism, { opener: string; physics: string
     },
     surreal: {
         opener: 'You are a visionary art director for conceptual brand imagery. Create a surreal, dreamlike composition — impossible as a place, impeccable as a photograph.',
-        physics: 'The PRODUCT obeys real physics and stays perfectly true to its reference photos; the environment may bend space, gravity, scale and weather in service of the concept. Cinematic, 8k.',
+        physics: 'The HERO obeys real physics and stays perfectly true to its reference photos; the environment may bend space, gravity, scale and weather in service of the concept. Cinematic, 8k.',
     },
     abstract: {
-        opener: 'You are an art director for abstract still-life brand imagery. Compose the product within a non-literal, formal environment of pure shape, material and light.',
-        physics: 'The PRODUCT stays photorealistic and true to its references; the environment is abstract — geometric forms, fields of color, sculptural light. Gallery-grade, 8k.',
+        opener: 'You are an art director for abstract still-life brand imagery. Compose the hero within a non-literal, formal environment of pure shape, material and light.',
+        physics: 'The HERO stays photorealistic and true to its references; the environment is abstract — geometric forms, fields of color, sculptural light. Gallery-grade, 8k.',
     },
 };
 
 /** Shared prompt fragments used by all recipes. */
 export const promptBlocks = {
-    productFidelity(assets: Asset[], brand: Brand | null): string {
-        const essence = brand?.productEssence?.trim();
+    heroFidelity(assets: Asset[], brand: Brand | null): string {
+        const essence = brand?.heroEssence?.trim();
         return assets.map(a =>
-            `PRODUCT: ${a.name}${a.category ? ` (${a.category})` : ''}
-SOURCE OF TRUTH: the attached reference photos for this product. Use ONLY them.
-FIDELITY RULE — applies to the PRODUCT ITSELF ONLY: reconstruct its exact silhouette, geometry, construction, color, material texture and hardware${essence ? `, with special care for: ${essence}` : ''}. ZERO deviation, no creative reinterpretation.
-STYLING RULE — decorative styling is NOT the product: bedding, pillows, throws, tabletop objects, vases, books, plants and any dressing visible in the product photos are disposable staging. REPLACE them with styling that serves THIS generation's creative direction. STYLING IS MANDATORY, not optional: a bed MUST be fully dressed (mattress, layered bedding, pillows) in the direction's palette and mood; tables/desks/consoles MUST carry a few curated objects; shelves must not be empty. A bare, unstyled product is a FAILED image unless the direction explicitly asks for bare. Styling must never alter or obscure the product's own structure, material or color.
-EXCLUSIVITY RULE — the listed product(s) are the ONLY furniture in the frame. NEVER invent companion furniture: no extra nightstands, side tables, chairs, benches, dressers, shelving or other beds. The environment may include architecture, rugs, curtains, plants, wall art, lighting fixtures and small decor objects — but anything that qualifies as furniture and is not a listed product makes the image a FAILURE.`
+            `HERO: ${a.name}${a.category ? ` (${a.category})` : ''}
+SOURCE OF TRUTH: the attached reference photos for this hero. Use ONLY them.
+FIDELITY RULE — applies to the HERO ITSELF ONLY: reconstruct its exact silhouette, geometry, construction, color, material texture and hardware${essence ? `, with special care for: ${essence}` : ''}. ZERO deviation, no creative reinterpretation.
+STYLING RULE — decorative styling is NOT the hero: bedding, pillows, throws, tabletop objects, vases, books, plants and any dressing visible in the hero photos are disposable staging. REPLACE them with styling that serves THIS generation's creative direction. STYLING IS MANDATORY, not optional: a bed MUST be fully dressed (mattress, layered bedding, pillows) in the direction's palette and mood; tables/desks/consoles MUST carry a few curated objects; shelves must not be empty. A bare, unstyled hero is a FAILED image unless the direction explicitly asks for bare. Styling must never alter or obscure the hero's own structure, material or color.
+EXCLUSIVITY RULE — the listed hero(s) are the ONLY furniture in the frame. NEVER invent companion furniture: no extra nightstands, side tables, chairs, benches, dressers, shelving or other beds. The environment may include architecture, rugs, curtains, plants, wall art, lighting fixtures and small decor objects — but anything that qualifies as furniture and is not a listed hero makes the image a FAILURE.`
         ).join('\n\n');
     },
     brand(brand: Brand | null): string {

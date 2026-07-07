@@ -5,7 +5,7 @@ import { Asset, BudgetConfig, Reference } from '../domain/types';
 import { INVENTORY_CHANGED_EVENT } from './events';
 import { S } from './styles';
 
-/** System — stores overview, budget, V1 data import. (The former M1 panel.) */
+/** System — stores overview, budget, and optional legacy data import. */
 export default function SystemView() {
     const [counts, setCounts] = useState({ assets: 0, references: 0, rules: 0, results: 0, signals: 0 });
     const [budget, setBudgetState] = useState<BudgetConfig>({ monthlyUsd: 50, warnAtFraction: 0.8 });
@@ -61,12 +61,12 @@ export default function SystemView() {
         await storage.setBudget(next);
     };
 
-    /** One-click Greenington import: the V1.3 app's legacy tables (same
-     *  Supabase project) already hold 2.0-shaped assets/references — read
-     *  them, stamp the active brandId, write into praxis_* tables. */
+    /** One-click legacy import: old cloud tables may already hold compatible
+     *  assets/references — read them, stamp the active brandId, write into
+     *  praxis_* tables. */
     const importFromV13Cloud = async () => {
         if (!isCloud || !(storage instanceof SupabaseProvider)) return;
-        setImportLog('Importing from Lumina V1.3 cloud…');
+        setImportLog('Importing from legacy cloud tables...');
         try {
             const [assetRows, refRows] = await Promise.all([
                 storage.readLegacyTable<{ id: string; data: Asset }>('assets'),
@@ -75,7 +75,7 @@ export default function SystemView() {
             const assets = assetRows.map(r => r.data).filter(a => a?.name && Array.isArray(a.photos));
             const references = refRows.map(r => r.data).filter(r => r?.image?.value);
             await storage.importBulk({ assets, references });
-            setImportLog(`Imported ${assets.length} products + ${references.length} references from V1.3 cloud`);
+            setImportLog(`Imported ${assets.length} heroes + ${references.length} references from legacy cloud tables`);
             window.dispatchEvent(new CustomEvent(INVENTORY_CHANGED_EVENT));
         } catch (err: any) {
             setImportLog(`Import failed: ${err?.message || err}`);
@@ -109,7 +109,7 @@ export default function SystemView() {
             <h2 style={{ fontSize: 16 }}>Stores</h2>
             <table style={{ fontSize: 14, borderSpacing: '1.5rem 0.25rem' }}>
                 <tbody>
-                    <tr><td>Assets (product truth)</td><td><strong>{counts.assets}</strong></td></tr>
+                    <tr><td>Assets (hero truth)</td><td><strong>{counts.assets}</strong></td></tr>
                     <tr><td>References (aesthetics)</td><td><strong>{counts.references}</strong></td></tr>
                     <tr><td>Knowledge rules</td><td><strong>{counts.rules}</strong></td></tr>
                     <tr><td>Results</td><td><strong>{counts.results}</strong></td></tr>
@@ -127,7 +127,7 @@ export default function SystemView() {
             <h2 style={{ fontSize: 16, marginTop: 24 }}>Data</h2>
             {isCloud && (
                 <button style={{ ...S.btn, marginRight: 8 }} onClick={importFromV13Cloud}>
-                    ⇩ Import Greenington from Lumina V1.3 cloud
+                    Import legacy cloud data
                 </button>
             )}
             {isCloud && (
@@ -135,7 +135,7 @@ export default function SystemView() {
                     Upload local data → cloud (one-time)
                 </button>
             )}
-            <button style={S.btnGhost} onClick={() => fileRef.current?.click()}>Import V1 data (migration-out/*.json)</button>
+            <button style={S.btnGhost} onClick={() => fileRef.current?.click()}>Import legacy data (migration-out/*.json)</button>
             <input ref={fileRef} type="file" multiple accept=".json" style={{ display: 'none' }} onChange={e => importFiles(e.target.files)} />
             {importLog && <p style={{ fontSize: 13, color: '#059669' }}>{importLog}</p>}
         </div>

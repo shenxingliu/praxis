@@ -11,9 +11,9 @@ import { getCurrentBrandId } from '../domain/brand';
  * the table shape is uniform ({id, data jsonb} / kv{key, value jsonb}) so
  * plain fetch covers everything.
  *
- * Praxis uses its OWN praxis_* tables. The V1.3 app may share the same
- * Supabase project — its tables (assets/refs/…) are never touched except
- * by the explicit one-way import in the System page.
+ * Praxis uses its OWN praxis_* tables. Legacy tables may exist in the same
+ * Supabase project; they are never touched except by the explicit one-way
+ * import in the System page.
  *
  * Brand scoping: reads filter server-side on data->>brandId.
  *
@@ -189,9 +189,9 @@ export class SupabaseProvider implements StorageProvider {
         if (data.signals?.length) await this.upsert(TABLE.signals, withBrand(data.signals));
     }
 
-    // ---- One-way import from the V1.3 app's tables (same project) ----
-    /** Reads the V1.3 legacy tables directly — used by the Greenington
-     *  import in System. Never writes to them. */
+    // ---- One-way import from legacy tables (same project) ----
+    /** Reads legacy tables directly. Used only by the optional System import.
+     *  Never writes to them. */
     async readLegacyTable<T>(table: 'assets' | 'refs' | 'kv', query = ''): Promise<T[]> {
         const select = table === 'kv' ? 'key,value' : 'id,data';
         const resp = await fetch(`${this.url}/rest/v1/${table}?select=${select}${query}`, {
