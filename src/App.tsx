@@ -71,7 +71,7 @@ export default function App() {
                 button:not(:disabled):hover { opacity: .86; }
                 button:not(:disabled):active { transform: scale(.96); }
                 button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible {
-                    outline: 2px solid rgba(91, 141, 239, 0.72);
+                    outline: 2px solid rgba(209, 72, 54, 0.72);
                     outline-offset: 2px;
                 }
                 button:disabled { cursor: progress; }
@@ -126,7 +126,7 @@ export default function App() {
             <section style={{ ...S.shell, ...(isNarrow ? { minHeight: 0 } : {}) }}>
                 <div style={{ ...S.topbar, ...(isNarrow ? { minHeight: 44, padding: '0 14px' } : {}) }}>
                     <div>
-                        <div style={{ fontSize: 14, fontWeight: 750, color: '#1f232b' }}>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: '#0b0b0b', letterSpacing: -0.1 }}>
                             {TABS.find(t => t.id === tab)?.label}
                         </div>
                         <div style={{ fontSize: 11.5, color: '#7b8190', marginTop: 2 }}>

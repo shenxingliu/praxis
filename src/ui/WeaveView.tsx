@@ -153,7 +153,7 @@ const Ball: React.FC<{ az: number; pi: number; size: number }> = ({ az, pi, size
                 );
             })}
             {fz > 0 && <circle cx={fx} cy={fy} r={size >= 60 ? 4.5 : 3}
-                fill="#d97706" stroke="#fff" strokeWidth={1.2} />}
+                fill="#D14836" stroke="#fff" strokeWidth={1.2} />}
         </svg>
     );
 };
@@ -762,7 +762,7 @@ export default function WeaveView() {
 
             {/* Save dialog */}
             {showSaveDialog && (
-                <div style={{ ...S.card, display: 'flex', gap: 8, alignItems: 'center', border: '1.5px solid #d97706', background: '#fffbeb' }}>
+                <div style={{ ...S.card, display: 'flex', gap: 8, alignItems: 'center', border: '1.5px solid #D14836', background: '#fff1f0' }}>
                     <span style={{ ...S.label, whiteSpace: 'nowrap' }}>SAVE WORKFLOW</span>
                     <input
                         value={saveName}
@@ -844,7 +844,7 @@ export default function WeaveView() {
                             const a = nodes.find(nn => nn.id === linking.from);
                             if (!a) return null;
                             return <path d={bezier(a.x + W(a), anchorY(a), linking.x, linking.y)}
-                                stroke="#d97706" strokeWidth={1.8} fill="none" strokeDasharray="5 4" />;
+                                stroke="#D14836" strokeWidth={1.8} fill="none" strokeDasharray="5 4" />;
                         })()}
                     </svg>
                     {nodes.map(nn => {
@@ -869,8 +869,8 @@ export default function WeaveView() {
                                     ...(H(nn) ? { height: H(nn) } : {}),
                                     background: nn.kind === 'output' ? '#18181b' : '#fff',
                                     borderRadius: 12,
-                                    border: linking?.from === nn.id ? '2px solid #d97706'
-                                        : linking ? '2px dashed #d97706'
+                                    border: linking?.from === nn.id ? '2px solid #D14836'
+                                        : linking ? '2px dashed #D14836'
                                         : open ? '2px solid #18181b' : '1px solid #d4d4d8',
                                     boxShadow: open ? '0 8px 24px rgba(0,0,0,0.16)' : '0 3px 10px rgba(0,0,0,0.08)',
                                     cursor: 'grab', userSelect: 'none', padding: 6, zIndex: open ? 5 : 1,
@@ -925,7 +925,7 @@ export default function WeaveView() {
                                             style={fitImage(fixed)} />}
                                         <div style={{ fontSize: 10, fontWeight: 700, marginTop: 3, display: fixed ? 'none' : undefined }}>
                                             {a.name}
-                                            {(nn.quantity ?? 1) > 1 && <span style={{ color: '#d97706', marginLeft: 4 }}>×{nn.quantity}</span>}
+                                            {(nn.quantity ?? 1) > 1 && <span style={{ color: '#D14836', marginLeft: 4 }}>×{nn.quantity}</span>}
                                         </div>
                                     </div>
                                 )}
