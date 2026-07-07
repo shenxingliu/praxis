@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Asset, Element, GenerationParams, GenerationResult } from '../domain/types';
 import { storage } from '../storage/local';
-import { weaveGenerate, extractFacets, deriveIdea, describeAsPrompt, WeaveFacet } from '../engine/weave';
+import { weaveGenerate, extractFacets, deriveIdea, describeAsPrompt, rotateView, WeaveFacet } from '../engine/weave';
 import { recordSignal } from '../learning/learning';
 import { BudgetExceededError } from '../engine/engine';
 import { openLightbox } from './lightbox';
@@ -17,7 +17,7 @@ import { S, chip } from './styles';
  * content — click a node to expand its action buttons.
  */
 
-type NodeKind = 'product' | 'element' | 'image' | 'note' | 'facet' | 'output';
+type NodeKind = 'product' | 'element' | 'image' | 'note' | 'facet' | 'output' | 'rotate';
 interface WeaveEdge { id: string; from: string; to: string }
 interface WeaveNode {
     id: string;
@@ -26,13 +26,18 @@ interface WeaveNode {
     y: number;
     assetId?: string;
     elementId?: string;
-    image?: string;        // image node source / output result
+    image?: string;        // image node cover / output result / rotate result
+    images?: string[];     // image nodes: ALL angles (multi-image subject)
     text?: string;         // prompt nodes
     dimension?: string;    // facet nodes
     description?: string;  // facet nodes / concept-role idea
     role?: 'fusion' | 'product' | 'concept';
-    resultId?: string;     // output nodes: the GenerationResult behind image
+    resultId?: string;     // output/rotate nodes: GenerationResult behind image
+    angle?: number;        // rotate nodes: target viewpoint in degrees
 }
+
+const nodeImages = (nn: WeaveNode): string[] =>
+    nn.images && nn.images.length > 0 ? nn.images : nn.image ? [nn.image] : [];
 
 const RATIOS: GenerationParams['ratio'][] = ['1:1', '16:9', '4:3', '3:4', '9:16'];
 const SIZES: NonNullable<GenerationParams['size']>[] = ['1K', '2K', '4K'];
@@ -107,6 +112,22 @@ export default function WeaveView() {
 
     const addImages = async (files: File[] | FileList | null) => {
         for (const f of imageFiles(files)) add({ kind: 'image', image: await fileToDataUrl(f), role: 'fusion' });
+    };
+
+    /** Append more angles to an existing image node (multi-image subject). */
+    const appendTarget = useRef<WeaveNode | null>(null);
+    const appendRef = useRef<HTMLInputElement>(null);
+    const appendAngles = async (files: FileList | null) => {
+        const target = appendTarget.current;
+        appendTarget.current = null;
+        if (!target) return;
+        const extra: string[] = [];
+        for (const f of imageFiles(files)) extra.push(await fileToDataUrl(f));
+        if (extra.length === 0) return;
+        setNodes(prev => prev.map(x => x.id === target.id
+            ? { ...x, images: [...nodeImages(x), ...extra] }
+            : x));
+        setNotice(`✓ ${extra.length} angle${extra.length === 1 ? '' : 's'} merged into the node.`);
     };
 
     // --- linking ---
@@ -242,10 +263,13 @@ export default function WeaveView() {
             .map(nn => ({ image: nn.image!, dimension: nn.dimension!, description: nn.description! }));
         const imageNodes = pool.filter(nn => nn.kind === 'image' && nn.image);
         const fusionImages = imageNodes.filter(nn => (nn.role ?? 'fusion') === 'fusion').map(nn => nn.image!);
-        const adhocProductImages = imageNodes.filter(nn => nn.role === 'product').map(nn => nn.image!);
+        // Product-role nodes contribute ALL their merged angles as truth.
+        const adhocProductImages = imageNodes.filter(nn => nn.role === 'product').flatMap(nodeImages);
         const conceptIdeas = imageNodes
             .filter(nn => nn.role === 'concept')
             .map(nn => ({ image: nn.image!, idea: nn.description?.trim() || 'the transferable aesthetic idea of this image' }));
+        // Rotate nodes with results feed their view in as product truth too.
+        adhocProductImages.push(...pool.filter(nn => nn.kind === 'rotate' && nn.image).map(nn => nn.image!));
         const note = pool.filter(nn => nn.kind === 'note' && nn.text?.trim()).map(nn => nn.text!.trim()).join(' · ') || undefined;
         // Output nodes with results also act as fusion sources when linked onward.
         const outputImages = pool.filter(nn => nn.kind === 'output' && nn.image).map(nn => nn.image!);
@@ -304,6 +328,57 @@ export default function WeaveView() {
         if (r) add({ kind: 'output', image: r.image.value, resultId: r.id }, { x: f.x + 150, y: f.y });
     };
 
+    /** Rotate node inputs: images from directly-connected neighbors. */
+    const rotateInputs = (rn: WeaveNode): string[] => {
+        const neighborIds = edges
+            .filter(e => e.from === rn.id || e.to === rn.id)
+            .map(e => (e.from === rn.id ? e.to : e.from));
+        const imgs: string[] = [];
+        for (const id of neighborIds) {
+            const nb = nodes.find(x => x.id === id);
+            if (!nb) continue;
+            if (nb.kind === 'image' || nb.kind === 'output' || nb.kind === 'rotate') imgs.push(...nodeImages(nb));
+            if (nb.kind === 'product') {
+                const a = assets.find(x => x.id === nb.assetId);
+                if (a) imgs.push(...a.photos.slice(0, 4).map(p => p.image.value));
+            }
+        }
+        return imgs.slice(0, 8);
+    };
+
+    const runRotate = async (rn: WeaveNode, deg?: number) => {
+        const angle = deg ?? rn.angle ?? 90;
+        const imgs = rotateInputs(rn);
+        if (imgs.length === 0) { setNotice('❌ Connect an image or product to the 🔄 node first (its angles become the input).'); return; }
+        setBusy(`Rotating to ${angle}°…`);
+        setNotice('');
+        try {
+            const r = await rotateView(imgs, angle, { ratio, size, tier: tierSel }, setBusy);
+            resultsRef.current.set(r.id, r);
+            setNodes(prev => prev.map(x => x.id === rn.id ? { ...x, image: r.image.value, resultId: r.id, angle } : x));
+            setNotice(`✓ ${angle}° view rendered.`);
+        } catch (err: any) { setNotice(`❌ ${err?.message || err}`); }
+        setBusy('');
+    };
+
+    /** Full turntable: 8 views at 45° steps, laid out next to the node. */
+    const run360 = async (rn: WeaveNode) => {
+        const imgs = rotateInputs(rn);
+        if (imgs.length === 0) { setNotice('❌ Connect an image or product to the 🔄 node first.'); return; }
+        for (let i = 0; i < 8; i++) {
+            const angle = i * 45;
+            setBusy(`360° turntable — ${i + 1}/8 (${angle}°)…`);
+            try {
+                const r = await rotateView(imgs, angle, { ratio, size, tier: 'flash' }, setBusy);
+                resultsRef.current.set(r.id, r);
+                add({ kind: 'output', image: r.image.value, resultId: r.id },
+                    { x: rn.x + 160 + (i % 4) * 215, y: rn.y + Math.floor(i / 4) * 215 });
+            } catch (err: any) { setNotice(`❌ ${angle}°: ${err?.message || err}`); break; }
+        }
+        setBusy('');
+        setNotice('✓ Turntable done — 8 views on the board.');
+    };
+
     const saveResult = async (nn: WeaveNode) => {
         const r = nn.resultId ? resultsRef.current.get(nn.resultId) : undefined;
         if (!r) { setNotice('❌ Result metadata not in this session — download instead.'); return; }
@@ -352,8 +427,11 @@ export default function WeaveView() {
                 <button style={S.btnGhost} onClick={() => fileRef.current?.click()}>🖼 + Images</button>
                 <button style={S.btnGhost} onClick={() => add({ kind: 'note', text: '' })}>✍️ + Prompt</button>
                 <button style={S.btnGhost} onClick={() => add({ kind: 'output' })}>🎯 + Output</button>
+                <button style={S.btnGhost} onClick={() => add({ kind: 'rotate', angle: 90 })} title="Turntable: connect a subject, render it from any angle or a full 360°">🔄 + Rotate</button>
                 <input ref={fileRef} type="file" multiple accept="image/*" style={{ display: 'none' }}
                     onChange={e => { addImages(e.target.files); e.currentTarget.value = ''; }} />
+                <input ref={appendRef} type="file" multiple accept="image/*" style={{ display: 'none' }}
+                    onChange={e => { appendAngles(e.target.files); e.currentTarget.value = ''; }} />
                 <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                     {RATIOS.map(r => <button key={r} style={chip(ratio === r)} onClick={() => setRatio(r)}>{r}</button>)}
                     {SIZES.map(s => <button key={s} style={chip(size === s)} onClick={() => setSize(s)}>{s}</button>)}
@@ -507,10 +585,33 @@ export default function WeaveView() {
                                 )}
                                 {nn.kind === 'image' && nn.image && (
                                     <div onClick={() => toggleExpand(nn.id)}>
-                                        <img src={nn.image} alt="" draggable={false}
-                                            style={{ width: '100%', borderRadius: 8, display: 'block' }} />
+                                        {nodeImages(nn).length > 1 ? (
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                                                {nodeImages(nn).slice(0, 4).map((img, i) => (
+                                                    <img key={i} src={img} alt="" draggable={false}
+                                                        style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 6, display: 'block' }} />
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <img src={nn.image} alt="" draggable={false}
+                                                style={{ width: '100%', borderRadius: 8, display: 'block' }} />
+                                        )}
                                         <div style={{ fontSize: 9, color: '#a1a1aa', marginTop: 2 }}>
                                             {nn.role === 'product' ? '🛋 product (exact)' : nn.role === 'concept' ? '💡 concept' : '🖼 fusion'}
+                                            {nodeImages(nn).length > 1 ? ` · ${nodeImages(nn).length} angles` : ''}
+                                        </div>
+                                    </div>
+                                )}
+                                {nn.kind === 'rotate' && (
+                                    <div onClick={() => toggleExpand(nn.id)} style={{ textAlign: 'center' }}>
+                                        {nn.image ? (
+                                            <img src={nn.image} alt="" draggable={false}
+                                                style={{ width: '100%', borderRadius: 8, display: 'block' }} />
+                                        ) : (
+                                            <div style={{ fontSize: 20, paddingTop: 8 }}>🔄</div>
+                                        )}
+                                        <div style={{ fontSize: 9, color: '#71717a', margin: '3px 0' }}>
+                                            Rotate · {nn.angle ?? 90}° · {rotateInputs(nn).length} input img
                                         </div>
                                     </div>
                                 )}
@@ -572,10 +673,32 @@ export default function WeaveView() {
                                                         {role === 'fusion' ? '🖼' : role === 'product' ? '🛋' : '💡'} {role}
                                                     </button>
                                                 ))}
+                                                <button style={miniBtn} disabled={!!busy} onClick={() => { appendTarget.current = nn; appendRef.current?.click(); }}
+                                                    title="Merge more angles of the same subject into this node">＋ angles</button>
                                                 <button style={miniBtn} disabled={!!busy} onClick={() => decomposeNode(nn)}>⚡ facets</button>
                                                 <button style={miniBtn} disabled={!!busy} onClick={() => imageToPrompt(nn)}>✍️ prompt</button>
                                                 <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>🔍 zoom</button>
                                                 <button style={miniBtn} onClick={() => download(nn)}>⬇</button>
+                                            </>
+                                        )}
+                                        {nn.kind === 'rotate' && (
+                                            <>
+                                                <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap', flexBasis: '100%' }}>
+                                                    {[0, 45, 90, 135, 180, 225, 270, 315].map(deg => (
+                                                        <button key={deg} disabled={!!busy}
+                                                            style={{ ...miniBtn, background: (nn.angle ?? 90) === deg ? '#18181b' : '#f4f4f5', color: (nn.angle ?? 90) === deg ? '#fff' : '#3f3f46', padding: '2px 5px' }}
+                                                            onClick={() => setNodes(prev => prev.map(x => x.id === nn.id ? { ...x, angle: deg } : x))}>
+                                                            {deg}°
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                <button style={{ ...miniBtn, background: '#18181b', color: '#fff' }} disabled={!!busy} onClick={() => runRotate(nn)}>▶ Rotate</button>
+                                                <button style={miniBtn} disabled={!!busy} onClick={() => run360(nn)} title="8 views at 45° steps (flash) — laid out on the board">🔄 360°</button>
+                                                {nn.image && <>
+                                                    <button style={miniBtn} onClick={() => download(nn)}>⬇</button>
+                                                    <button style={miniBtn} disabled={!!busy} onClick={() => saveResult(nn)}>★</button>
+                                                    <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>🔍</button>
+                                                </>}
                                             </>
                                         )}
                                         {nn.kind === 'facet' && (

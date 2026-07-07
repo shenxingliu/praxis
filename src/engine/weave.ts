@@ -64,6 +64,58 @@ export async function describeAsPrompt(image: string): Promise<string> {
     return String(parsed?.prompt ?? '').trim();
 }
 
+/**
+ * Turntable rotation — render the SAME subject (product, object or person)
+ * from a new viewpoint, using one or more reference angles. Geometry,
+ * materials, colors and identity are preserved exactly; neutral backdrop.
+ */
+export async function rotateView(
+    sourceImages: string[],
+    angleDegrees: number,
+    opts: { ratio: GenerationParams['ratio']; size?: GenerationParams['size']; tier: 'flash' | 'pro' },
+    onStatus?: (t: string) => void
+): Promise<GenerationResult> {
+    if (sourceImages.length === 0) throw new Error('Connect or add at least one image of the subject.');
+    const model = opts.tier === 'pro' ? MODELS.imagePro : MODELS.imageFlash;
+    const cost = COST_ESTIMATE_USD[model] ?? 0.1;
+    const month = new Date().toISOString().slice(0, 7);
+    const budget = await storage.getBudget();
+    const spent = await storage.getMonthSpend(month);
+    if (spent + cost > budget.monthlyUsd) throw new Error(`Monthly budget reached: $${spent.toFixed(2)} of $${budget.monthlyUsd.toFixed(2)}.`);
+
+    const dir = ((angleDegrees % 360) + 360) % 360;
+    const prompt = `TURNTABLE TASK. The attached image(s) show ONE subject (a product, object or person) from ${sourceImages.length > 1 ? 'multiple angles' : 'one angle'}.
+
+Render the EXACT SAME subject rotated to the ${dir}° viewpoint (0° = the first image's front view; rotation is clockwise around the subject's vertical axis, camera height and distance unchanged).
+
+STRICT IDENTITY: same geometry, proportions, materials, textures, colors, details${sourceImages.length > 1 ? ' — reconcile all provided angles into one consistent subject' : ''}. Infer hidden sides plausibly and consistently.
+BACKDROP: clean neutral studio backdrop, soft even light, gentle grounding shadow. NOTHING else in frame. No text.`;
+
+    onStatus?.(`Rotating to ${dir}°…`);
+    const out = await generateImage({
+        prompt,
+        referenceImages: sourceImages.slice(0, 8),
+        model,
+        aspectRatio: opts.ratio,
+        imageSize: opts.size,
+    });
+
+    const result: GenerationResult = {
+        id: crypto.randomUUID(),
+        brandId: getCurrentBrandId(),
+        params: { outputType: 'silo', ratio: opts.ratio, size: opts.size, note: `turntable ${dir}°`, modelTier: opts.tier },
+        assetIds: [], referenceIds: [], elementIds: [], appliedRuleIds: [],
+        fullPrompt: prompt, model,
+        image: { kind: 'data', value: out.image },
+        estimatedCostUsd: cost,
+        createdAt: Date.now(),
+        adopted: false,
+    };
+    await storage.upsertResult(result);
+    await storage.addSpend({ id: crypto.randomUUID(), resultId: result.id, usd: cost, model, month, createdAt: Date.now() });
+    return result;
+}
+
 export interface WeaveInput {
     assets: Asset[];
     elements: Element[];
