@@ -35,6 +35,7 @@ interface WeaveNode {
     resultId?: string;     // output/rotate nodes: GenerationResult behind image
     angle?: number;        // rotate nodes: azimuth in degrees (free, 0-359)
     pitch?: number;        // rotate nodes: camera elevation −45..+45
+    w?: number;            // custom width (drag the ◢ corner handle)
 }
 
 const nodeImages = (nn: WeaveNode): string[] =>
@@ -137,6 +138,8 @@ export default function WeaveView() {
     const drag = useRef<{ id: string; dx: number; dy: number; moved: boolean } | null>(null);
     /** 3D orbit-drag on rotate nodes: horizontal = azimuth, vertical = pitch. */
     const orbit = useRef<{ id: string; sx: number; sy: number; a0: number; p0: number } | null>(null);
+    /** Corner-handle resizing. */
+    const resizing = useRef<{ id: string; sx: number; w0: number } | null>(null);
     const boardRef = useRef<HTMLDivElement>(null);
     const [pan, setPan] = useState({ x: 40, y: 40 });
     const [scale, setScale] = useState(1);
@@ -233,6 +236,12 @@ export default function WeaveView() {
             setLinking({ ...linking, x: w.x, y: w.y });
             return;
         }
+        const rs = resizing.current;
+        if (rs) {
+            const w = Math.max(90, Math.min(520, Math.round(rs.w0 + (e.clientX - rs.sx) / scale)));
+            setNodes(prev => prev.map(nn => nn.id === rs.id ? { ...nn, w } : nn));
+            return;
+        }
         const o = orbit.current;
         if (o) {
             const az = ((Math.round(o.a0 + (e.clientX - o.sx) * 1.1) % 360) + 360) % 360;
@@ -250,7 +259,7 @@ export default function WeaveView() {
         const p = panning.current;
         if (p) setPan({ x: p.px + (e.clientX - p.sx), y: p.py + (e.clientY - p.sy) });
     };
-    const onUp = () => { drag.current = null; panning.current = null; orbit.current = null; setLinking(null); };
+    const onUp = () => { drag.current = null; panning.current = null; orbit.current = null; resizing.current = null; setLinking(null); };
 
     // Zoom must use a NON-PASSIVE native wheel listener — React's synthetic
     // wheel is passive, so preventDefault() is ignored and the browser zooms
@@ -275,7 +284,7 @@ export default function WeaveView() {
         return () => el.removeEventListener('wheel', handler);
     }, []);
 
-    const W = (nn: WeaveNode) => nn.kind === 'note' ? 200 : nn.kind === 'output' ? (nn.image ? 200 : 110) : 130;
+    const W = (nn: WeaveNode) => nn.w ?? (nn.kind === 'note' ? 200 : nn.kind === 'output' ? (nn.image ? 200 : 110) : 130);
     const anchorY = (nn: WeaveNode) => nn.y + 46;
     const bezier = (x1: number, y1: number, x2: number, y2: number) => {
         const dx = Math.max(40, Math.abs(x2 - x1) / 2);
@@ -649,6 +658,19 @@ export default function WeaveView() {
                                     boxShadow: open ? '0 8px 24px rgba(0,0,0,0.16)' : '0 3px 10px rgba(0,0,0,0.08)',
                                     cursor: 'grab', userSelect: 'none', padding: 6, zIndex: open ? 5 : 1,
                                 }}>
+                                {/* Resize handle — drag ◢ to scale the node */}
+                                <div
+                                    onPointerDown={e => {
+                                        e.stopPropagation();
+                                        resizing.current = { id: nn.id, sx: e.clientX, w0: W(nn) };
+                                    }}
+                                    title="Drag to resize"
+                                    style={{
+                                        position: 'absolute', right: 1, bottom: 1, width: 14, height: 14, zIndex: 6,
+                                        cursor: 'nwse-resize', display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end',
+                                        color: nn.kind === 'output' ? 'rgba(255,255,255,0.5)' : '#c4c4ca', fontSize: 10, lineHeight: 1,
+                                        userSelect: 'none',
+                                    }}>◢</div>
                                 {/* Ports */}
                                 {(['left', 'right'] as const).map(side => (
                                     <div key={side}
