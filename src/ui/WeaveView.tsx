@@ -435,7 +435,7 @@ export default function WeaveView() {
                 // blend into one scale factor via the frame's aspect ratio at
                 // grab time, and height keeps following the content — so a
                 // diagonal (or vertical) pull resizes naturally, never crops.
-                if (nn.kind === 'rotate' || nn.kind === 'output' || nn.kind === 'image') {
+                if (nn.kind === 'rotate' || nn.kind === 'output' || nn.kind === 'image' || nn.kind === 'hero') {
                     const ar = rs.h0 > 0 ? rs.w0 / rs.h0 : 1;
                     const dwRaw = fromLeft ? -dx : dx;
                     const dhRaw = fromTop ? -dy : dy;
@@ -502,7 +502,7 @@ export default function WeaveView() {
     // what's inside (image aspect ratio, trackball, action rows) with no
     // cropping. Notes/facets keep a working default; others keep custom h.
     const H = (nn: WeaveNode) => {
-        if (nn.kind === 'rotate' || nn.kind === 'output' || nn.kind === 'image') return undefined;
+        if (nn.kind === 'rotate' || nn.kind === 'output' || nn.kind === 'image' || nn.kind === 'hero') return undefined;
         return nn.h ?? (
             nn.kind === 'note' ? 136 :
             nn.kind === 'facet' ? 132 :
@@ -1467,7 +1467,7 @@ export default function WeaveView() {
                                             gap: 3,
                                             flexWrap: 'wrap',
                                             marginTop: open ? 5 : 0,
-                                            maxHeight: open ? (fixed ? 58 : 200) : 0,
+                                            maxHeight: open ? (fixed ? 58 : 340) : 0,
                                             overflow: open && fixed ? 'auto' : 'hidden',
                                             opacity: open ? 1 : 0,
                                             transform: open ? 'translateY(0)' : 'translateY(-5px)',
@@ -1549,7 +1549,7 @@ export default function WeaveView() {
                                                 {a && a.photos.length > 1 && (
                                                     <div style={{ flexBasis: '100%', display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 4, paddingTop: 2 }}>
                                                         {a.photos.map(p => (
-                                                            <div key={p.id} style={{ position: 'relative', width: 34, height: 34 }}>
+                                                            <div key={p.id} style={{ position: 'relative', width: 56, height: 56 }}>
                                                                 <img src={p.image.value} alt="" draggable={false}
                                                                     onClick={() => openLightbox(p.image.value)}
                                                                     style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6, display: 'block', cursor: 'zoom-in' }} />
@@ -1557,7 +1557,7 @@ export default function WeaveView() {
                                                                     onClick={() => removeAssetPhoto(a, p.id)}
                                                                     disabled={!!busy}
                                                                     title="Remove this angle from the asset"
-                                                                    style={{ position: 'absolute', top: -5, right: -5, width: 15, height: 15, borderRadius: 999, border: 'none', background: 'rgba(24,24,27,0.85)', color: '#fff', fontSize: 8, lineHeight: 1, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                                                                    style={{ position: 'absolute', top: -6, right: -6, width: 17, height: 17, borderRadius: 999, border: 'none', background: 'rgba(24,24,27,0.85)', color: '#fff', fontSize: 8, lineHeight: 1, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                                                             </div>
                                                         ))}
                                                     </div>
