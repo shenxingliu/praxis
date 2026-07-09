@@ -313,7 +313,12 @@ export default function WeaveView() {
         if (rs) {
             const w = Math.max(90, Math.min(520, Math.round(rs.w0 + (e.clientX - rs.sx) / scale)));
             const h = Math.max(60, Math.min(600, Math.round(rs.h0 + (e.clientY - rs.sy) / scale)));
-            setNodes(prev => prev.map(nn => nn.id === rs.id ? { ...nn, w, h } : nn));
+            setNodes(prev => prev.map(nn => {
+                if (nn.id !== rs.id) return nn;
+                // Image nodes scale by width; height follows the picture.
+                if (nn.kind === 'image' && nodeImages(nn).length === 1) return { ...nn, w, h: undefined };
+                return { ...nn, w, h };
+            }));
             return;
         }
         const o = orbit.current;
@@ -359,7 +364,9 @@ export default function WeaveView() {
     }, []);
 
     const W = (nn: WeaveNode) => nn.w ?? (nn.kind === 'note' ? 200 : nn.kind === 'output' ? (nn.image ? 200 : 110) : 130);
-    const H = (nn: WeaveNode) => nn.h;
+    // Single-image nodes ignore any stored height — the frame always
+    // follows the image's own aspect ratio, never cropping it.
+    const H = (nn: WeaveNode) => (nn.kind === 'image' && nodeImages(nn).length === 1 ? undefined : nn.h);
     const anchorY = (nn: WeaveNode) => nn.y + 46;
     const bezier = (x1: number, y1: number, x2: number, y2: number) => {
         const dx = Math.max(40, Math.abs(x2 - x1) / 2);
@@ -946,12 +953,14 @@ export default function WeaveView() {
                                 style={{
                                     position: 'absolute', left: nn.x, top: nn.y, width: W(nn),
                                     ...(H(nn) ? { height: H(nn) } : {}),
-                                    background: nn.kind === 'output' ? '#18181b' : '#fff',
+                                    background: 'rgba(255,255,255,0.82)',
+                                    backdropFilter: 'blur(24px)',
+                                    WebkitBackdropFilter: 'blur(24px)',
                                     borderRadius: 12,
                                     border: linking?.from === nn.id ? '2px solid #18181b'
                                         : linking ? '2px dashed #52525b'
-                                        : open ? '2px solid #18181b' : '1px solid #d4d4d8',
-                                    boxShadow: open ? '0 8px 24px rgba(0,0,0,0.16)' : '0 3px 10px rgba(0,0,0,0.08)',
+                                        : open ? '2px solid #18181b' : '1px solid #e4e4e7',
+                                    boxShadow: open ? '0 20px 25px -5px rgba(0,0,0,0.14), 0 8px 10px -6px rgba(0,0,0,0.12)' : '0 20px 25px -5px rgba(0,0,0,0.08), 0 8px 10px -6px rgba(0,0,0,0.08)',
                                     cursor: 'grab', userSelect: 'none', padding: 6, zIndex: open ? 5 : 1,
                                     boxSizing: 'border-box',
                                 }}>
@@ -965,7 +974,7 @@ export default function WeaveView() {
                                     style={{
                                         position: 'absolute', right: 1, bottom: 1, width: 14, height: 14, zIndex: 6,
                                         cursor: 'nwse-resize', display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end',
-                                        color: nn.kind === 'output' ? 'rgba(255,255,255,0.5)' : '#c4c4ca', fontSize: 10, lineHeight: 1,
+                                        color: '#c4c4ca', fontSize: 10, lineHeight: 1,
                                         userSelect: 'none',
                                     }}>◢</div>
                                 {/* Ports */}
@@ -983,6 +992,35 @@ export default function WeaveView() {
                                             cursor: 'crosshair', zIndex: 6,
                                         }} />
                                 ))}
+
+                                {/* Header — title + delete; dragging it moves any node (incl. rotate) */}
+                                <div
+                                    onPointerDown={e => { e.stopPropagation(); onDown(e, nn); }}
+                                    onClick={() => toggleExpand(nn.id)}
+                                    style={{
+                                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
+                                        margin: '-6px -6px 6px', padding: '5px 10px',
+                                        borderBottom: '1px solid rgba(228,228,231,0.85)',
+                                        fontSize: 9, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase',
+                                        color: '#71717a', cursor: 'grab',
+                                    }}>
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {nn.kind === 'hero' ? (a?.name || 'Asset')
+                                            : nn.kind === 'element' ? 'Inspiration'
+                                            : nn.kind === 'image' ? (nn.role === 'concept' ? 'Idea ref' : nn.role === 'hero' ? 'Asset ref' : 'Vibe ref')
+                                            : nn.kind === 'note' ? 'Prompt'
+                                            : nn.kind === 'facet' ? `Extract · ${nn.dimension ?? ''}`
+                                            : nn.kind === 'rotate' ? 'Rotate'
+                                            : 'Output'}
+                                    </span>
+                                    <button
+                                        onPointerDown={e => e.stopPropagation()}
+                                        onClick={e => { e.stopPropagation(); remove(nn.id); }}
+                                        title="Delete node"
+                                        style={{ border: 'none', background: 'none', color: '#a1a1aa', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>
+                                        ×
+                                    </button>
+                                </div>
 
                                 {/* --- content (collapsed = content only, no buttons) --- */}
                                 <div style={{
@@ -1035,17 +1073,6 @@ export default function WeaveView() {
                                 )}
                                 {nn.kind === 'rotate' && (
                                     <div style={{ textAlign: 'center' }}>
-                                        {/* Move handle — the ONLY part that drags the node */}
-                                        <div
-                                            onPointerDown={e => { e.stopPropagation(); onDown(e, nn); }}
-                                            title="Drag here to MOVE the node"
-                                            style={{
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                                                fontSize: 9, fontWeight: 800, color: '#71717a', cursor: 'grab',
-                                                background: '#f4f4f5', borderRadius: 6, padding: '3px 0', marginBottom: 4,
-                                            }}>
-                                            ⠿ Rotate — drag here to move
-                                        </div>
                                         {nn.image && (
                                             <img src={nn.image} alt="" draggable={false}
                                                 onClick={() => toggleExpand(nn.id)}
@@ -1082,7 +1109,7 @@ export default function WeaveView() {
                                         onChange={e => setNodes(prev => prev.map(x => x.id === nn.id ? { ...x, text: e.target.value } : x))}
                                         onPointerDown={e => e.stopPropagation()}
                                         onClick={() => setExpandedId(nn.id)}
-                                        style={{ width: '100%', minHeight: 64, height: H(nn) ? 'calc(100% - 4px)' : undefined, border: 'none', outline: 'none', resize: 'none', fontSize: 11, fontFamily: 'inherit', background: '#fffbeb', borderRadius: 8, padding: 6, boxSizing: 'border-box' }}
+                                        style={{ width: '100%', minHeight: 64, height: H(nn) ? 'calc(100% - 4px)' : undefined, border: 'none', outline: 'none', resize: 'none', fontSize: 11, lineHeight: 1.5, fontFamily: 'inherit', background: 'rgba(244,244,245,0.8)', borderRadius: 8, padding: 10, boxSizing: 'border-box' }}
                                     />
                                 )}
                                 {nn.kind === 'output' && (
@@ -1091,12 +1118,12 @@ export default function WeaveView() {
                                             <img src={nn.image} alt="" draggable={false}
                                                 style={fitImage(fixed, { borderRadius: 9 })} />
                                         ) : (
-                                            <>
+                                            <div style={{ background: '#f4f4f5', borderRadius: 8, padding: '18px 6px' }}>
                                                 <div style={{ fontSize: 13, fontWeight: 800, color: '#71717a' }}>OUTPUT</div>
-                                                <div style={{ fontSize: 9, color: '#a1a1aa', margin: '3px 0 8px' }}>
+                                                <div style={{ fontSize: 9, color: '#a1a1aa', marginTop: 3 }}>
                                                     {Math.max(0, componentOf(nn.id).size - 1)} linked · click for Run
                                                 </div>
-                                            </>
+                                            </div>
                                         )}
                                     </div>
                                 )}
@@ -1113,13 +1140,12 @@ export default function WeaveView() {
                                             marginTop: 5,
                                             maxHeight: fixed ? 58 : undefined,
                                             overflow: fixed ? 'auto' : undefined,
-                                            background: nn.kind === 'output' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.82)',
                                             borderRadius: 8,
-                                            padding: nn.kind === 'output' ? 4 : fixed ? 4 : 0,
+                                            padding: fixed ? 4 : 0,
                                         }}>
                                         {nn.kind === 'output' && (
                                             <>
-                                                <button style={{ ...miniBtn, background: '#fff' }} disabled={!!busy} onClick={() => runOutput(nn)}>Run</button>
+                                                <button style={{ ...miniBtn, background: '#18181b', color: '#fff' }} disabled={!!busy} onClick={() => runOutput(nn)}>Run</button>
                                                 {nn.image && <>
                                                     <button style={miniBtn} onClick={() => download(nn)}>Save</button>
                                                     <button style={miniBtn} disabled={!!busy} onClick={() => saveResult(nn)}>Gallery</button>
@@ -1197,7 +1223,6 @@ export default function WeaveView() {
                                                 Analyze / Prompt
                                             </button>
                                         )}
-                                        <button style={{ ...miniBtn, color: '#18181b' }} onClick={() => remove(nn.id)}>✕ delete</button>
                                     </div>
                                 )}
                                 </div>
