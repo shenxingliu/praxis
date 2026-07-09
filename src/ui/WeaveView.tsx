@@ -21,7 +21,7 @@ import { S, chip } from './styles';
  */
 
 type NodeKind = 'hero' | 'element' | 'image' | 'note' | 'facet' | 'output' | 'rotate';
-type ResizeDir = 'nw' | 'ne' | 'sw' | 'se';
+type ResizeDir = 'sw' | 'se';
 interface WeaveEdge { id: string; from: string; to: string }
 interface WeaveNode {
     id: string;
@@ -992,12 +992,11 @@ export default function WeaveView() {
                                     flexDirection: 'column',
                                     overflow: 'hidden',
                                 }}>
-                                {/* Resize handles — roomy corners so image scaling is easy to grab. */}
-                                {(['nw', 'ne', 'sw', 'se'] as const).map(dir => {
+                                {/* Resize handles — bottom corners avoid the delete button/title bar. */}
+                                {(['sw', 'se'] as const).map(dir => {
                                     const fromLeft = dir.includes('w');
-                                    const fromTop = dir.includes('n');
-                                    const cursor = dir === 'nw' || dir === 'se' ? 'nwse-resize' : 'nesw-resize';
-                                    const glyph = dir === 'nw' ? '◤' : dir === 'ne' ? '◥' : dir === 'sw' ? '◣' : '◢';
+                                    const cursor = dir === 'se' ? 'nwse-resize' : 'nesw-resize';
+                                    const glyph = dir === 'sw' ? '◣' : '◢';
                                     return (
                                         <div
                                             key={dir}
@@ -1018,13 +1017,13 @@ export default function WeaveView() {
                                             style={{
                                                 position: 'absolute',
                                                 [fromLeft ? 'left' : 'right']: -8,
-                                                [fromTop ? 'top' : 'bottom']: -8,
-                                                width: 28,
-                                                height: 28,
+                                                bottom: -8,
+                                                width: 34,
+                                                height: 34,
                                                 zIndex: 6,
                                                 cursor,
                                                 display: 'flex',
-                                                alignItems: fromTop ? 'flex-start' : 'flex-end',
+                                                alignItems: 'flex-end',
                                                 justifyContent: fromLeft ? 'flex-start' : 'flex-end',
                                                 color: '#a1a1aa',
                                                 fontSize: 10,
