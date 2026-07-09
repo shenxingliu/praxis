@@ -3,7 +3,6 @@ import { storage } from '../storage/local';
 import { getCurrentBrand, getCurrentBrandId, brandKey } from '../domain/brand';
 import { getBrandSoul, getFieldAttributions } from '../brain/soul';
 import { generateImage, generateJson, MODELS } from './gemini';
-import { decomposeReference } from './decompose';
 
 /**
  * Fusion Lab — the self-breeding aesthetic loop.
@@ -172,9 +171,13 @@ export async function synthesizeReference(
     elements: Element[],
     level: TransferLevel,
     note?: string,
-    onStatus?: (t: string) => void
+    onStatus?: (t: string) => void,
+    /** References fused DIRECTLY (no pre-decomposition): ONE call derives
+     *  each image's strongest idea at the transfer level and fuses — the
+     *  token-cheap path that needs no concept library at all. */
+    refsToFuse: Reference[] = []
 ): Promise<FusionDraft> {
-    if (elements.length < 2) throw new Error('Pick at least 2 concept cards to fuse.');
+    if (elements.length + refsToFuse.length < 2) throw new Error('Pick at least 2 items (concept cards and/or references) to fuse.');
     const brand = await getCurrentBrand();
     const refs = await storage.listReferences();
 
@@ -191,18 +194,27 @@ export async function synthesizeReference(
             .map(r => r.image.value)
         : [];
 
-    const generation = Math.max(0, ...sourceRefIds.map(id => refs.find(r => r.id === id)?.generation ?? 0)) + 1;
+    const refFuseImages = refsToFuse
+        .filter(r => r.image.kind === 'data')
+        .slice(0, 4)
+        .map(r => r.image.value);
+    const allRefIds = [...new Set([...sourceRefIds, ...refsToFuse.map(r => r.id)])];
+    const generation = Math.max(0, ...allRefIds.map(id => refs.find(r => r.id === id)?.generation ?? 0)) + 1;
 
     const prompt = `Create a single, original AESTHETIC REFERENCE IMAGE for the brand "${brand.name}" — ${brand.description}
 
 This is NOT a hero shot. NO hero, NO furniture staging requirement, NO text, NO logos. It is a pure piece of visual language — a mood/world the brand could live in.
 
 ### FUSE THESE IDEAS (transfer level: ${LEVEL_LABEL[level]}) ###
-${elements.map((e, i) => `${i + 1}. [${e.type}] ${levelText(e, level)}`).join('\n')}
-
+${elements.map((e, i) => `${i + 1}. [${e.type}] ${levelText(e, level)}`).join('\n') || '(no concept cards — all ideas come from the attached reference images)'}
+${refFuseImages.length > 0 ? `
+### AND FUSE THE ATTACHED REFERENCE IMAGE${refFuseImages.length > 1 ? 'S' : ''} (the last ${refFuseImages.length} attached) ###
+For EACH of them, first silently derive its single strongest transferable idea at the same transfer level, then fuse those derived ideas together with the listed ones. ${level === 'percept' || level === 'principle'
+        ? 'Their surface behavior may be inherited where the ideas demand it, but the composition must be NEW — never a collage or copy.'
+        : 'Do NOT copy their compositions or subjects — transfer only the derived ideas.'}` : ''}
 ${attachSources && sourceImages.length > 0
-        ? 'The attached images are the SOURCES of these ideas — inherit their visual DNA where the ideas demand it, but the composition must be NEW, not a collage or copy.'
-        : 'Do not imitate any existing image — realize the ideas from first principles. The more the result surprises while still obeying every idea, the better.'}
+        ? `The first ${sourceImages.length} attached image${sourceImages.length > 1 ? 's are' : ' is'} the SOURCE of the listed ideas — inherit visual DNA where the ideas demand it, but the composition must be NEW, not a collage or copy.`
+        : refFuseImages.length === 0 ? 'Do not imitate any existing image — realize the ideas from first principles. The more the result surprises while still obeying every idea, the better.' : ''}
 ${note ? `\nArt direction: ${note}` : ''}
 
 ### REQUIREMENTS ###
@@ -211,7 +223,7 @@ One coherent image where ALL the fused ideas coexist and reinforce each other. M
     onStatus?.('Synthesizing (flash)…');
     const out = await generateImage({
         prompt,
-        referenceImages: sourceImages,
+        referenceImages: [...sourceImages, ...refFuseImages],
         model: MODELS.imageFlash,
         aspectRatio: '4:3',
     });
@@ -235,7 +247,7 @@ Output JSON: { "pass": boolean (true if NO red-line is violated), "note": one se
     }
 
     return {
-        image: out.image, prompt, sourceRefIds,
+        image: out.image, prompt, sourceRefIds: allRefIds,
         elementIds: elements.map(e => e.id), level,
         generation, redline,
     };
@@ -260,7 +272,8 @@ export async function keepFusion(
         generation: draft.generation,
     };
     await storage.upsertReference(ref);
-    onStatus?.('Decomposing the newborn…');
-    try { await decomposeReference(ref); } catch (err) { console.warn('[fusion] decompose failed:', err); }
+    // No auto-decomposition: the newborn is immediately fusable as a raw
+    // reference; mine concepts from it explicitly (Decomp) only if wanted.
+    void onStatus;
     return ref;
 }

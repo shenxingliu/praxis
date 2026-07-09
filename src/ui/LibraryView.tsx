@@ -3,7 +3,7 @@ import { Element, ElementType, Reference } from '../domain/types';
 import { storage } from '../storage/local';
 import { getCurrentBrandId } from '../domain/brand';
 import {
-    decomposeReference, decomposeAllPending, curateLibrary,
+    decomposeAllPending, curateLibrary,
     redecomposeReference, rebuildLibrary,
 } from '../engine/decompose';
 import {
@@ -44,6 +44,7 @@ export default function LibraryView() {
 
     // Fusion Lab state
     const [selected, setSelected] = useState<Set<string>>(new Set());
+    const [selectedRefs, setSelectedRefs] = useState<Set<string>>(new Set());
     const [level, setLevel] = useState<TransferLevel>('concept');
     const [fusionNote, setFusionNote] = useState('');
     const [draft, setDraft] = useState<FusionDraft | null>(null);
@@ -72,13 +73,9 @@ export default function LibraryView() {
                 createdAt: Date.now(),
             };
             await storage.upsertReference(ref);
-            setBusy(`Decomposing ${f.name}…`);
-            try { await decomposeReference(ref); } catch (err: any) {
-                console.warn('decompose failed:', err);
-            }
         }
         setBusy('');
-        setNotice('Uploaded & decomposed');
+        setNotice('Uploaded — fuse references directly, or press Decomp on a card to mine concept cards (optional).');
         refresh();
     };
 
@@ -115,6 +112,12 @@ export default function LibraryView() {
             n.has(id) ? n.delete(id) : n.add(id);
             return n;
         });
+    const toggleSelectRef = (id: string) =>
+        setSelectedRefs(prev => {
+            const n = new Set(prev);
+            n.has(id) ? n.delete(id) : n.add(id);
+            return n;
+        });
 
     /** Run an async action: busy while running, outcome goes to notice,
      *  busy ALWAYS cleared — buttons can never stay locked. */
@@ -134,8 +137,9 @@ export default function LibraryView() {
 
     const fuse = () => run('Fusing…', async () => {
         const picked = elements.filter(e => selected.has(e.id));
+        const pickedRefs = refs.filter(r => selectedRefs.has(r.id));
         setDraft(null);
-        setDraft(await synthesizeReference(picked, level, fusionNote.trim() || undefined, setBusy));
+        setDraft(await synthesizeReference(picked, level, fusionNote.trim() || undefined, setBusy, pickedRefs));
     });
 
     const autoFuse = () => run('Curator picking combinations…', async () => {
@@ -198,7 +202,8 @@ export default function LibraryView() {
             recordFusionVerdict(draft, verdictElements(draft), draft.level, 'keep').catch(() => {});
             setDraft(null);
             setSelected(new Set());
-            return 'In the library — decomposed into new concepts · verdict remembered';
+            setSelectedRefs(new Set());
+            return 'In the library · verdict remembered — fuse it directly anytime; Decomp only if you want its concepts';
         });
     };
 
@@ -224,7 +229,7 @@ export default function LibraryView() {
                     {busy ? `${busy}` : notice}
                 </div>
             )}
-            <DropZone onFiles={upload} hint="Drop references — auto-decomposed" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <DropZone onFiles={upload} hint="Drop references — fuse them directly, decompose only if you want concept cards" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={S.label}>REFERENCES · {refs.length}</span>
                 <button style={S.btn} onClick={() => fileRef.current?.click()}>＋ Upload references</button>
@@ -236,11 +241,13 @@ export default function LibraryView() {
             {/* Pinterest-style masonry: natural aspect ratios, no cropping */}
             <div style={{ columnWidth: 150, columnGap: 10 }}>
                 {refs.map(r => (
-                    <div key={r.id} style={{ ...S.card, padding: 0, overflow: 'hidden', position: 'relative', breakInside: 'avoid', marginBottom: 10 }}>
+                    <div key={r.id} style={{ ...S.card, padding: 0, overflow: 'hidden', position: 'relative', breakInside: 'avoid', marginBottom: 10, border: selectedRefs.has(r.id) ? '1.5px solid #18181b' : undefined }}>
                         <img src={r.image.value} alt={r.name} onClick={() => openLightbox(r.image.value)}
                             style={{ width: '100%', display: 'block', cursor: 'zoom-in' }} />
-                        <div style={{ padding: '5px 8px', fontSize: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+                        <div style={{ padding: '5px 8px', fontSize: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 5 }}>
+                            <input type="checkbox" checked={selectedRefs.has(r.id)} onChange={() => toggleSelectRef(r.id)}
+                                style={{ cursor: 'pointer', margin: 0 }} title="Select for the Fusion Lab — fuses directly, no decomposition needed" />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{r.name}</span>
                             <span>{r.source === 'synthesized' ? `g${r.generation ?? 1}` : r.source === 'promoted' ? '*' : r.decomposed ? 'd' : '·'}</span>
                         </div>
                         <button onClick={() => removeRef(r)} title="Delete"
@@ -249,19 +256,19 @@ export default function LibraryView() {
                             style={{ position: 'absolute', top: 4, left: 4, border: 'none', borderRadius: 6, background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 10, cursor: 'pointer', padding: '2px 6px' }}>Decomp</button>
                     </div>
                 ))}
-                {refs.length === 0 && <p style={{ fontSize: 12, color: '#a1a1aa' }}>No references yet. Upload or drag & drop aesthetic references — each is decomposed into reusable elements.</p>}
+                {refs.length === 0 && <p style={{ fontSize: 12, color: '#a1a1aa' }}>No references yet. Upload or drag & drop aesthetic references — tick 2-4 and Fuse directly; decomposition into concept cards is optional (Decomp on a card).</p>}
             </div>
             </DropZone>
 
             {/* Fusion Lab */}
             <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 8, border: '1.5px dashed #a1a1aa' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={S.label}>FUSION LAB · {selected.size} concept{selected.size === 1 ? '' : 's'} selected</span>
+                    <span style={S.label}>FUSION LAB · {selectedRefs.size} ref{selectedRefs.size === 1 ? '' : 's'} + {selected.size} concept{selected.size === 1 ? '' : 's'}</span>
                     <select value={level} onChange={e => setLevel(e.target.value as TransferLevel)} style={{ ...S.input, width: 250 }}>
                         {(Object.keys(LEVEL_LABEL) as TransferLevel[]).map(l => <option key={l} value={l}>{LEVEL_LABEL[l]}</option>)}
                     </select>
                     <input style={{ ...S.input, flex: 1, minWidth: 160 }} placeholder="Optional art direction…" value={fusionNote} onChange={e => setFusionNote(e.target.value)} />
-                    <button style={{ ...S.btn, opacity: selected.size >= 2 ? 1 : 0.4 }} disabled={selected.size < 2 || !!busy} onClick={fuse}>
+                    <button style={{ ...S.btn, opacity: selected.size + selectedRefs.size >= 2 ? 1 : 0.4 }} disabled={selected.size + selectedRefs.size < 2 || !!busy} onClick={fuse}>
                         Fuse → new reference
                     </button>
                     <button style={S.btn} disabled={!!busy} onClick={autoFuse} title="The curator picks 3 combinations for you — scored for productive tension, not similarity">
@@ -288,7 +295,7 @@ export default function LibraryView() {
                     </div>
                 )}
                 <div style={{ fontSize: 10, color: '#a1a1aa' }}>
-                    Select 2-4 concept cards below , pick the transfer level — L1 imitates, L3/L4 creates — and breed a brand-new pure aesthetic reference (no hero, flash-model cost).
+                    Tick 2-4 references above (zero extraction cost — one call derives & fuses) and/or concept cards below, pick the transfer level — L1 imitates, L3/L4 creates — and breed a brand-new pure aesthetic reference (flash-model cost).
                 </div>
                 {draft && (
                     <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
