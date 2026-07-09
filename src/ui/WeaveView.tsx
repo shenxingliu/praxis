@@ -306,6 +306,16 @@ export default function WeaveView() {
         setNotice(`${extra.length} angle${extra.length === 1 ? '' : 's'} added to "${updated.name}".`);
     };
 
+    /** Remove one angle photo from an asset (kept: at least one). */
+    const removeAssetPhoto = async (asset: Asset, photoId: string) => {
+        if (asset.photos.length <= 1) { setNotice('An asset needs at least one photo.'); return; }
+        const updated: Asset = { ...asset, photos: asset.photos.filter(p => p.id !== photoId), updatedAt: Date.now() };
+        await storage.upsertAsset(updated);
+        setAssets(prev => prev.map(x => (x.id === updated.id ? updated : x)));
+        angleCache.current.delete(`asset:${updated.id}:${asset.photos.length}`);
+        setNotice('Angle removed.');
+    };
+
     // --- rotate angle awareness: photo roles map to azimuths, untagged
     // multi-angle sets get ONE cached vision estimation per subject ---
     const ROLE_ANGLE: Record<string, number | null> = { hero: 0, side: 90, back: 180, detail: null };
@@ -1536,6 +1546,22 @@ export default function WeaveView() {
                                                     title="Upload more photos of this asset from other angles — they persist on the asset and feed rotate + fidelity">Add angles</button>
                                                 {a && a.photos.length > 1 && <span style={{ fontSize: 9, color: '#a1a1aa', alignSelf: 'center' }}>{a.photos.length} angles</span>}
                                                 {a?.photos[0] && <button style={miniBtn} onClick={() => openLightbox(a.photos[0].image.value)}>View</button>}
+                                                {a && a.photos.length > 1 && (
+                                                    <div style={{ flexBasis: '100%', display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 4, paddingTop: 2 }}>
+                                                        {a.photos.map(p => (
+                                                            <div key={p.id} style={{ position: 'relative', width: 34, height: 34 }}>
+                                                                <img src={p.image.value} alt="" draggable={false}
+                                                                    onClick={() => openLightbox(p.image.value)}
+                                                                    style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6, display: 'block', cursor: 'zoom-in' }} />
+                                                                <button
+                                                                    onClick={() => removeAssetPhoto(a, p.id)}
+                                                                    disabled={!!busy}
+                                                                    title="Remove this angle from the asset"
+                                                                    style={{ position: 'absolute', top: -5, right: -5, width: 15, height: 15, borderRadius: 999, border: 'none', background: 'rgba(24,24,27,0.85)', color: '#fff', fontSize: 8, lineHeight: 1, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </>
                                         )}
                                         {nn.kind === 'element' && el && (
