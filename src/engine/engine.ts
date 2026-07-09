@@ -129,11 +129,19 @@ export async function generate(
     const aestheticCap = extraRefImages.length > 0
         ? Math.min(2, recipe.referenceBudget.aesthetic)
         : recipe.referenceBudget.aesthetic;
+    // Inspiration explicitly chosen in the brief always leads and is never
+    // dropped by the budget cap.
+    const chosenRefs = (params.referenceIds ?? [])
+        .map(id => allRefs.find(r => r.id === id && r.image.kind === 'data'))
+        .filter((r): r is Reference => !!r)
+        .slice(0, 4);
+    const chosenIds = new Set(chosenRefs.map(r => r.id));
     const aesthetic = [
-        ...elementRefs,
+        ...chosenRefs,
+        ...elementRefs.filter(r => !chosenIds.has(r.id)),
         ...allRefs.filter(r =>
-            r.kind !== 'plate' && r.image.kind === 'data' && !elementRefIds.includes(r.id)),
-    ].slice(0, aestheticCap);
+            r.kind !== 'plate' && r.image.kind === 'data' && !elementRefIds.includes(r.id) && !chosenIds.has(r.id)),
+    ].slice(0, Math.max(aestheticCap, chosenRefs.length));
 
     // ---- Budget gate ----
     const budget = await storage.getBudget();

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Asset, Element, GenerationResult, PraxisJob } from '../domain/types';
+import { Asset, Element, GenerationResult, PraxisJob, Reference } from '../domain/types';
 import { storage } from '../storage/local';
 import {
     startJob, proposeConcepts, proposeWildcard, analyzeCompetitor, makePlan,
@@ -30,6 +30,9 @@ export default function StudioView() {
     const [assets, setAssets] = useState<Asset[]>([]);
     const [elements, setElements] = useState<Element[]>([]);
     const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
+    const [refs, setRefs] = useState<Reference[]>([]);
+    const [selectedRefs, setSelectedRefs] = useState<Set<string>>(new Set());
+    const [inspOpen, setInspOpen] = useState(false);
     const [brief, setBrief] = useState('');
     const [count, setCount] = useState(2);
     const [results, setResults] = useState<GenerationResult[]>([]);
@@ -43,6 +46,7 @@ export default function StudioView() {
     useEffect(() => {
         storage.listAssets().then(setAssets);
         storage.listElements().then(setElements);
+        storage.listReferences().then(rs => setRefs(rs.filter(r => r?.image?.kind === 'data' && r.kind !== 'plate'))).catch(err => console.warn('[studio] refs load failed:', err));
     }, []);
 
     const guard = async (label: string, fn: () => Promise<void>) => {
@@ -60,7 +64,10 @@ export default function StudioView() {
 
     const choose = (conceptId: string) => guard('Producer drafting the plan…', async () => {
         if (!job) return;
-        setJob(await makePlan(job, conceptId, Array.from(selectedAssets)));
+        const planned = await makePlan(job, conceptId, Array.from(selectedAssets));
+        setJob(planned.plan && selectedRefs.size > 0
+            ? { ...planned, plan: { ...planned.plan, params: { ...planned.plan.params, referenceIds: Array.from(selectedRefs) } } }
+            : planned);
     });
 
     const wildcard = () => guard('Colliding concepts…', async () => {
@@ -248,6 +255,47 @@ export default function StudioView() {
                             );
                         })}
                         {assets.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No assets yet — add them in Assets.</span>}
+                    </div>
+
+                    {/* Inspiration — collapsible; chosen refs lead the aesthetic stack */}
+                    <button
+                        onClick={() => setInspOpen(o => !o)}
+                        style={{
+                            ...S.btnGhost, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6,
+                            fontSize: 10, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase', color: '#71717a',
+                        }}
+                        title="Pick inspiration references — their look leads the generation's aesthetic references">
+                        <span style={{ display: 'inline-block', transition: 'transform 200ms cubic-bezier(0.22,1,0.36,1)', transform: inspOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>▸</span>
+                        Inspiration · {selectedRefs.size} selected
+                    </button>
+                    <div style={{
+                        overflow: 'hidden',
+                        maxHeight: inspOpen ? 480 : 0,
+                        opacity: inspOpen ? 1 : 0,
+                        transition: 'max-height 320ms cubic-bezier(0.22,1,0.36,1), opacity 200ms ease',
+                    }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 6, maxHeight: 470, overflowY: 'auto' }}>
+                            {refs.map(r => {
+                                const on = selectedRefs.has(r.id);
+                                return (
+                                    <button key={r.id} onClick={() => setSelectedRefs(prev => {
+                                        const n = new Set(prev); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n;
+                                    })}
+                                        title={`${r.name}${on ? ' — selected' : ''}`}
+                                        style={{
+                                            border: on ? '1.5px solid #18181b' : '1px solid rgba(212,212,216,0.58)',
+                                            background: 'rgba(255,255,255,0.58)',
+                                            borderRadius: 8, padding: 4, cursor: 'pointer',
+                                            display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0,
+                                        }}>
+                                        <img src={r.image.value} alt="" draggable={false}
+                                            style={{ width: '100%', aspectRatio: '1', borderRadius: 5, objectFit: 'cover', display: 'block' }} />
+                                        <span style={{ width: '100%', fontSize: 9, fontWeight: 700, color: '#3f3f46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{r.name}</span>
+                                    </button>
+                                );
+                            })}
+                            {refs.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No references yet — collect them in Inspiration.</span>}
+                        </div>
                     </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                         <button style={S.btn} disabled={!!busy} onClick={begin}>

@@ -49,12 +49,22 @@ export class SupabaseProvider implements StorageProvider {
     }
 
     private async rows<T>(table: string, query = ''): Promise<T[]> {
-        const resp = await fetch(`${this.url}/rest/v1/${table}?select=data${query}`, {
-            headers: this.headers(),
-        });
-        if (!resp.ok) throw new Error(`Supabase ${table} read ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
-        const raw: Array<{ data: T }> = await resp.json();
-        return raw.map(r => r.data);
+        // Image-heavy tables (full base64 in jsonb) intermittently 500 on
+        // the Supabase side — retry transient server errors before failing.
+        let lastErr = '';
+        for (let attempt = 0; attempt < 3; attempt++) {
+            const resp = await fetch(`${this.url}/rest/v1/${table}?select=data${query}`, {
+                headers: this.headers(),
+            });
+            if (resp.ok) {
+                const raw: Array<{ data: T }> = await resp.json();
+                return raw.map(r => r.data);
+            }
+            lastErr = `${resp.status}: ${(await resp.text()).slice(0, 200)}`;
+            if (resp.status < 500) break;
+            await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+        }
+        throw new Error(`Supabase ${table} read ${lastErr}`);
     }
 
     /** Rows of the ACTIVE brand only (server-side jsonb filter). */

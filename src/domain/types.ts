@@ -211,6 +211,9 @@ export interface GenerationParams {
     contextModeId?: string;
     /** Elements explicitly chosen for recombination. */
     elementIds?: string[];
+    /** Inspiration references explicitly chosen in the brief — attached
+     *  FIRST among aesthetic refs, never dropped by the budget cap. */
+    referenceIds?: string[];
 
     // --- Studio (expert) controls — ported from V1.3. All optional;
     // 'Auto'/undefined lets brand soul + recipe defaults decide. ---
