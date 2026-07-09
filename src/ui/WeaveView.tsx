@@ -185,7 +185,8 @@ export default function WeaveView() {
     const [edges, setEdges] = useState<WeaveEdge[]>([]);
     const [linking, setLinking] = useState<{ from: string; x: number; y: number } | null>(null);
     const [expandedId, setExpandedId] = useState<string | null>(null);
-    const [picker, setPicker] = useState<'hero' | 'element' | null>(null);
+    const [assetsOpen, setAssetsOpen] = useState(true);
+    const [inspirationOpen, setInspirationOpen] = useState(true);
     const [facetPick, setFacetPick] = useState<{ image: string; near: { x: number; y: number }; facets: Array<{ dimension: string; description: string }> } | null>(null);
     const [ratio, setRatio] = useState<GenerationParams['ratio']>('4:3');
     const [size, setSize] = useState<NonNullable<GenerationParams['size']>>('1K');
@@ -801,8 +802,6 @@ export default function WeaveView() {
 
             {/* Toolbar */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <button style={S.btn} onClick={() => setPicker(picker === 'hero' ? null : 'hero')}>Asset</button>
-                <button style={S.btn} onClick={() => setPicker(picker === 'element' ? null : 'element')} title="Add an image from your Inspiration library">Inspiration</button>
                 <button style={S.btnGhost} onClick={() => fileRef.current?.click()}>Images</button>
                 <button style={S.btnGhost} onClick={() => add({ kind: 'note', text: '' })}>Prompt</button>
                 <button style={S.btnGhost} onClick={() => add({ kind: 'output' })}>Output</button>
@@ -825,31 +824,6 @@ export default function WeaveView() {
                     </button>
                 </span>
             </div>
-
-            {/* Pickers */}
-            {picker === 'hero' && (
-                <div style={{ ...S.card, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {assets.map(a => (
-                        <button key={a.id} style={chip(false)} onClick={() => { add({ kind: 'hero', assetId: a.id }); setPicker(null); }}>
-                            {a.photos[0] && <img src={a.photos[0].image.value} alt="" style={{ width: 20, height: 20, borderRadius: 4, objectFit: 'cover', marginRight: 5, verticalAlign: 'middle' }} />}
-                            {a.name}
-                        </button>
-                    ))}
-                    {assets.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No assets — add them in Assets.</span>}
-                </div>
-            )}
-            {picker === 'element' && (
-                <div style={{ ...S.card, display: 'flex', gap: 6, flexWrap: 'wrap', maxHeight: 180, overflow: 'auto' }}>
-                    {references.map(ref => (
-                        <button key={ref.id} style={chip(false)} title={ref.name}
-                            onClick={() => { add({ kind: 'image', image: ref.image.value, role: 'fusion' }); setPicker(null); }}>
-                            <img src={ref.image.value} alt="" style={{ width: 20, height: 20, borderRadius: 4, objectFit: 'cover', marginRight: 5, verticalAlign: 'middle' }} />
-                            {ref.name}
-                        </button>
-                    ))}
-                    {references.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No images — add them in Inspiration.</span>}
-                </div>
-            )}
 
             {/* Facet chooser — pick only the dimensions you want */}
             {facetPick && (
@@ -923,8 +897,94 @@ export default function WeaveView() {
                 </div>
             )}
 
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 8 }}>
+            <aside style={{
+                flex: '0 0 auto',
+                width: (assetsOpen ? 132 : 42) + (inspirationOpen ? 132 : 42) + 8,
+                minHeight: 0,
+                display: 'flex',
+                gap: 8,
+                transition: 'width 180ms ease',
+            }}>
+                <div style={{ ...S.card, flex: `0 0 ${assetsOpen ? 132 : 42}px`, minWidth: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' }}>
+                    <button
+                        style={{ ...S.btnGhost, minHeight: 30, width: '100%', justifyContent: assetsOpen ? 'space-between' : 'center', padding: assetsOpen ? '0 8px' : 0 }}
+                        onClick={() => setAssetsOpen(v => !v)}
+                        title={assetsOpen ? 'Collapse Assets' : 'Expand Assets'}
+                    >
+                        <span>{assetsOpen ? 'Assets' : 'A'}</span>
+                        {assetsOpen && <span style={{ fontSize: 9, color: '#a1a1aa' }}>{assets.length}</span>}
+                    </button>
+                    {assetsOpen && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflow: 'auto', minHeight: 0 }}>
+                            {assets.map(asset => (
+                                <button
+                                    key={asset.id}
+                                    onClick={() => add({ kind: 'hero', assetId: asset.id })}
+                                    title={asset.name}
+                                    style={{
+                                        border: '1px solid rgba(212,212,216,0.58)',
+                                        background: 'rgba(255,255,255,0.58)',
+                                        borderRadius: 8,
+                                        padding: 5,
+                                        cursor: 'pointer',
+                                        textAlign: 'left',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 6,
+                                        minHeight: 38,
+                                    }}
+                                >
+                                    {asset.photos[0] && <img src={asset.photos[0].image.value} alt="" draggable={false} style={{ width: 28, height: 28, borderRadius: 5, objectFit: 'cover', flex: '0 0 auto' }} />}
+                                    <span style={{ fontSize: 10.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{asset.name}</span>
+                                </button>
+                            ))}
+                            {assets.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>Empty</span>}
+                        </div>
+                    )}
+                </div>
+
+                <div style={{ ...S.card, flex: `0 0 ${inspirationOpen ? 132 : 42}px`, minWidth: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' }}>
+                    <button
+                        style={{ ...S.btnGhost, minHeight: 30, width: '100%', justifyContent: inspirationOpen ? 'space-between' : 'center', padding: inspirationOpen ? '0 8px' : 0 }}
+                        onClick={() => setInspirationOpen(v => !v)}
+                        title={inspirationOpen ? 'Collapse Inspiration' : 'Expand Inspiration'}
+                    >
+                        <span>{inspirationOpen ? 'Inspiration' : 'I'}</span>
+                        {inspirationOpen && <span style={{ fontSize: 9, color: '#a1a1aa' }}>{references.length}</span>}
+                    </button>
+                    {inspirationOpen && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflow: 'auto', minHeight: 0 }}>
+                            {references.map(ref => (
+                                <button
+                                    key={ref.id}
+                                    onClick={() => add({ kind: 'image', image: ref.image.value, role: 'fusion' })}
+                                    title={ref.name}
+                                    style={{
+                                        border: '1px solid rgba(212,212,216,0.58)',
+                                        background: 'rgba(255,255,255,0.58)',
+                                        borderRadius: 8,
+                                        padding: 5,
+                                        cursor: 'pointer',
+                                        textAlign: 'left',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 6,
+                                        minHeight: 38,
+                                    }}
+                                >
+                                    <img src={ref.image.value} alt="" draggable={false} style={{ width: 28, height: 28, borderRadius: 5, objectFit: 'cover', flex: '0 0 auto' }} />
+                                    <span style={{ fontSize: 10.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ref.name}</span>
+                                </button>
+                            ))}
+                            {references.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>Empty</span>}
+                        </div>
+                    )}
+                </div>
+            </aside>
+
             {/* Infinite canvas — fills the whole remaining viewport */}
-            <DropZone onFiles={addImages} hint="Drop images — fusion sources" style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+            <DropZone onFiles={addImages} hint="Drop images — fusion sources" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex' }}>
                 <div ref={boardRef} onPointerDown={onBoardDown} onPointerMove={onMove} onPointerUp={onUp}
                     style={{
                         position: 'relative', flex: 1, minHeight: 0, borderRadius: 16,
@@ -1336,6 +1396,7 @@ export default function WeaveView() {
                     </div>
                 </div>
             </DropZone>
+            </div>
         </div>
     );
 }
