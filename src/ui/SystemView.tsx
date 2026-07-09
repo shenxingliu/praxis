@@ -34,22 +34,27 @@ export default function SystemView() {
             else if (f.name.startsWith('signals')) bulk.signals = json;
         }
 
-        // Cleanup: remove rows from older migration snapshots (pre-deterministic
-        // ids) so re-imports refresh instead of duplicating. Learned rules,
-        // generation results and promoted references are never touched.
+        // Snapshot the stale rows from older migration snapshots
+        // (pre-deterministic ids) BEFORE importing, but delete them only
+        // AFTER the import succeeds — deleting first opened a window where
+        // a failed import left the user with neither old nor new data.
+        const staleAssetIds: string[] = [];
+        const staleReferenceIds: string[] = [];
         if (bulk.assets) {
             for (const a of await storage.listAssets()) {
-                if (a.v1Id && !a.id.startsWith('v1a:')) await storage.deleteAsset(a.id);
+                if (a.v1Id && !a.id.startsWith('v1a:')) staleAssetIds.push(a.id);
             }
         }
         if (bulk.references) {
             for (const r of await storage.listReferences()) {
                 const fromV1 = r.kind === 'material' || (r.tags ?? []).includes('v1-plate');
-                if (fromV1 && !r.id.startsWith('v1')) await storage.deleteReference(r.id);
+                if (fromV1 && !r.id.startsWith('v1')) staleReferenceIds.push(r.id);
             }
         }
 
         await storage.importBulk(bulk as never);
+        for (const id of staleAssetIds) await storage.deleteAsset(id);
+        for (const id of staleReferenceIds) await storage.deleteReference(id);
         setImportLog(`Imported: ${Object.keys(bulk).join(', ')}`);
         window.dispatchEvent(new CustomEvent(INVENTORY_CHANGED_EVENT));
         refresh();

@@ -3,7 +3,7 @@ import { storage } from '../storage/local';
 import { getCurrentBrand, getCurrentBrandId } from '../domain/brand';
 import { getBrandSoul } from '../brain/soul';
 import { generateImage, generateJson, MODELS, COST_ESTIMATE_USD } from './gemini';
-import { promptBlocks } from './engine';
+import { BudgetExceededError, pendingSpendUsd, reservePendingSpend, promptBlocks } from './engine';
 
 /**
  * Weave — freeform canvas generation (the Figma-Weave-inspired mode).
@@ -111,7 +111,8 @@ export async function rotateView(
     const month = new Date().toISOString().slice(0, 7);
     const budget = await storage.getBudget();
     const spent = await storage.getMonthSpend(month);
-    if (spent + cost > budget.monthlyUsd) throw new Error(`Monthly budget reached: $${spent.toFixed(2)} of $${budget.monthlyUsd.toFixed(2)}.`);
+    if (spent + pendingSpendUsd() + cost > budget.monthlyUsd) throw new BudgetExceededError(spent, budget.monthlyUsd);
+    const releaseBudget = reservePendingSpend(cost);
 
     const dir = ((angleDegrees % 360) + 360) % 360;
     const prompt = `TURNTABLE TASK. The attached image(s) show ONE subject (a hero, object or person) from ${sourceImages.length > 1 ? 'multiple angles' : 'one angle'}.
@@ -144,6 +145,7 @@ BACKDROP: clean neutral studio backdrop, soft even light, gentle grounding shado
     };
     await storage.upsertResult(result);
     await storage.addSpend({ id: crypto.randomUUID(), resultId: result.id, usd: cost, model, month, createdAt: Date.now() });
+    releaseBudget();
     return result;
 }
 
@@ -196,9 +198,10 @@ export async function weaveGenerate(
     const month = new Date().toISOString().slice(0, 7);
     const budget = await storage.getBudget();
     const spent = await storage.getMonthSpend(month);
-    if (spent + cost > budget.monthlyUsd) {
-        throw new Error(`Monthly budget reached: $${spent.toFixed(2)} of $${budget.monthlyUsd.toFixed(2)}.`);
+    if (spent + pendingSpendUsd() + cost > budget.monthlyUsd) {
+        throw new BudgetExceededError(spent, budget.monthlyUsd);
     }
+    const releaseBudget = reservePendingSpend(cost);
 
     // ---- Prompt ----
     const n = assetImages.length;
@@ -324,6 +327,7 @@ Known defects:\n${first.issues.map(s => `- ${s}`).join('\n')}`,
         month,
         createdAt: Date.now(),
     });
+    releaseBudget();
     return result;
 }
 

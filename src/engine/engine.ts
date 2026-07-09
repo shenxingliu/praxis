@@ -62,6 +62,27 @@ export class BudgetExceededError extends Error {
     }
 }
 
+// In-flight cost reservations — the budget gate reads recorded spend, which
+// lands only AFTER a generation finishes, so two parallel generations could
+// both squeeze through the same remaining budget. Reservations bridge that
+// window; entries expire after 5 min so an exception can never wedge the gate.
+const pendingCosts = new Map<string, { usd: number; at: number }>();
+const PENDING_TTL_MS = 5 * 60_000;
+export const pendingSpendUsd = (): number => {
+    const now = Date.now();
+    let sum = 0;
+    for (const [key, entry] of pendingCosts) {
+        if (now - entry.at > PENDING_TTL_MS) pendingCosts.delete(key);
+        else sum += entry.usd;
+    }
+    return sum;
+};
+export const reservePendingSpend = (usd: number): (() => void) => {
+    const key = crypto.randomUUID();
+    pendingCosts.set(key, { usd, at: Date.now() });
+    return () => { pendingCosts.delete(key); };
+};
+
 export async function generate(
     params: GenerationParams,
     assetIds: string[],
@@ -123,7 +144,8 @@ export async function generate(
             ? MODELS.imagePro
             : recipe.defaultModel === 'pro' ? MODELS.imagePro : MODELS.imageFlash;
     const cost = COST_ESTIMATE_USD[model] ?? 0.1;
-    if (spent + cost > budget.monthlyUsd) throw new BudgetExceededError(spent, budget.monthlyUsd);
+    if (spent + pendingSpendUsd() + cost > budget.monthlyUsd) throw new BudgetExceededError(spent, budget.monthlyUsd);
+    const releaseBudget = reservePendingSpend(cost);
 
     // ---- Prompt + reference images ----
     // Plate anchoring (silo): the chosen backdrop plate goes FIRST in the
@@ -271,6 +293,7 @@ Images 2-${1 + Math.min(assetImages.length, 6)}: HERO SOURCE OF TRUTH.`,
         month: monthKey(),
         createdAt: Date.now(),
     });
+    releaseBudget();
     return result;
 }
 

@@ -52,6 +52,7 @@ export default function App() {
             });
             return;
         }
+        if (!window.confirm('Switch brand? The app reloads — anything unsaved (canvas layouts, running jobs, drafts) is lost.')) return;
         setCurrentBrandId(id);
         setBrandId(id);
         window.location.reload(); // simplest correctness: every view reloads its brand's data

@@ -139,6 +139,13 @@ Output JSON: { "fields": [ { "key": string, "value": string, "rationale": string
             };
         });
 
+    // Locked red-lines must survive re-derivation even when the model's
+    // response omits (or mangles) their keys — otherwise a truncated JSON
+    // reply silently erases the brand's hard constraints.
+    for (const [key, kept] of lockedByKey) {
+        if (!fields.some(f => f.key === key)) fields.push(kept);
+    }
+
     return { version: 1, updatedAt: Date.now(), fields };
 }
 

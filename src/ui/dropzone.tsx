@@ -18,7 +18,7 @@ export const DropZone: React.FC<{
             onDrop={e => {
                 e.preventDefault();
                 setOver(false);
-                const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+                const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') && f.type !== 'image/svg+xml');
                 if (files.length > 0) onFiles(files);
             }}
             style={{
@@ -44,4 +44,4 @@ export const DropZone: React.FC<{
 
 /** Normalize any file source to an image File[]. */
 export const imageFiles = (src: FileList | File[] | null): File[] =>
-    Array.from(src ?? []).filter(f => f.type.startsWith('image/'));
+    Array.from(src ?? []).filter(f => f.type.startsWith('image/') && f.type !== 'image/svg+xml');

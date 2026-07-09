@@ -190,7 +190,9 @@ export default function LibraryView() {
 
     const keep = () => {
         if (!draft) return;
-        const name = window.prompt('Name this reference:', `Fusion gen${draft.generation}`) ?? '';
+        const input = window.prompt('Name this reference:', `Fusion gen${draft.generation}`);
+        if (input === null) return; // cancelled
+        const name = input.trim() || `Fusion gen${draft.generation}`;
         run('Saving…', async () => {
             await keepFusion(draft, name, setBusy);
             recordFusionVerdict(draft, verdictElements(draft), draft.level, 'keep').catch(() => {});

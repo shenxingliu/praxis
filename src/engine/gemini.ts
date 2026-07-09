@@ -234,7 +234,10 @@ export async function generateImage(opts: {
         try {
             const data = await restGenerate(opts.model, body);
             for (const part of data.candidates?.[0]?.content?.parts || []) {
-                if (part.inlineData?.data) {
+                // A real image is tens of KB of base64 — a tiny/empty payload
+                // is an API glitch and must fail (and retry), not get saved
+                // as a permanently broken data URL.
+                if (typeof part.inlineData?.data === 'string' && part.inlineData.data.length > 1000) {
                     return {
                         image: `data:image/png;base64,${part.inlineData.data}`,
                         model: opts.model,
