@@ -1046,12 +1046,41 @@ export default function WeaveView() {
                                             const w = toWorld(e.clientX, e.clientY);
                                             setLinking({ from: nn.id, x: w.x, y: w.y });
                                         }}
-                                        title="Drag to another node to link"
+                                        onPointerUp={e => {
+                                            if (!linking) return;
+                                            e.stopPropagation();
+                                            completeLink(nn.id);
+                                        }}
+                                        title="Drag from this side to link nodes"
                                         style={{
-                                            position: 'absolute', [side]: -7, top: 38, width: 13, height: 13,
-                                            borderRadius: '50%', background: 'rgba(255,255,255,0.92)', border: '2px solid #a1a1aa',
-                                            cursor: 'crosshair', zIndex: 6,
-                                        }} />
+                                            position: 'absolute',
+                                            [side]: -18,
+                                            top: 18,
+                                            width: 36,
+                                            height: 72,
+                                            cursor: 'crosshair',
+                                            zIndex: 7,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: side === 'left' ? 'flex-start' : 'flex-end',
+                                            padding: side === 'left' ? '0 0 0 10px' : '0 10px 0 0',
+                                            boxSizing: 'border-box',
+                                        }}
+                                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.18)'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                                    >
+                                        <span
+                                            style={{
+                                                width: 13,
+                                                height: 13,
+                                                borderRadius: '50%',
+                                                background: 'rgba(255,255,255,0.92)',
+                                                border: '2px solid #a1a1aa',
+                                                boxShadow: '0 6px 14px rgba(0,0,0,0.10)',
+                                                boxSizing: 'border-box',
+                                            }}
+                                        />
+                                    </div>
                                 ))}
 
                                 {/* Header — title + delete; dragging it moves any node (incl. rotate) */}
