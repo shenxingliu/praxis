@@ -503,11 +503,7 @@ export default function WeaveView() {
     // cropping. Notes/facets keep a working default; others keep custom h.
     const H = (nn: WeaveNode) => {
         if (nn.kind === 'rotate' || nn.kind === 'output' || nn.kind === 'image' || nn.kind === 'hero' || nn.kind === 'facet') return undefined;
-        return nn.h ?? (
-            nn.kind === 'note' ? 136 :
-            nn.kind === 'facet' ? 132 :
-            220
-        );
+        return nn.h ?? (nn.kind === 'note' ? 136 : 220);
     };
     const anchorY = (nn: WeaveNode) => nn.y + Math.min(84, (H(nn) ?? 168) / 2);
     const bezier = (x1: number, y1: number, x2: number, y2: number) => {
