@@ -162,10 +162,10 @@ const Ball: React.FC<{ az: number; pi: number; size: number }> = ({ az, pi, size
 };
 
 const miniBtn: React.CSSProperties = {
-    border: '1px solid rgba(212,212,216,0.72)', background: 'rgba(255,255,255,0.68)',
+    border: '1px solid rgba(212,212,216,0.52)', background: 'rgba(255,255,255,0.52)',
     borderRadius: 8, fontSize: 9.5, fontWeight: 680, cursor: 'pointer',
     padding: '3px 7px', color: '#3f3f46',
-    backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+    backdropFilter: 'blur(18px) saturate(1.18)', WebkitBackdropFilter: 'blur(18px) saturate(1.18)',
 };
 
 const fitImage = (fixed: boolean, extra: React.CSSProperties = {}): React.CSSProperties => ({
@@ -977,14 +977,14 @@ export default function WeaveView() {
                                 style={{
                                     position: 'absolute', left: nn.x, top: nn.y, width: W(nn),
                                     ...(H(nn) ? { height: H(nn) } : {}),
-                                    background: 'rgba(255,255,255,0.8)',
-                                    backdropFilter: 'blur(12px)',
-                                    WebkitBackdropFilter: 'blur(12px)',
+                                    background: 'rgba(255,255,255,0.58)',
+                                    backdropFilter: 'blur(18px) saturate(1.18)',
+                                    WebkitBackdropFilter: 'blur(18px) saturate(1.18)',
                                     borderRadius: 12,
                                     border: linking?.from === nn.id ? '2px solid rgba(24,24,27,0.78)'
                                         : linking ? '2px dashed rgba(82,82,91,0.58)'
-                                        : open ? '1px solid rgba(24,24,27,0.28)' : '1px solid rgba(212,212,216,0.62)',
-                                    boxShadow: open ? '0 22px 42px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.78)' : '0 18px 34px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.68)',
+                                        : open ? '1px solid rgba(24,24,27,0.24)' : '1px solid rgba(212,212,216,0.46)',
+                                    boxShadow: open ? '0 22px 42px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.58)' : '0 18px 34px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.48)',
                                     cursor: 'grab', userSelect: 'none', padding: 6, zIndex: open ? 5 : 1,
                                     boxSizing: 'border-box',
                                     color: '#18181b',
@@ -1061,7 +1061,7 @@ export default function WeaveView() {
                                     style={{
                                         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
                                         margin: '-6px -6px 6px', padding: '5px 10px',
-                                        borderBottom: '1px solid rgba(228,228,231,0.72)',
+                                        borderBottom: '1px solid rgba(228,228,231,0.48)',
                                         fontSize: 9, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase',
                                         color: '#71717a', cursor: 'grab',
                                         flex: '0 0 auto',
@@ -1171,7 +1171,7 @@ export default function WeaveView() {
                                         onChange={e => setNodes(prev => prev.map(x => x.id === nn.id ? { ...x, text: e.target.value } : x))}
                                         onPointerDown={e => e.stopPropagation()}
                                         onClick={() => setExpandedId(nn.id)}
-                                        style={{ width: '100%', minHeight: 64, height: H(nn) ? 'calc(100% - 4px)' : undefined, border: '1px solid rgba(212,212,216,0.72)', outline: 'none', resize: 'none', fontSize: 11, lineHeight: 1.5, fontFamily: 'inherit', background: 'rgba(244,244,245,0.72)', color: '#18181b', borderRadius: 8, padding: 10, boxSizing: 'border-box', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.72)' }}
+                                        style={{ width: '100%', minHeight: 64, height: H(nn) ? 'calc(100% - 4px)' : undefined, border: '1px solid rgba(212,212,216,0.52)', outline: 'none', resize: 'none', fontSize: 11, lineHeight: 1.5, fontFamily: 'inherit', background: 'rgba(244,244,245,0.42)', color: '#18181b', borderRadius: 8, padding: 10, boxSizing: 'border-box', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.54)' }}
                                     />
                                 )}
                                 {nn.kind === 'output' && (
@@ -1180,7 +1180,7 @@ export default function WeaveView() {
                                             <img src={nn.image} alt="" draggable={false}
                                                 style={fitImage(fixed, { borderRadius: 9 })} />
                                         ) : (
-                                            <div style={{ background: 'rgba(244,244,245,0.72)', border: '1px solid rgba(212,212,216,0.72)', borderRadius: 8, padding: '18px 6px', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.72)' }}>
+                                            <div style={{ background: 'rgba(244,244,245,0.42)', border: '1px solid rgba(212,212,216,0.52)', borderRadius: 8, padding: '18px 6px', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.54)' }}>
                                                 <div style={{ fontSize: 13, fontWeight: 800, color: '#71717a' }}>OUTPUT</div>
                                                 <div style={{ fontSize: 9, color: '#a1a1aa', marginTop: 3 }}>
                                                     {Math.max(0, componentOf(nn.id).size - 1)} linked · click for Run
@@ -1222,7 +1222,7 @@ export default function WeaveView() {
                                         {nn.kind === 'image' && (
                                             <>
                                                 {(['fusion', 'concept'] as const).map(role => (
-                                                    <button key={role} style={{ ...miniBtn, background: (nn.role ?? 'fusion') === role ? 'rgba(24,24,27,0.94)' : 'rgba(255,255,255,0.68)', color: (nn.role ?? 'fusion') === role ? '#fff' : '#3f3f46', border: (nn.role ?? 'fusion') === role ? '1px solid rgba(24,24,27,0.94)' : '1px solid rgba(212,212,216,0.72)' }}
+                                                    <button key={role} style={{ ...miniBtn, background: (nn.role ?? 'fusion') === role ? 'rgba(24,24,27,0.94)' : 'rgba(255,255,255,0.52)', color: (nn.role ?? 'fusion') === role ? '#fff' : '#3f3f46', border: (nn.role ?? 'fusion') === role ? '1px solid rgba(24,24,27,0.94)' : '1px solid rgba(212,212,216,0.52)' }}
                                                         disabled={!!busy} onClick={() => setRole(nn, role)}
                                                         title={role === 'fusion'
                                                             ? "Vibe: blend this image's overall look — light, palette, material, mood — into the result. Never copies its objects."
