@@ -18,11 +18,11 @@ type Tab = 'studio' | 'weave' | 'quick' | 'gallery' | 'heroes' | 'library' | 'kn
 
 const TABS: Array<{ id: Tab; label: string; meta: string }> = [
     { id: 'studio', label: 'Studio', meta: 'workflow' },
-    { id: 'weave', label: 'Weave', meta: 'canvas' },
+    { id: 'weave', label: 'Canvas', meta: 'board' },
     { id: 'quick', label: 'Quick', meta: 'presets' },
     { id: 'gallery', label: 'Gallery', meta: 'outputs' },
-    { id: 'heroes', label: 'Heroes', meta: 'truth' },
-    { id: 'library', label: 'Library', meta: 'references' },
+    { id: 'heroes', label: 'Assets', meta: 'truth' },
+    { id: 'library', label: 'Inspiration', meta: 'references' },
     { id: 'knowledge', label: 'Brain', meta: 'learning' },
     { id: 'system', label: 'System', meta: 'settings' },
 ];
@@ -45,7 +45,7 @@ export default function App() {
             const name = window.prompt('New brand name:')?.trim();
             if (!name) return;
             const description = window.prompt('One line — category + positioning (drives every prompt):')?.trim() ?? '';
-            const essence = window.prompt('Hero fidelity essentials (what must never change):')?.trim() ?? '';
+            const essence = window.prompt('Asset fidelity essentials (what must never change):')?.trim() ?? '';
             createBrand(name, description, essence).then(b => {
                 setCurrentBrandId(b.id);
                 window.location.reload();

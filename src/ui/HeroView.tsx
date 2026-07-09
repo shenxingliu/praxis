@@ -9,8 +9,8 @@ import { S } from './styles';
 
 /**
  * HEROES — the hero-truth library (zero-deviation source pixels).
- * Upload photos to create heroes; add more photos to existing ones.
- * References (aesthetics) live in Library; heroes live here.
+ * Upload photos to create assets; add more photos to existing ones.
+ * References (aesthetics) live in Inspiration; assets live here.
  */
 
 const fileToDataUrl = (f: File): Promise<string> =>
@@ -37,7 +37,7 @@ export default function HeroView() {
     const createHero = async (input: FileList | File[] | null) => {
         const files = imageFiles(input);
         if (files.length === 0) return;
-        const name = window.prompt('Hero name:', files[0].name.replace(/\.[^.]+$/, ''))?.trim();
+        const name = window.prompt('Asset name:', files[0].name.replace(/\.[^.]+$/, ''))?.trim();
         if (!name) return;
         const category = window.prompt('Category (optional — e.g. Bed, Desk, Bottle):')?.trim() || undefined;
         setBusy(`Uploading ${files.length} photo${files.length === 1 ? '' : 's'}…`);
@@ -97,14 +97,14 @@ export default function HeroView() {
     };
 
     const removePhoto = async (a: Asset, photoId: string) => {
-        if (a.photos.length <= 1) { setNotice('A hero needs at least one photo — delete the hero instead.'); return; }
+        if (a.photos.length <= 1) { setNotice('An asset needs at least one photo — delete the asset instead.'); return; }
         await storage.upsertAsset({ ...a, photos: a.photos.filter(p => p.id !== photoId), updatedAt: Date.now() });
         announce();
         refresh();
     };
 
     const rename = async (a: Asset) => {
-        const name = window.prompt('Hero name:', a.name)?.trim();
+        const name = window.prompt('Asset name:', a.name)?.trim();
         if (!name) return;
         await storage.upsertAsset({ ...a, name, updatedAt: Date.now() });
         announce();
@@ -136,13 +136,13 @@ export default function HeroView() {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={S.label}>HEROES · {assets.length}</span>
-                <button style={S.btn} disabled={!!busy} onClick={() => newRef.current?.click()}>＋ New hero (upload photos)</button>
-                <span style={{ fontSize: 10, color: '#a1a1aa' }}>Source of truth — or drag & drop photos: onto the page = new hero, onto a card = add to that hero.</span>
+                <button style={S.btn} disabled={!!busy} onClick={() => newRef.current?.click()}>＋ New asset (upload photos)</button>
+                <span style={{ fontSize: 10, color: '#a1a1aa' }}>Source of truth — or drag & drop photos: onto the page = new asset, onto a card = add to that asset.</span>
                 <input ref={newRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={e => { createHero(e.target.files); e.target.value = ''; }} />
                 <input ref={addRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={e => { addPhotos(e.target.files); e.target.value = ''; }} />
             </div>
 
-            <DropZone onFiles={createHero} hint="Drop photos — creates a new hero">
+            <DropZone onFiles={createHero} hint="Drop photos — creates a new asset">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12, minHeight: 120 }}>
                 {assets.map(a => (
                     <DropZone key={a.id} onFiles={fs => addPhotosTo(a, fs)} hint={`Add to ${a.name}`}>
@@ -171,7 +171,7 @@ export default function HeroView() {
                 ))}
                 {assets.length === 0 && (
                     <p style={{ fontSize: 12, color: '#a1a1aa' }}>
-                        No heroes yet. Upload or drag & drop hero photos here, or import legacy data in System.
+                        No assets yet. Upload or drag & drop asset photos here, or import legacy data in System.
                     </p>
                 )}
             </div>

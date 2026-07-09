@@ -156,7 +156,7 @@ export default function CreateView() {
             {/* Assets */}
             <div style={{ width: 230, flexShrink: 0, borderRight: '1px solid #e4e4e7', background: '#fff', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ padding: '14px 14px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <span style={S.label}>1 · Heroes</span>
+                    <span style={S.label}>1 · Assets</span>
                     <span style={{ fontSize: 10, color: '#a1a1aa' }}>{selected.size} selected</span>
                 </div>
                 <div style={{ padding: '0 14px 8px' }}>
@@ -176,7 +176,7 @@ export default function CreateView() {
                             </button>
                         );
                     })}
-                    {filtered.length === 0 && <p style={{ fontSize: 11, color: '#a1a1aa' }}>No heroes. Import V1 data in System tab.</p>}
+                    {filtered.length === 0 && <p style={{ fontSize: 11, color: '#a1a1aa' }}>No assets. Import V1 data in System tab.</p>}
                 </div>
             </div>
 
@@ -254,7 +254,7 @@ export default function CreateView() {
                         </div>
                         <div style={{ fontSize: 10, color: '#a1a1aa' }}>
                             Brand DNA · learned rules · promoted references — applied automatically
-                            {selected.size === 0 && ' · pick at least one hero on the left'}
+                            {selected.size === 0 && ' · pick at least one asset on the left'}
                         </div>
                     </div>
 

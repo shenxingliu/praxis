@@ -109,7 +109,7 @@ export default function SystemView() {
             <h2 style={{ fontSize: 16 }}>Stores</h2>
             <table style={{ fontSize: 14, borderSpacing: '1.5rem 0.25rem' }}>
                 <tbody>
-                    <tr><td>Assets (hero truth)</td><td><strong>{counts.assets}</strong></td></tr>
+                    <tr><td>Assets (source of truth)</td><td><strong>{counts.assets}</strong></td></tr>
                     <tr><td>References (aesthetics)</td><td><strong>{counts.references}</strong></td></tr>
                     <tr><td>Knowledge rules</td><td><strong>{counts.rules}</strong></td></tr>
                     <tr><td>Results</td><td><strong>{counts.results}</strong></td></tr>

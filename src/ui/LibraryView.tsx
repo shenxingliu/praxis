@@ -15,7 +15,7 @@ import { DropZone, imageFiles } from './dropzone';
 import { S, chip } from './styles';
 
 /**
- * LIBRARY — collect → classify → decompose.
+ * INSPIRATION — collect → classify → decompose.
  * Upload references; each is auto-decomposed into reusable elements.
  * Elements are the studio's recombination vocabulary.
  */

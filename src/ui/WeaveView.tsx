@@ -10,7 +10,7 @@ import { DropZone, imageFiles } from './dropzone';
 import { S, chip } from './styles';
 
 /**
- * WEAVE — infinite freeform canvas (Figma-Weave inspired).
+ * CANVAS — infinite freeform canvas (Figma-Weave inspired).
  *
  * Nodes: hero · concept · image · facet · prompt · output.
  * Port-drag bezier links; connected groups flow into outputs; results are
@@ -583,7 +583,7 @@ export default function WeaveView() {
         if (!nn.image) return;
         const a = document.createElement('a');
         a.href = nn.image;
-        a.download = `praxis-weave-${nn.id.slice(0, 6)}.png`;
+        a.download = `praxis-canvas-${nn.id.slice(0, 6)}.png`;
         a.click();
         const r = nn.resultId ? resultsRef.current.get(nn.resultId) : undefined;
         if (r) recordSignal(r, 'export');
@@ -689,7 +689,7 @@ export default function WeaveView() {
 
             {/* Toolbar */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <button style={S.btn} onClick={() => setPicker(picker === 'hero' ? null : 'hero')}>+ Hero</button>
+                <button style={S.btn} onClick={() => setPicker(picker === 'hero' ? null : 'hero')}>+ Asset</button>
                 <button style={S.btn} onClick={() => setPicker(picker === 'element' ? null : 'element')}>+ Concept</button>
                 <button style={S.btnGhost} onClick={() => fileRef.current?.click()}>+ Images</button>
                 <button style={S.btnGhost} onClick={() => add({ kind: 'note', text: '' })}>+ Prompt</button>
@@ -723,7 +723,7 @@ export default function WeaveView() {
                             {a.name}
                         </button>
                     ))}
-                    {assets.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No heroes — add them in Heroes.</span>}
+                    {assets.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No assets — add them in Assets.</span>}
                 </div>
             )}
             {picker === 'element' && (
@@ -734,7 +734,7 @@ export default function WeaveView() {
                             [{el.type}] {el.concept}
                         </button>
                     ))}
-                    {elements.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No concepts — decompose references in Library.</span>}
+                    {elements.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No concepts — decompose references in Inspiration.</span>}
                 </div>
             )}
 

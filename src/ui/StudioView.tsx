@@ -53,7 +53,7 @@ export default function StudioView() {
     };
 
     const begin = () => guard('Concept agent thinking…', async () => {
-        if (selectedAssets.size === 0) throw new Error('Pick at least one hero.');
+        if (selectedAssets.size === 0) throw new Error('Pick at least one asset.');
         const j = await startJob(brief.trim()); // empty brief = open exploration
         setJob(await proposeConcepts(j));
     });
@@ -222,7 +222,7 @@ export default function StudioView() {
                         placeholder='Optional — leave blank for open exploration (the studio proposes what the brand should make next). Or e.g. "Spring campaign hero image — fresh, optimistic, website banner"'
                         value={brief} onChange={e => setBrief(e.target.value)}
                     />
-                    <span style={S.label}>HEROES · {selectedAssets.size} selected</span>
+                    <span style={S.label}>ASSETS · {selectedAssets.size} selected</span>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {assets.map(a => {
                             const on = selectedAssets.has(a.id);
@@ -237,7 +237,7 @@ export default function StudioView() {
                                 </button>
                             );
                         })}
-                        {assets.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No heroes yet — import them in System.</span>}
+                        {assets.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No assets yet — import them in System.</span>}
                     </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                         <button style={S.btn} disabled={!!busy} onClick={begin}>
@@ -383,7 +383,7 @@ export default function StudioView() {
                                         </span>
                                         <span style={{ display: 'flex', gap: 6 }}>
                                             <button style={S.btnGhost} title="Save to Gallery (curated set, used for training export)" onClick={async () => { await recordSignal(r, 'save'); setBusy(''); setError(null); window.alert('Saved — find it in Gallery.'); }}>Gallery</button>
-                                            <button style={S.btnGhost} title="Save this whole setup as a Quick preset — same look, swap heroes" onClick={() => toPreset(r)}>Preset</button>
+                                            <button style={S.btnGhost} title="Save this whole setup as a Quick preset — same look, swap assets" onClick={() => toPreset(r)}>Preset</button>
                                             <button style={S.btnGhost} onClick={() => download(r)}>Save</button>
                                         </span>
                                     </div>

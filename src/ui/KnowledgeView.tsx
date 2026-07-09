@@ -195,7 +195,7 @@ const SoulPanel: React.FC = () => {
                 <div style={{ ...S.card, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 6, background: '#fffbeb' }}>
                     <span style={{ fontWeight: 700 }}>The site also suggests brand meta — apply?</span>
                     <span>Description: {webSuggest.suggestedDescription}</span>
-                    <span>Hero essence: {webSuggest.suggestedEssence}</span>
+                    <span>Asset essence: {webSuggest.suggestedEssence}</span>
                     <span style={{ display: 'flex', gap: 8 }}>
                         <button style={S.btn} onClick={applySuggestion}>Apply to brand</button>
                         <button style={S.btnGhost} onClick={() => setWebSuggest(null)}>Ignore</button>
