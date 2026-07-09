@@ -1133,7 +1133,7 @@ export default function WeaveView() {
                                         )}
                                         {nn.kind === 'image' && (
                                             <>
-                                                {(['fusion', 'hero', 'concept'] as const).map(role => (
+                                                {(['fusion', 'concept'] as const).map(role => (
                                                     <button key={role} style={{ ...miniBtn, background: (nn.role ?? 'fusion') === role ? '#18181b' : '#f4f4f5', color: (nn.role ?? 'fusion') === role ? '#fff' : '#3f3f46' }}
                                                         disabled={!!busy} onClick={() => setRole(nn, role)}>
                                                         {role}
