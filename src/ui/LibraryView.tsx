@@ -1,28 +1,27 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Element, ElementType, Reference } from '../domain/types';
+import { Reference } from '../domain/types';
 import { storage } from '../storage/local';
 import { getCurrentBrandId } from '../domain/brand';
-import {
-    decomposeAllPending, curateLibrary,
-    redecomposeReference, rebuildLibrary,
-} from '../engine/decompose';
 import {
     TransferLevel, LEVEL_LABEL, FusionDraft, FusionCombo,
     synthesizeReference, keepFusion, proposeCombos, recordFusionVerdict,
 } from '../engine/fusion';
 import { openLightbox } from './lightbox';
 import { DropZone, imageFiles } from './dropzone';
-import { S, chip } from './styles';
+import { S } from './styles';
 
 /**
- * INSPIRATION — collect → classify → decompose.
- * Upload references; each is auto-decomposed into reusable elements.
- * Elements are the studio's recombination vocabulary.
+ * INSPIRATION — a pool of raw reference images, fused directly.
+ *
+ * No decomposition step, no concept library: uploading costs zero API
+ * calls, and every fusion is ONE call in which the model derives each
+ * image's strongest transferable idea at the chosen level and fuses.
+ *
+ *   Fuse       — ticked 2-4 refs fuse immediately; with nothing ticked
+ *                the curator studies the pool and proposes 3 combos
+ *   Auto-fuse  — zero decisions: curator proposes AND fuses; you only
+ *                Keep or Discard
  */
-
-const TYPE_LABEL: Record<ElementType, string> = {
-    visual: 'Visual', feeling: 'Feeling', communication: 'Communication',
-};
 
 const fileToDataUrl = (f: File): Promise<string> =>
     new Promise((res, rej) => {
@@ -34,8 +33,6 @@ const fileToDataUrl = (f: File): Promise<string> =>
 
 export default function LibraryView() {
     const [refs, setRefs] = useState<Reference[]>([]);
-    const [elements, setElements] = useState<Element[]>([]);
-    const [filter, setFilter] = useState<ElementType | 'all'>('all');
     /** busy = something is RUNNING (gates buttons). Cleared when settled. */
     const [busy, setBusy] = useState('');
     /** notice = outcome message. Never gates anything. */
@@ -43,7 +40,6 @@ export default function LibraryView() {
     const fileRef = useRef<HTMLInputElement>(null);
 
     // Fusion Lab state
-    const [selected, setSelected] = useState<Set<string>>(new Set());
     const [selectedRefs, setSelectedRefs] = useState<Set<string>>(new Set());
     const [level, setLevel] = useState<TransferLevel>('concept');
     const [fusionNote, setFusionNote] = useState('');
@@ -52,7 +48,6 @@ export default function LibraryView() {
 
     const refresh = () => {
         storage.listReferences().then(setRefs);
-        storage.listElements().then(setElements);
     };
     useEffect(refresh, []);
 
@@ -75,43 +70,17 @@ export default function LibraryView() {
             await storage.upsertReference(ref);
         }
         setBusy('');
-        setNotice('Uploaded — fuse references directly, or press Decomp on a card to mine concept cards (optional).');
+        setNotice(`Uploaded ${files.length} reference${files.length === 1 ? '' : 's'} — tick a few and Fuse.`);
         refresh();
     };
 
-    const runPending = async () => {
-        setBusy('Decomposing…');
-        try {
-            const { refs: n, elements: m } = await decomposeAllPending(setBusy);
-            setNotice(n === 0 ? 'Nothing pending.' : `Decomposed ${n} refs → ${m} elements.`);
-        } catch (err: any) { setNotice(`${err?.message || err}`); }
-        setBusy('');
-        refresh();
-    };
-
-    const toggleElement = async (el: Element) => {
-        await storage.upsertElement({ ...el, enabled: !el.enabled });
-        refresh();
-    };
-    const removeElement = async (el: Element) => {
-        await storage.deleteElement(el.id);
-        refresh();
-    };
     const removeRef = async (r: Reference) => {
-        if (!window.confirm(`Delete reference "${r.name}" (its elements stay)?`)) return;
+        if (!window.confirm(`Delete reference "${r.name}"?`)) return;
         await storage.deleteReference(r.id);
+        setSelectedRefs(prev => { const n = new Set(prev); n.delete(r.id); return n; });
         refresh();
     };
 
-    const refById = (id: string) => refs.find(r => r.id === id);
-    const shown = filter === 'all' ? elements : elements.filter(e => e.type === filter);
-
-    const toggleSelect = (id: string) =>
-        setSelected(prev => {
-            const n = new Set(prev);
-            n.has(id) ? n.delete(id) : n.add(id);
-            return n;
-        });
     const toggleSelectRef = (id: string) =>
         setSelectedRefs(prev => {
             const n = new Set(prev);
@@ -135,34 +104,38 @@ export default function LibraryView() {
         }
     };
 
-    const fuse = () => run('Fusing…', async () => {
-        const picked = elements.filter(e => selected.has(e.id));
-        const pickedRefs = refs.filter(r => selectedRefs.has(r.id));
-        setDraft(null);
-        setDraft(await synthesizeReference(picked, level, fusionNote.trim() || undefined, setBusy, pickedRefs));
-    });
-
-    const autoFuse = () => run('Curator picking combinations…', async () => {
-        setCombos([]);
-        setDraft(null);
-        setCombos(await proposeCombos(fusionNote.trim() || undefined));
-    });
+    /** Fuse: ticked 2+ refs fuse directly; otherwise the curator proposes. */
+    const fuse = () => {
+        const picked = refs.filter(r => selectedRefs.has(r.id));
+        if (picked.length >= 2) {
+            run('Fusing…', async () => {
+                setDraft(null);
+                setCombos([]);
+                setDraft(await synthesizeReference([], level, fusionNote.trim() || undefined, setBusy, picked));
+            });
+        } else {
+            run('Curator studying the pool…', async () => {
+                setCombos([]);
+                setDraft(null);
+                setCombos(await proposeCombos(fusionNote.trim() || undefined));
+            });
+        }
+    };
 
     const doCombo = async (c: FusionCombo) => {
-        const picked = elements.filter(e => c.elementIds.includes(e.id));
-        setSelected(new Set(c.elementIds));
+        const picked = refs.filter(r => c.refIds.includes(r.id));
+        setSelectedRefs(new Set(c.refIds));
         setLevel(c.level);
         setDraft(null);
         setBusy(`Fusing “${c.title}”…`);
         const note = [fusionNote.trim(), c.provocation].filter(Boolean).join(' · ');
-        setDraft(await synthesizeReference(picked, c.level, note || undefined, setBusy));
+        setDraft(await synthesizeReference([], c.level, note || undefined, setBusy, picked));
     };
 
     const runCombo = (c: FusionCombo) => run(`Fusing “${c.title}”…`, () => doCombo(c));
 
-    /** Full auto: curator picks combos → one is chosen at random → fused.
-     *  Only Keep/Discard remains. */
-    const fullAuto = () => run('Curator picking…', async () => {
+    /** Auto-fuse: curator proposes AND fuses — only Keep/Discard remains. */
+    const autoFuse = () => run('Curator picking…', async () => {
         setCombos([]);
         setDraft(null);
         const cs = await proposeCombos(fusionNote.trim() || undefined);
@@ -171,26 +144,8 @@ export default function LibraryView() {
         await doCombo(cs[Math.min(cs.length - 1, Math.floor(Math.random() * cs.length))]);
     });
 
-    const curate = () => run('Curating library…', async () => {
-        const r = await curateLibrary();
-        return `Disabled ${r.disabled}, kept ${r.kept}. ${r.note}`;
-    });
-
-    const redo = (r: Reference) => run(`Re-decomposing ${r.name}…`, async () => {
-        const els = await redecomposeReference(r);
-        return `${r.name} → ${els.length} fresh concepts`;
-    });
-
-    const rebuild = () => {
-        if (!window.confirm('Rebuild the whole concept library?\n\nAll current concepts are wiped and every reference is re-decomposed with dedupe + auto-curation. No selection needed.')) return;
-        run('Rebuilding…', async () => {
-            const r = await rebuildLibrary(setBusy);
-            setSelected(new Set());
-            return `Rebuilt: ${r.refs} refs → ${r.elements} concepts${r.curated > 0 ? ` (auto-curated ${r.curated})` : ''}`;
-        });
-    };
-
-    const verdictElements = (d: FusionDraft) => elements.filter(e => d.elementIds.includes(e.id));
+    const draftRefNames = (d: FusionDraft) =>
+        d.sourceRefIds.map(id => refs.find(r => r.id === id)?.name).filter((n): n is string => !!n);
 
     const keep = () => {
         if (!draft) return;
@@ -199,17 +154,17 @@ export default function LibraryView() {
         const name = input.trim() || `Fusion gen${draft.generation}`;
         run('Saving…', async () => {
             await keepFusion(draft, name, setBusy);
-            recordFusionVerdict(draft, verdictElements(draft), draft.level, 'keep').catch(() => {});
+            recordFusionVerdict(draft, [], draft.level, 'keep', draftRefNames(draft)).catch(() => {});
             setDraft(null);
-            setSelected(new Set());
+            setCombos([]);
             setSelectedRefs(new Set());
-            return 'In the library · verdict remembered — fuse it directly anytime; Decomp only if you want its concepts';
+            return 'In the library · verdict remembered — it can be fused again like any reference';
         });
     };
 
     const discard = () => {
         if (!draft) return;
-        recordFusionVerdict(draft, verdictElements(draft), draft.level, 'discard').catch(() => {});
+        recordFusionVerdict(draft, [], draft.level, 'discard', draftRefNames(draft)).catch(() => {});
         setDraft(null);
         setNotice('Discarded · verdict remembered — the curator won’t repeat this combo');
         refresh();
@@ -229,53 +184,29 @@ export default function LibraryView() {
                     {busy ? `${busy}` : notice}
                 </div>
             )}
-            <DropZone onFiles={upload} hint="Drop references — fuse them directly, decompose only if you want concept cards" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <DropZone onFiles={upload} hint="Drop references — zero cost, fuse whenever you like" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={S.label}>REFERENCES · {refs.length}</span>
                 <button style={S.btn} onClick={() => fileRef.current?.click()}>＋ Upload references</button>
-                <button style={S.btnGhost} onClick={runPending}>Decompose pending</button>
                 <span style={{ fontSize: 10, color: '#a1a1aa' }}>or drag & drop images anywhere in this section</span>
                 <input ref={fileRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={e => { upload(e.target.files); e.currentTarget.value = ''; }} />
             </div>
 
-            {/* Pinterest-style masonry: natural aspect ratios, no cropping */}
-            <div style={{ columnWidth: 150, columnGap: 10 }}>
-                {refs.map(r => (
-                    <div key={r.id} style={{ ...S.card, padding: 0, overflow: 'hidden', position: 'relative', breakInside: 'avoid', marginBottom: 10, border: selectedRefs.has(r.id) ? '1.5px solid #18181b' : undefined }}>
-                        <img src={r.image.value} alt={r.name} onClick={() => openLightbox(r.image.value)}
-                            style={{ width: '100%', display: 'block', cursor: 'zoom-in' }} />
-                        <div style={{ padding: '5px 8px', fontSize: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 5 }}>
-                            <input type="checkbox" checked={selectedRefs.has(r.id)} onChange={() => toggleSelectRef(r.id)}
-                                style={{ cursor: 'pointer', margin: 0 }} title="Select for the Fusion Lab — fuses directly, no decomposition needed" />
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{r.name}</span>
-                            <span>{r.source === 'synthesized' ? `g${r.generation ?? 1}` : r.source === 'promoted' ? '*' : r.decomposed ? 'd' : '·'}</span>
-                        </div>
-                        <button onClick={() => removeRef(r)} title="Delete"
-                            style={{ position: 'absolute', top: 4, right: 4, border: 'none', borderRadius: 6, background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 10, cursor: 'pointer', padding: '2px 6px' }}>✕</button>
-                        <button onClick={() => redo(r)} title="Re-decompose — wipe this reference's concepts and extract fresh"
-                            style={{ position: 'absolute', top: 4, left: 4, border: 'none', borderRadius: 6, background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 10, cursor: 'pointer', padding: '2px 6px' }}>Decomp</button>
-                    </div>
-                ))}
-                {refs.length === 0 && <p style={{ fontSize: 12, color: '#a1a1aa' }}>No references yet. Upload or drag & drop aesthetic references — tick 2-4 and Fuse directly; decomposition into concept cards is optional (Decomp on a card).</p>}
-            </div>
-            </DropZone>
-
             {/* Fusion Lab */}
             <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 8, border: '1.5px dashed #a1a1aa' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={S.label}>FUSION LAB · {selectedRefs.size} ref{selectedRefs.size === 1 ? '' : 's'} + {selected.size} concept{selected.size === 1 ? '' : 's'}</span>
+                    <span style={S.label}>FUSION LAB · {selectedRefs.size} selected</span>
                     <select value={level} onChange={e => setLevel(e.target.value as TransferLevel)} style={{ ...S.input, width: 250 }}>
                         {(Object.keys(LEVEL_LABEL) as TransferLevel[]).map(l => <option key={l} value={l}>{LEVEL_LABEL[l]}</option>)}
                     </select>
                     <input style={{ ...S.input, flex: 1, minWidth: 160 }} placeholder="Optional art direction…" value={fusionNote} onChange={e => setFusionNote(e.target.value)} />
-                    <button style={{ ...S.btn, opacity: selected.size + selectedRefs.size >= 2 ? 1 : 0.4 }} disabled={selected.size + selectedRefs.size < 2 || !!busy} onClick={fuse}>
-                        Fuse → new reference
+                    <button style={S.btn} disabled={!!busy || refs.length < 2} onClick={fuse}
+                        title="Ticked 2-4 references fuse immediately; with nothing ticked the curator studies the pool and proposes 3 combos">
+                        Fuse
                     </button>
-                    <button style={S.btn} disabled={!!busy} onClick={autoFuse} title="The curator picks 3 combinations for you — scored for productive tension, not similarity">
+                    <button style={S.btn} disabled={!!busy || refs.length < 3} onClick={autoFuse}
+                        title="Zero decisions: the curator proposes the combo AND fuses it — you only Keep or Discard">
                         Auto-fuse
-                    </button>
-                    <button style={S.btn} disabled={!!busy} onClick={fullAuto} title="Zero decisions: curator picks the combo AND fuses it — you only Keep or Discard">
-                        Full auto
                     </button>
                 </div>
                 {combos.length > 0 && !draft && (
@@ -285,8 +216,12 @@ export default function LibraryView() {
                                 <div style={{ fontSize: 12.5, fontWeight: 700 }}>{c.title}</div>
                                 <div style={{ fontSize: 10, color: '#71717a' }}>{LEVEL_LABEL[c.level]}</div>
                                 <div style={{ fontSize: 11, lineHeight: 1.5 }}>{c.why}</div>
-                                <div style={{ fontSize: 10.5, color: '#57534e' }}>
-                                    {c.elementIds.map(id => elements.find(e => e.id === id)?.concept).filter(Boolean).map(s => `“${s}”`).join(' × ')}
+                                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                    {c.refIds.map(id => {
+                                        const r = refs.find(x => x.id === id);
+                                        return r ? <img key={id} src={r.image.value} alt={r.name} title={r.name}
+                                            style={{ width: 44, height: 44, borderRadius: 6, objectFit: 'cover' }} /> : null;
+                                    })}
                                 </div>
                                 {c.provocation && <div style={{ fontSize: 10.5, color: '#92400e' }}>{c.provocation}</div>}
                                 <button style={{ ...S.btn, marginTop: 'auto' }} disabled={!!busy} onClick={() => runCombo(c)}>Fuse this</button>
@@ -295,7 +230,7 @@ export default function LibraryView() {
                     </div>
                 )}
                 <div style={{ fontSize: 10, color: '#a1a1aa' }}>
-                    Tick 2-4 references above (zero extraction cost — one call derives & fuses) and/or concept cards below, pick the transfer level — L1 imitates, L3/L4 creates — and breed a brand-new pure aesthetic reference (flash-model cost).
+                    Tick 2-4 references and Fuse — ONE call derives each image’s strongest idea at the transfer level (L1 imitates, L3/L4 creates) and breeds a new pure aesthetic reference. Or press Fuse with nothing ticked and let the curator propose.
                 </div>
                 {draft && (
                     <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
@@ -303,6 +238,7 @@ export default function LibraryView() {
                             style={{ width: 260, borderRadius: 10, cursor: 'zoom-in' }} />
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12 }}>
                             <span style={{ fontWeight: 700 }}>Generation {draft.generation}</span>
+                            <span style={{ fontSize: 10.5, color: '#71717a' }}>{draftRefNames(draft).map(n => `“${n}”`).join(' × ')}</span>
                             {draft.redline && (
                                 <span style={{ color: draft.redline.pass ? '#3f3f46' : '#18181b' }}>
                                     {draft.redline.pass ? 'passes brand red-lines' : 'red-line risk'} — {draft.redline.note}
@@ -324,52 +260,27 @@ export default function LibraryView() {
                 )}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <span style={S.label}>ELEMENTS · {elements.length}</span>
-                <button style={S.btnGhost} disabled={!!busy} onClick={curate} title="Merge near-duplicates, disable generic filler — nothing is deleted">
-                    Curate
-                </button>
-                <button style={S.btnGhost} disabled={!!busy} onClick={rebuild} title="Wipe all concepts and re-decompose every reference — lean by construction, auto-curated, zero picking">
-                    Rebuild library
-                </button>
-                <button style={chip(filter === 'all')} onClick={() => setFilter('all')}>All</button>
-                {(Object.keys(TYPE_LABEL) as ElementType[]).map(t => (
-                    <button key={t} style={chip(filter === t)} onClick={() => setFilter(t)}>
-                        {TYPE_LABEL[t]} {elements.filter(e => e.type === t).length || ''}
-                    </button>
-                ))}
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
-                {shown.map(el => {
-                    const src = refById(el.sourceRefId);
-                    const on = selected.has(el.id);
-                    return (
-                        <div key={el.id} style={{ ...S.card, display: 'flex', gap: 10, opacity: el.enabled ? 1 : 0.45, border: on ? '1.5px solid #18181b' : undefined }}>
-                            <input type="checkbox" checked={on} onChange={() => toggleSelect(el.id)} style={{ alignSelf: 'flex-start', marginTop: 4, cursor: 'pointer' }} title="Select for Fusion Lab" />
-                            {src && <img src={src.image.value} alt="" onClick={() => openLightbox(src.image.value)}
-                                style={{ width: 54, height: 54, borderRadius: 8, objectFit: 'cover', flexShrink: 0, cursor: 'zoom-in' }} />}
-                            <div style={{ minWidth: 0, flex: 1 }}>
-                                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: '#71717a' }}>
-                                    {TYPE_LABEL[el.type]} · w{el.weight.toFixed(1)}
-                                    {el.weight > 1 && <span style={{ color: '#059669' }}> ▲ rising</span>}
-                                    {el.weight < 0.9 && <span style={{ color: '#52525b' }}> ▼ fading</span>}
-                                    {!el.lastUsedAt && Date.now() - el.createdAt > 14 * 86400_000 && <span style={{ color: '#a1a1aa' }}> sleeping</span>}
-                                </div>
-                                <div style={{ fontSize: 12.5, fontWeight: 700, marginTop: 3 }}>{el.concept}{el.worldview && <span style={{ fontWeight: 400, color: '#a1a1aa' }}> · “{el.worldview}”</span>}</div>
-                                {el.analysis && <div style={{ fontSize: 10.5, color: '#71717a', marginTop: 2, lineHeight: 1.45 }}>{el.analysis}</div>}
-                                {el.principle && <div style={{ fontSize: 10.5, color: '#57534e', marginTop: 2, lineHeight: 1.45 }}>{el.principle}</div>}
-                                <div style={{ fontSize: 11, marginTop: 3, lineHeight: 1.45 }}>↳ {el.description}</div>
-                                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                                    <button style={S.btnGhost} onClick={() => toggleElement(el)}>{el.enabled ? 'Disable' : 'Enable'}</button>
-                                    <button style={S.btnGhost} onClick={() => removeElement(el)}>Delete</button>
-                                </div>
-                            </div>
+            {/* Pinterest-style masonry: natural aspect ratios, no cropping */}
+            <div style={{ columnWidth: 150, columnGap: 10 }}>
+                {refs.map(r => (
+                    <div key={r.id} style={{ ...S.card, padding: 0, overflow: 'hidden', position: 'relative', breakInside: 'avoid', marginBottom: 10, border: selectedRefs.has(r.id) ? '1.5px solid #18181b' : undefined }}>
+                        <img src={r.image.value} alt={r.name} onClick={() => toggleSelectRef(r.id)}
+                            style={{ width: '100%', display: 'block', cursor: 'pointer' }} />
+                        <div style={{ padding: '5px 8px', fontSize: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 5 }}>
+                            <input type="checkbox" checked={selectedRefs.has(r.id)} onChange={() => toggleSelectRef(r.id)}
+                                style={{ cursor: 'pointer', margin: 0 }} title="Select for the Fusion Lab" />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{r.name}</span>
+                            <span>{r.source === 'synthesized' ? `g${r.generation ?? 1}` : r.source === 'promoted' ? '*' : ''}</span>
                         </div>
-                    );
-                })}
-                {shown.length === 0 && <p style={{ fontSize: 12, color: '#a1a1aa' }}>No elements{filter !== 'all' ? ' of this type' : ''} yet.</p>}
+                        <button onClick={() => removeRef(r)} title="Delete"
+                            style={{ position: 'absolute', top: 4, right: 4, border: 'none', borderRadius: 6, background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 10, cursor: 'pointer', padding: '2px 6px' }}>✕</button>
+                        <button onClick={e => { e.stopPropagation(); openLightbox(r.image.value); }} title="Zoom"
+                            style={{ position: 'absolute', top: 4, left: 4, border: 'none', borderRadius: 6, background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 10, cursor: 'pointer', padding: '2px 6px' }}>⤢</button>
+                    </div>
+                ))}
+                {refs.length === 0 && <p style={{ fontSize: 12, color: '#a1a1aa' }}>No references yet. Upload or drag & drop aesthetic references — tick a few and Fuse.</p>}
             </div>
+            </DropZone>
         </div>
     );
 }

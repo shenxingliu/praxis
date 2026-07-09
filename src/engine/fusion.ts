@@ -57,11 +57,13 @@ export async function recordFusionVerdict(
     draft: FusionDraft,
     elements: Element[],
     level: TransferLevel,
-    verdict: 'keep' | 'discard'
+    verdict: 'keep' | 'discard',
+    /** For reference-direct fusions (no concept cards): the ref names. */
+    refNames: string[] = []
 ): Promise<void> {
     const v: FusionVerdict = {
         verdict,
-        concepts: elements.map(e => e.concept),
+        concepts: elements.length > 0 ? elements.map(e => e.concept) : refNames,
         elementIds: elements.map(e => e.id),
         level,
         generation: draft.generation,
@@ -94,15 +96,21 @@ export async function getFusionVerdicts(): Promise<FusionVerdict[]> {
 export interface FusionCombo {
     title: string;
     why: string;
-    elementIds: string[];
+    refIds: string[];
     level: TransferLevel;
     /** One deliberately foreign twist injected for creativity. */
     provocation?: string;
 }
 
-export async function proposeCombos(intent?: string): Promise<FusionCombo[]> {
-    const elements = (await storage.listElements()).filter(e => e.enabled);
-    if (elements.length < 4) throw new Error('Need at least 4 enabled concepts — decompose more references first.');
+/** The curator LOOKS at the reference images themselves (up to 8, newest
+ *  first) and proposes combinations — no concept library required. */
+export async function proposeCombos(intent?: string, candidateRefs?: Reference[]): Promise<FusionCombo[]> {
+    const all = (candidateRefs && candidateRefs.length > 0
+        ? candidateRefs
+        : await storage.listReferences()
+    ).filter(r => r.image.kind === 'data');
+    if (all.length < 3) throw new Error('Need at least 3 references to propose fusions — upload more.');
+    const pool = [...all].sort((a, b) => (b.weight - a.weight) || (b.createdAt - a.createdAt)).slice(0, 8);
     const brand = await getCurrentBrand();
     const soul = await getBrandSoul().catch(() => null);
     const recentDislikes = (await getFieldAttributions().catch(() => []))
@@ -120,41 +128,43 @@ Favor the patterns behind KEPT combos; do not repeat DISCARDED combinations or c
 ` : '';
 
     const parsed = await generateJson<{ combos: Array<Record<string, unknown>> }>(
-        `You are the CURATOR of a design studio's concept library, working for "${brand.name}" — ${brand.description}
+        `You are the CURATOR of a design studio's reference collection, working for "${brand.name}" — ${brand.description}
 ${intent ? `\nThe owner's intent right now: ${intent}\n` : ''}
-### CONCEPT LIBRARY ###
-${elements.map(e => `- id=${e.id} [${e.type}] (w${e.weight}) "${e.concept}"${e.worldview ? ` / believes: ${e.worldview}` : ''} — ${e.description.slice(0, 90)}`).join('\n')}
+### REFERENCE POOL (the ${pool.length} attached images, numbered in order) ###
+${pool.map((r, i) => `${i + 1}. "${r.name}"${r.source === 'synthesized' ? ` (fusion gen${r.generation ?? 1})` : ''} (w${r.weight})`).join('\n')}
 
 ### BRAND SOUL (locked = untouchable) ###
 ${(soul?.fields ?? []).filter(f => f.value.trim()).slice(0, 10).map(f => `${f.key}${f.locked ? ' [LOCKED]' : ''}: ${f.value.slice(0, 80)}`).join('\n') || '(none yet)'}
 ${recentDislikes.length > 0 ? `\n### RECENT COMPLAINTS (avoid these failure modes) ###\n${recentDislikes.map(r => `- ${r}`).join('\n')}` : ''}
 ${memoryBlock}
 ### TASK ###
-Propose exactly 3 fusion combinations. Selection criteria, in order:
-1. PRODUCTIVE TENSION — concepts that resist each other interestingly. Never pick concepts because they are similar; similar + similar = wallpaper.
-2. CROSS-LENS — each combo should mix lenses (a visual × a feeling × a communication beats three visuals).
-3. Weight-aware — favor rising concepts (w>1), but each combo may include ONE sleeper as a dark horse.
+Study the attached images, then propose exactly 3 fusion combinations. Selection criteria, in order:
+1. PRODUCTIVE TENSION — images whose visual worlds resist each other interestingly. Never pick images because they are similar; similar + similar = wallpaper.
+2. COMPLEMENTARY STRENGTHS — combine what each image is uniquely best at (one's light, another's formal language, another's attitude).
+3. Weight-aware — favor rising references (w>1), but each combo may include ONE sleeper as a dark horse.
 Make the three combos genuinely different strategies: one SAFE-ADJACENT (closest to current soul), one TENSION-FORWARD, one WILD (still inside locked red-lines).
 
 For each combo:
 - title: 3-5 words
 - why: 1-2 sentences — name the tension and why the brand would recognize the result as its own
-- elementIds: 2-4 ids from the library
+- refNumbers: 2-4 image numbers from the pool above
 - level: percept | principle | concept | worldview (higher = more creative freedom; match the combo's strategy)
 - provocation: optional — ONE deliberately foreign art-direction twist, max 12 words (e.g. "shot as if underwater", "colors of an overexposed Polaroid")
 
-Output JSON: { "combos": [ { "title", "why", "elementIds", "level", "provocation" } ] }`
+Output JSON: { "combos": [ { "title", "why", "refNumbers", "level", "provocation" } ] }`,
+        pool.map(r => r.image.value)
     );
 
-    const valid = new Set(elements.map(e => e.id));
     const levels: TransferLevel[] = ['percept', 'principle', 'concept', 'worldview'];
     return (parsed?.combos ?? []).slice(0, 3).map(c => ({
         title: String(c.title ?? 'Combo'),
         why: String(c.why ?? ''),
-        elementIds: (Array.isArray(c.elementIds) ? c.elementIds : []).filter((id: unknown) => valid.has(String(id))).map(String),
+        refIds: (Array.isArray(c.refNumbers) ? c.refNumbers : [])
+            .map((n: unknown) => pool[Number(n) - 1]?.id)
+            .filter((id: string | undefined): id is string => !!id),
         level: levels.includes(c.level as TransferLevel) ? c.level as TransferLevel : 'concept',
         provocation: c.provocation ? String(c.provocation) : undefined,
-    })).filter(c => c.elementIds.length >= 2);
+    })).filter(c => c.refIds.length >= 2);
 }
 
 export interface FusionDraft {
