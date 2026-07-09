@@ -922,7 +922,7 @@ export default function WeaveView() {
             <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 8 }}>
             <aside style={{
                 flex: '0 0 auto',
-                width: (assetsOpen ? assetsRailWidth : 28) + (inspirationOpen ? inspirationRailWidth : 28) + 8,
+                width: (assetsOpen ? assetsRailWidth : 40) + (inspirationOpen ? inspirationRailWidth : 40) + 8,
                 minHeight: 0,
                 display: 'flex',
                 gap: 8,
@@ -973,22 +973,39 @@ export default function WeaveView() {
                     <button
                         onClick={() => setAssetsOpen(true)}
                         title="Open Assets"
+                        onMouseEnter={event => {
+                            event.currentTarget.style.background = 'rgba(255,255,255,0.9)';
+                            event.currentTarget.style.transform = 'translateX(2px)';
+                        }}
+                        onMouseLeave={event => {
+                            event.currentTarget.style.background = 'rgba(255,255,255,0.72)';
+                            event.currentTarget.style.transform = 'translateX(0)';
+                        }}
                         style={{
-                            flex: '0 0 28px',
-                            border: '1px solid rgba(212,212,216,0.58)',
-                            background: 'rgba(255,255,255,0.58)',
-                            borderRadius: 8,
+                            flex: '0 0 40px',
+                            border: '1px solid rgba(161,161,170,0.56)',
+                            background: 'rgba(255,255,255,0.72)',
+                            backdropFilter: 'blur(18px) saturate(1.18)',
+                            WebkitBackdropFilter: 'blur(18px) saturate(1.18)',
+                            borderRadius: 12,
+                            boxShadow: '0 18px 34px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.62)',
                             cursor: 'pointer',
-                            color: '#71717a',
+                            color: '#52525b',
                             fontSize: 10,
                             fontWeight: 800,
-                            letterSpacing: 0.6,
-                            writingMode: 'vertical-rl',
-                            textOrientation: 'mixed',
-                            padding: '10px 0',
+                            letterSpacing: 0.8,
+                            padding: '10px 0 8px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 8,
+                            transition: 'transform 160ms ease, background 160ms ease, box-shadow 160ms ease',
                         }}
                     >
-                        Assets
+                        <span style={{ fontSize: 14, lineHeight: 1 }}>›</span>
+                        <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>Assets</span>
+                        <span style={{ minWidth: 18, minHeight: 18, borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(24,24,27,0.08)', color: '#71717a', fontSize: 9, letterSpacing: 0 }}>{assets.length}</span>
                     </button>
                 )}
 
@@ -1037,22 +1054,39 @@ export default function WeaveView() {
                     <button
                         onClick={() => setInspirationOpen(true)}
                         title="Open Inspiration"
+                        onMouseEnter={event => {
+                            event.currentTarget.style.background = 'rgba(255,255,255,0.9)';
+                            event.currentTarget.style.transform = 'translateX(2px)';
+                        }}
+                        onMouseLeave={event => {
+                            event.currentTarget.style.background = 'rgba(255,255,255,0.72)';
+                            event.currentTarget.style.transform = 'translateX(0)';
+                        }}
                         style={{
-                            flex: '0 0 28px',
-                            border: '1px solid rgba(212,212,216,0.58)',
-                            background: 'rgba(255,255,255,0.58)',
-                            borderRadius: 8,
+                            flex: '0 0 40px',
+                            border: '1px solid rgba(161,161,170,0.56)',
+                            background: 'rgba(255,255,255,0.72)',
+                            backdropFilter: 'blur(18px) saturate(1.18)',
+                            WebkitBackdropFilter: 'blur(18px) saturate(1.18)',
+                            borderRadius: 12,
+                            boxShadow: '0 18px 34px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.62)',
                             cursor: 'pointer',
-                            color: '#71717a',
+                            color: '#52525b',
                             fontSize: 10,
                             fontWeight: 800,
-                            letterSpacing: 0.6,
-                            writingMode: 'vertical-rl',
-                            textOrientation: 'mixed',
-                            padding: '10px 0',
+                            letterSpacing: 0.8,
+                            padding: '10px 0 8px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 8,
+                            transition: 'transform 160ms ease, background 160ms ease, box-shadow 160ms ease',
                         }}
                     >
-                        Inspiration
+                        <span style={{ fontSize: 14, lineHeight: 1 }}>›</span>
+                        <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>Inspiration</span>
+                        <span style={{ minWidth: 18, minHeight: 18, borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(24,24,27,0.08)', color: '#71717a', fontSize: 9, letterSpacing: 0 }}>{references.length}</span>
                     </button>
                 )}
             </aside>
