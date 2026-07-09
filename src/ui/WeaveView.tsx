@@ -3,7 +3,7 @@ import { Asset, Element, GenerationParams, GenerationResult, Reference, SubjectT
 import { storage } from '../storage/local';
 import { brandKey, getCurrentBrandId } from '../domain/brand';
 import { INVENTORY_CHANGED_EVENT } from './events';
-import { weaveGenerate, extractFacets, deriveIdea, describeAsPrompt, analyzeImage, rotateView, estimateAngles, distillWeaveApproach, WeaveFacet } from '../engine/weave';
+import { weaveGenerate, extractFacets, deriveIdea, describeAsPrompt, analyzeImage, rotateView, estimateAngles, distillWeaveApproach, WeaveFacet, FACET_DIMENSIONS, FACET_HINTS } from '../engine/weave';
 import { recordSignal } from '../learning/learning';
 import { BudgetExceededError } from '../engine/engine';
 import { openLightbox } from './lightbox';
@@ -190,7 +190,7 @@ export default function WeaveView() {
     const [libTab, setLibTab] = useState<'assets' | 'inspiration'>('assets');
     const [libWidth, setLibWidth] = useState(208);
     const [libResizing, setLibResizing] = useState(false);
-    const [facetPick, setFacetPick] = useState<{ image: string; near: { x: number; y: number }; facets: Array<{ dimension: string; description: string }> } | null>(null);
+    const [facetPick, setFacetPick] = useState<{ image: string; near: { x: number; y: number }; chosen: string[] } | null>(null);
     const [ratio, setRatio] = useState<GenerationParams['ratio']>('4:3');
     const [size, setSize] = useState<NonNullable<GenerationParams['size']>>('1K');
     const [tierSel, setTierSel] = useState<'flash' | 'pro'>('flash');
@@ -511,23 +511,36 @@ export default function WeaveView() {
         return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
     };
 
-    // --- facets: extract, then let the user PICK which ones to add ---
-    const decomposeImage = async (image: string | undefined, near: { x: number; y: number }) => {
+    // --- facets: PICK dimensions first, then extract only those ---
+    const decomposeImage = (image: string | undefined, near: { x: number; y: number }) => {
         if (!image) return;
-        setBusy('Decomposing into dimensions…');
-        setNotice('');
-        try {
-            const facets = await extractFacets(image);
-            setFacetPick({ image, near, facets });
-        } catch (err: any) { setNotice(`${err?.message || err}`); }
-        setBusy('');
+        setFacetPick({ image, near, chosen: [] });
     };
     const decomposeNode = (node: WeaveNode) => decomposeImage(node.image, { x: node.x + 150, y: node.y });
 
-    const addFacet = (f: { dimension: string; description: string }, i: number) => {
-        if (!facetPick) return;
-        add({ kind: 'facet', image: facetPick.image, dimension: f.dimension, description: f.description },
-            { x: facetPick.near.x + (i % 2) * 145, y: facetPick.near.y + Math.floor(i / 2) * 105 });
+    const toggleFacetDim = (dim: string) => {
+        setFacetPick(prev => prev ? {
+            ...prev,
+            chosen: prev.chosen.includes(dim) ? prev.chosen.filter(d => d !== dim) : [...prev.chosen, dim],
+        } : prev);
+    };
+
+    const runExtract = async (dims?: string[]) => {
+        const pick = facetPick;
+        if (!pick) return;
+        const chosen = dims ?? pick.chosen;
+        if (chosen.length === 0) { setNotice('Pick at least one dimension.'); return; }
+        setFacetPick(null);
+        setBusy(`Extracting ${chosen.length} dimension${chosen.length === 1 ? '' : 's'}…`);
+        setNotice('');
+        try {
+            const facets = await extractFacets(pick.image, chosen);
+            facets.forEach((f, i) =>
+                add({ kind: 'facet', image: pick.image, dimension: f.dimension, description: f.description },
+                    { x: pick.near.x + (i % 2) * 210, y: pick.near.y + Math.floor(i / 2) * 170 }));
+            setNotice(`${facets.length} facet card${facets.length === 1 ? '' : 's'} on the board.`);
+        } catch (err: any) { setNotice(`${err?.message || err}`); }
+        setBusy('');
     };
 
     // --- promote an uploaded image node into a library Asset ---
@@ -995,7 +1008,7 @@ export default function WeaveView() {
                 </span>
             </div>
 
-            {/* Facet chooser — pick only the dimensions you want */}
+            {/* Extract chooser — pick dimensions BEFORE the vision call */}
             {facetPick && (
                 <div style={{ ...S.card, display: 'flex', gap: 10, alignItems: 'center', border: '1.5px dashed #a1a1aa', padding: 10 }}>
                     <img
@@ -1006,21 +1019,24 @@ export default function WeaveView() {
                     />
                     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-                        <span style={S.label}>EXTRACT</span>
+                        <span style={S.label}>EXTRACT · pick what to decompose{facetPick.chosen.length > 0 ? ` · ${facetPick.chosen.length} selected` : ''}</span>
                         <span style={{ display: 'flex', gap: 6 }}>
-                            <button style={S.btnGhost} onClick={() => { facetPick.facets.forEach((f, i) => addFacet(f, i)); setFacetPick(null); }}>Add all</button>
+                            <button style={{ ...S.btn, fontSize: 11 }} disabled={!!busy || facetPick.chosen.length === 0} onClick={() => runExtract()}>
+                                Extract{facetPick.chosen.length > 0 ? ` ${facetPick.chosen.length}` : ''}
+                            </button>
+                            <button style={S.btnGhost} disabled={!!busy} onClick={() => runExtract([...FACET_DIMENSIONS])}>All 12</button>
                             <button style={S.btnGhost} onClick={() => setFacetPick(null)}>Close</button>
                         </span>
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
-                        {facetPick.facets.map((f, i) => (
+                        {FACET_DIMENSIONS.map(dim => (
                             <button
-                                key={f.dimension}
-                                onClick={() => { addFacet(f, i); }}
-                                title={f.description}
-                                style={{ ...chip(false), minHeight: 30, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.2 }}
+                                key={dim}
+                                onClick={() => toggleFacetDim(dim)}
+                                title={FACET_HINTS[dim]}
+                                style={{ ...chip(facetPick.chosen.includes(dim)), minHeight: 30, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.2 }}
                             >
-                                <div>{f.dimension.toUpperCase()}</div>
+                                <div>{dim.toUpperCase()}</div>
                             </button>
                         ))}
                     </div>

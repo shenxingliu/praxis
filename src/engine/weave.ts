@@ -30,7 +30,7 @@ export interface WeaveFacet {
 export const FACET_DIMENSIONS = ['light', 'palette', 'composition', 'material', 'texture', 'mood', 'space', 'form', 'camera', 'styling', 'grading', 'narrative'] as const;
 
 /** What each dimension means — keeps the extraction model on-target. */
-const FACET_HINTS: Record<(typeof FACET_DIMENSIONS)[number], string> = {
+export const FACET_HINTS: Record<(typeof FACET_DIMENSIONS)[number], string> = {
     light: 'direction, quality (hard/soft), temperature, shadow behavior',
     palette: 'the actual colors and their proportions/logic',
     composition: 'framing geometry, balance, focal placement, negative space',
@@ -45,18 +45,22 @@ const FACET_HINTS: Record<(typeof FACET_DIMENSIONS)[number], string> = {
     narrative: 'the implied story or human moment — time of day, traces of presence, what just happened',
 };
 
-/** Multi-dimensional decomposition: one vision call → all 7 facets. */
-export async function extractFacets(image: string): Promise<Array<{ dimension: string; description: string }>> {
+/** Dimensional decomposition: ONE vision call for exactly the requested
+ *  dimensions (defaults to all of them). */
+export async function extractFacets(image: string, dimensions?: ReadonlyArray<string>): Promise<Array<{ dimension: string; description: string }>> {
+    const wanted = (dimensions && dimensions.length > 0
+        ? FACET_DIMENSIONS.filter(d => dimensions.includes(d))
+        : [...FACET_DIMENSIONS]);
     const parsed = await generateJson<{ facets: Array<{ dimension: string; description: string }> }>(
-        `Decompose the attached image into its INDEPENDENT visual dimensions, so each can be transferred to a different image on its own.
+        `Decompose the attached image into ${wanted.length === 1 ? 'this INDEPENDENT visual dimension' : 'these INDEPENDENT visual dimensions'}, so each can be transferred to a different image on its own.
 
 For each dimension output a CONCRETE, promptable description (specific hues, light direction/quality, named materials, compositional geometry — never vague):
-${FACET_DIMENSIONS.map(d => `- ${d}: ${FACET_HINTS[d]}`).join('\n')}
+${wanted.map(d => `- ${d}: ${FACET_HINTS[d]}`).join('\n')}
 
 Output JSON: { "facets": [ { "dimension", "description" } ] }`,
         [image]
     );
-    const allowed = new Set<string>(FACET_DIMENSIONS);
+    const allowed = new Set<string>(wanted);
     return (parsed?.facets ?? [])
         .filter(f => allowed.has(String(f.dimension)) && f.description?.trim())
         .map(f => ({ dimension: String(f.dimension), description: String(f.description).trim() }));
