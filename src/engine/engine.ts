@@ -214,6 +214,7 @@ ${manifestLines.join('\n')}
     let out = await generateImage({
         prompt,
         referenceImages: [...assetImages, ...refImages],
+        sharpCount: assetImages.length,
         model,
         aspectRatio: params.ratio,
         imageSize: params.size,
@@ -262,6 +263,7 @@ ${first.issues.map(s => `- ${s}`).join('\n')}
 Image 1: the image to edit (everything except the hero is correct).
 Images 2-${1 + Math.min(assetImages.length, 6)}: HERO SOURCE OF TRUTH.`,
                     referenceImages: [out.image, ...assetImages.slice(0, 6)],
+                    sharpCount: 1 + Math.min(assetImages.length, 3),
                     model,
                     aspectRatio: params.ratio,
                     imageSize: params.size,

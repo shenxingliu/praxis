@@ -179,6 +179,7 @@ BACKDROP: clean neutral studio backdrop, soft even light, gentle grounding shado
     const out = await generateImage({
         prompt,
         referenceImages: sourceImages.slice(0, 8),
+        sharpCount: Math.min(sourceImages.length, 3),
         model,
         aspectRatio: opts.ratio,
         imageSize: opts.size,
@@ -305,6 +306,7 @@ One coherent, museum-grade image where every board input coexists and reinforces
     let out = await generateImage({
         prompt,
         referenceImages: [...assetImages, ...viewpoints, ...fusion, ...concepts.map(c => c.image), ...facetImages, ...heroReminder],
+        sharpCount: assetImages.length,
         model,
         aspectRatio: input.ratio,
         imageSize: input.size,
@@ -333,6 +335,7 @@ Output JSON: { "pass": boolean, "issues": [up to 4 concrete actionable deviation
                     prompt: `EDIT the FIRST attached image (image-editing task). KEEP the environment, composition, light, styling and mood EXACTLY. FIX ONLY THE HERO to match the hero photos (all images after the first) with zero deviation.
 Known defects:\n${first.issues.map(s => `- ${s}`).join('\n')}`,
                     referenceImages: [out.image, ...assetImages.slice(0, 6)],
+                    sharpCount: 1 + Math.min(assetImages.length, 3),
                     model,
                     aspectRatio: input.ratio,
                     imageSize: input.size,

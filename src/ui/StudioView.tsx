@@ -422,9 +422,16 @@ export default function StudioView() {
                     <ol style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.7 }}>
                         {job.plan.steps.map((s, i) => <li key={i}>{s}</li>)}
                     </ol>
-                    <div style={{ fontSize: 11, color: '#71717a' }}>
-                        purpose {job.plan.params.purpose} · {job.plan.elementIds.length} elements · note: “{job.plan.params.note}”
+                    <div style={{ fontSize: 11, color: '#71717a', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span>purpose {job.plan.params.purpose} · {job.plan.elementIds.length} elements · note:</span>
                     </div>
+                    <textarea
+                        value={job.plan.params.note ?? ''}
+                        onChange={e => updatePlan({ note: e.target.value })}
+                        placeholder="The one-sentence art direction the image model will obey — edit freely"
+                        title="Editable — this exact sentence goes into the generation prompt"
+                        style={{ ...S.input, width: '100%', minHeight: 44, boxSizing: 'border-box', resize: 'vertical', fontSize: 12, lineHeight: 1.5 }}
+                    />
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                         <span style={S.label}>RATIO</span>
                         {(['1:1', '16:9', '4:3', '3:4', '9:16'] as const).map(r =>

@@ -115,7 +115,7 @@ async function shrinkDataUrl(dataUrl: string, opts: {
     }
 }
 
-async function prepareInlineParts(images: string[], mode: 'image' | 'json'): Promise<ImagePart[]> {
+async function prepareInlineParts(images: string[], mode: 'image' | 'json', sharpCount = 0): Promise<ImagePart[]> {
     const maxImages = mode === 'image' ? 14 : 8;
     const totalBudget = isProxyMode()
         ? mode === 'image' ? 2_800_000 : 1_900_000
@@ -125,8 +125,14 @@ async function prepareInlineParts(images: string[], mode: 'image' | 'json'): Pro
     const quality = mode === 'image' ? 0.74 : 0.7;
     const capped = images.slice(0, maxImages);
     const parts: ImagePart[] = [];
-    for (const img of capped) {
-        const resized = await shrinkDataUrl(img, { maxEdge, quality, maxDataChars: perImageBudget });
+    for (let i = 0; i < capped.length; i++) {
+        // The first `sharpCount` images are SOURCE-OF-TRUTH pixels (product
+        // photos): they keep far more resolution than aesthetic refs, so
+        // fine construction/texture detail survives into the model.
+        const sharp = i < Math.min(sharpCount, 4);
+        const resized = await shrinkDataUrl(capped[i], sharp
+            ? { maxEdge: 2048, quality: 0.86, maxDataChars: 1_100_000 }
+            : { maxEdge, quality, maxDataChars: perImageBudget });
         parts.push(toInlinePart(resized));
     }
     const used = parts.reduce((sum, part) => sum + part.inlineData.data.length, 0);
@@ -206,12 +212,14 @@ async function restGenerate(model: string, body: unknown): Promise<any> {
 export async function generateImage(opts: {
     prompt: string;
     referenceImages: string[]; // data URLs, most important first (max 14 for pro)
+    /** First N reference images are truth pixels — compressed far less. */
+    sharpCount?: number;
     model: string;
     aspectRatio: string;
     /** '1K' | '2K' | '4K' — silently dropped if the model rejects it. */
     imageSize?: string;
 }): Promise<{ image: string; model: string }> {
-    const imageParts = await prepareInlineParts(opts.referenceImages, 'image');
+    const imageParts = await prepareInlineParts(opts.referenceImages, 'image', opts.sharpCount ?? 0);
     const parts: Array<ImagePart | { text: string }> = [
         ...imageParts,
         { text: opts.prompt },
