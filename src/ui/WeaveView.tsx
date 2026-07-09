@@ -511,6 +511,18 @@ export default function WeaveView() {
         return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
     };
 
+    // Context-menu behavior: any pointerdown outside the popover closes it.
+    const facetPopRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!facetPick) return;
+        const onDown = (e: PointerEvent) => {
+            if (facetPopRef.current && e.target instanceof Node && facetPopRef.current.contains(e.target)) return;
+            setFacetPick(null);
+        };
+        window.addEventListener('pointerdown', onDown, true);
+        return () => window.removeEventListener('pointerdown', onDown, true);
+    }, [facetPick]);
+
     // --- facets: a popover on the node — one click extracts one dimension ---
     const decomposeImage = (image: string | undefined, near: { x: number; y: number }) => {
         if (!image) return;
@@ -1196,11 +1208,12 @@ export default function WeaveView() {
                     </svg>
                     {facetPick && (
                         <div
+                            ref={facetPopRef}
                             onPointerDown={e => e.stopPropagation()}
                             style={{
                                 position: 'absolute', left: facetPick.near.x, top: facetPick.near.y, width: 216, zIndex: 30,
-                                background: 'rgba(255,255,255,0.95)',
-                                backdropFilter: 'blur(24px) saturate(1.18)', WebkitBackdropFilter: 'blur(24px) saturate(1.18)',
+                                background: 'rgba(255,255,255,0.68)',
+                                backdropFilter: 'blur(28px) saturate(1.25)', WebkitBackdropFilter: 'blur(28px) saturate(1.25)',
                                 border: '1px solid #e4e4e7', borderRadius: 12,
                                 boxShadow: '0 20px 25px -5px rgba(0,0,0,0.14), 0 8px 10px -6px rgba(0,0,0,0.12)',
                                 padding: 8, boxSizing: 'border-box',
