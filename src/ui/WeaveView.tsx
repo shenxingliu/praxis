@@ -349,9 +349,17 @@ export default function WeaveView() {
             const y = fromTop ? rs.y0 + (rs.h0 - h) : rs.y0;
             setNodes(prev => prev.map(nn => {
                 if (nn.id !== rs.id) return nn;
-                // Content-driven nodes scale by width; height follows content.
+                // Content-driven nodes scale PROPORTIONALLY: both drag axes
+                // blend into one scale factor via the frame's aspect ratio at
+                // grab time, and height keeps following the content — so a
+                // diagonal (or vertical) pull resizes naturally, never crops.
                 if (nn.kind === 'rotate' || nn.kind === 'output' || (nn.kind === 'image' && nodeImages(nn).length === 1)) {
-                    return { ...nn, x, w, h: undefined };
+                    const ar = rs.h0 > 0 ? rs.w0 / rs.h0 : 1;
+                    const dwRaw = fromLeft ? -dx : dx;
+                    const dhRaw = fromTop ? -dy : dy;
+                    const wProp = Math.max(130, Math.min(620, Math.round(rs.w0 + (dwRaw + dhRaw * ar) / 2)));
+                    const xProp = fromLeft ? rs.x0 + (rs.w0 - wProp) : rs.x0;
+                    return { ...nn, x: xProp, w: wProp, h: undefined };
                 }
                 return { ...nn, x, y, w, h };
             }));
