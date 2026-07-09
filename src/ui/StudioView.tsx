@@ -223,21 +223,31 @@ export default function StudioView() {
                         value={brief} onChange={e => setBrief(e.target.value)}
                     />
                     <span style={S.label}>ASSETS · {selectedAssets.size} selected</span>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {/* Same card grid as the Canvas library — big thumbnails, names below, click to select */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 6 }}>
                         {assets.map(a => {
                             const on = selectedAssets.has(a.id);
                             return (
                                 <button key={a.id} onClick={() => setSelectedAssets(prev => {
                                     const n = new Set(prev); n.has(a.id) ? n.delete(a.id) : n.add(a.id); return n;
-                                })} style={{ ...chip(on), display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    {a.photos[0] && <img src={a.photos[0].image.value} alt=""
-                                        onClick={e => { e.stopPropagation(); openLightbox(a.photos[0].image.value); }}
-                                        style={{ width: 22, height: 22, borderRadius: 4, objectFit: 'cover', cursor: 'zoom-in' }} />}
-                                    {a.name}
+                                })}
+                                    title={`${a.name}${on ? ' — selected' : ''}`}
+                                    style={{
+                                        border: on ? '1.5px solid #18181b' : '1px solid rgba(212,212,216,0.58)',
+                                        background: 'rgba(255,255,255,0.58)',
+                                        borderRadius: 8, padding: 4, cursor: 'pointer',
+                                        display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0,
+                                    }}>
+                                    {a.photos[0] && <img src={a.photos[0].image.value} alt="" draggable={false}
+                                        onClick={e => { if (e.altKey) { e.stopPropagation(); openLightbox(a.photos[0].image.value); } }}
+                                        style={{ width: '100%', aspectRatio: '1', borderRadius: 5, objectFit: 'cover', display: 'block' }} />}
+                                    <span style={{ width: '100%', fontSize: 9, fontWeight: 700, color: '#3f3f46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>
+                                        {a.name}{a.photos.length > 1 ? ` · ${a.photos.length}` : ''}
+                                    </span>
                                 </button>
                             );
                         })}
-                        {assets.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No assets yet — import them in System.</span>}
+                        {assets.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No assets yet — add them in Assets.</span>}
                     </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                         <button style={S.btn} disabled={!!busy} onClick={begin}>
