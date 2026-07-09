@@ -3,7 +3,7 @@ import { Asset, Element, GenerationParams, GenerationResult, Reference, SubjectT
 import { storage } from '../storage/local';
 import { brandKey, getCurrentBrandId } from '../domain/brand';
 import { INVENTORY_CHANGED_EVENT } from './events';
-import { weaveGenerate, extractFacets, deriveIdea, describeAsPrompt, analyzeImage, rotateView, distillWeaveApproach, WeaveFacet } from '../engine/weave';
+import { weaveGenerate, extractFacets, deriveIdea, describeAsPrompt, analyzeImage, rotateView, estimateAngles, distillWeaveApproach, WeaveFacet } from '../engine/weave';
 import { recordSignal } from '../learning/learning';
 import { BudgetExceededError } from '../engine/engine';
 import { openLightbox } from './lightbox';
@@ -281,8 +281,9 @@ export default function WeaveView() {
         for (const f of imageFiles(files)) add({ kind: 'image', image: await fileToDataUrl(f), role: 'fusion' });
     };
 
-    /** Append more angles to an existing image node (multi-image subject). */
-    const appendTarget = useRef<WeaveNode | null>(null);
+    /** Add more angle photos to a library ASSET — they persist on the
+     *  asset itself and feed rotate + fidelity everywhere it's used. */
+    const appendTarget = useRef<Asset | null>(null);
     const appendRef = useRef<HTMLInputElement>(null);
     const appendAngles = async (files: FileList | null) => {
         const target = appendTarget.current;
@@ -291,10 +292,81 @@ export default function WeaveView() {
         const extra: string[] = [];
         for (const f of imageFiles(files)) extra.push(await fileToDataUrl(f));
         if (extra.length === 0) return;
-        setNodes(prev => prev.map(x => x.id === target.id
-            ? { ...x, images: [...nodeImages(x), ...extra] }
-            : x));
-        setNotice(`${extra.length} angle${extra.length === 1 ? '' : 's'} merged into the node.`);
+        const updated: Asset = {
+            ...target,
+            photos: [
+                ...target.photos,
+                ...extra.map(value => ({ id: crypto.randomUUID(), image: { kind: 'data' as const, value }, role: 'detail' as const })),
+            ],
+            updatedAt: Date.now(),
+        };
+        await storage.upsertAsset(updated);
+        setAssets(prev => prev.map(a => (a.id === updated.id ? updated : a)));
+        angleCache.current.delete(`asset:${updated.id}`);
+        setNotice(`${extra.length} angle${extra.length === 1 ? '' : 's'} added to "${updated.name}".`);
+    };
+
+    // --- rotate angle awareness: photo roles map to azimuths, untagged
+    // multi-angle sets get ONE cached vision estimation per subject ---
+    const ROLE_ANGLE: Record<string, number | null> = { hero: 0, side: 90, back: 180, detail: null };
+    const angleCache = useRef<Map<string, Array<number | null>>>(new Map());
+    const estimateAnglesCached = async (key: string, images: string[]): Promise<Array<number | null>> => {
+        const cached = angleCache.current.get(key);
+        if (cached && cached.length === images.length) return cached;
+        try {
+            setBusy('Estimating photo angles…');
+            const angles = await estimateAngles(images);
+            angleCache.current.set(key, angles);
+            return angles;
+        } catch {
+            return images.map(() => null);
+        }
+    };
+    const angularDist = (a: number, b: number) => {
+        const d = Math.abs(a - b) % 360;
+        return d > 180 ? 360 - d : d;
+    };
+    /** Rotate inputs with per-image azimuths, sorted nearest-first to the
+     *  target angle so the closest existing photo leads the generation. */
+    const gatherRotateSources = async (rn: WeaveNode, targetAngle: number): Promise<{ images: string[]; angles: Array<number | null> }> => {
+        const neighborIds = edges
+            .filter(e => e.from === rn.id || e.to === rn.id)
+            .map(e => (e.from === rn.id ? e.to : e.from));
+        const entries: Array<{ image: string; angle: number | null }> = [];
+        for (const id of neighborIds) {
+            const nb = nodes.find(x => x.id === id);
+            if (!nb) continue;
+            if (nb.kind === 'hero') {
+                const asset = assets.find(x => x.id === nb.assetId);
+                if (!asset || asset.photos.length === 0) continue;
+                const photos = asset.photos.slice(0, 6);
+                const tagged = photos.some(p => p.role === 'side' || p.role === 'back');
+                const angles = tagged
+                    ? photos.map(p => ROLE_ANGLE[p.role ?? 'hero'] ?? 0)
+                    : photos.length > 1
+                        ? await estimateAnglesCached(`asset:${asset.id}:${photos.length}`, photos.map(p => p.image.value))
+                        : [0];
+                photos.forEach((p, i) => entries.push({ image: p.image.value, angle: angles[i] ?? null }));
+            } else if (nb.kind === 'rotate' && nb.image) {
+                entries.push({ image: nb.image, angle: nb.angle ?? null });
+            } else if (nb.kind === 'image' || nb.kind === 'output') {
+                const imgs = nodeImages(nb);
+                if (imgs.length > 1) {
+                    const angles = await estimateAnglesCached(`node:${nb.id}:${imgs.length}`, imgs);
+                    imgs.forEach((image, i) => entries.push({ image, angle: angles[i] ?? null }));
+                } else if (imgs[0]) {
+                    entries.push({ image: imgs[0], angle: null });
+                }
+            }
+        }
+        entries.sort((a, b) => {
+            if (a.angle == null && b.angle == null) return 0;
+            if (a.angle == null) return 1;
+            if (b.angle == null) return -1;
+            return angularDist(a.angle, targetAngle) - angularDist(b.angle, targetAngle);
+        });
+        const top = entries.slice(0, 6);
+        return { images: top.map(e => e.image), angles: top.map(e => e.angle) };
     };
 
     // --- linking ---
@@ -353,7 +425,7 @@ export default function WeaveView() {
                 // blend into one scale factor via the frame's aspect ratio at
                 // grab time, and height keeps following the content — so a
                 // diagonal (or vertical) pull resizes naturally, never crops.
-                if (nn.kind === 'rotate' || nn.kind === 'output' || (nn.kind === 'image' && nodeImages(nn).length === 1)) {
+                if (nn.kind === 'rotate' || nn.kind === 'output' || nn.kind === 'image') {
                     const ar = rs.h0 > 0 ? rs.w0 / rs.h0 : 1;
                     const dwRaw = fromLeft ? -dx : dx;
                     const dhRaw = fromTop ? -dy : dy;
@@ -420,8 +492,7 @@ export default function WeaveView() {
     // what's inside (image aspect ratio, trackball, action rows) with no
     // cropping. Notes/facets keep a working default; others keep custom h.
     const H = (nn: WeaveNode) => {
-        if (nn.kind === 'rotate' || nn.kind === 'output') return undefined;
-        if (nn.kind === 'image' && nodeImages(nn).length === 1) return undefined;
+        if (nn.kind === 'rotate' || nn.kind === 'output' || nn.kind === 'image') return undefined;
         return nn.h ?? (
             nn.kind === 'note' ? 136 :
             nn.kind === 'facet' ? 132 :
@@ -563,11 +634,12 @@ export default function WeaveView() {
             ? { azimuth: rotateNodes[0].angle ?? 90, pitch: rotateNodes[0].pitch ?? 0 }
             : undefined;
         for (const rn of rotateNodes.filter(nn => !nn.image)) {
-            const imgs = rotateInputs(rn);
-            if (imgs.length === 0) continue;
-            setBusy(`Rendering viewpoint ${rn.angle ?? 90}° first…`);
+            const target = rn.angle ?? 90;
+            const sources = await gatherRotateSources(rn, target);
+            if (sources.images.length === 0) continue;
+            setBusy(`Rendering viewpoint ${target}° first…`);
             try {
-                const rv = await rotateView(imgs, rn.angle ?? 90, { ratio, size, tier: 'flash', pitch: rn.pitch ?? 0 }, setBusy);
+                const rv = await rotateView(sources.images, target, { ratio, size, tier: 'flash', pitch: rn.pitch ?? 0, sourceAngles: sources.angles }, setBusy);
                 rememberResult(rv);
                 setNodes(prev => prev.map(x => x.id === rn.id ? { ...x, image: rv.image.value, resultId: rv.id } : x));
                 viewpointImages.push(rv.image.value);
@@ -661,12 +733,12 @@ export default function WeaveView() {
     const runRotate = async (rn: WeaveNode, deg?: number) => {
         const angle = deg ?? rn.angle ?? 90;
         const pitch = rn.pitch ?? 0;
-        const imgs = rotateInputs(rn);
-        if (imgs.length === 0) { setNotice('Connect an image or hero to the node first (its angles become the input).'); return; }
+        if (rotateInputs(rn).length === 0) { setNotice('Connect an image or asset to the node first (its angles become the input).'); return; }
         setBusy(`Rotating to ${angle}°${pitch !== 0 ? ` / ${pitch > 0 ? '+' : ''}${pitch}°` : ''}…`);
         setNotice('');
         try {
-            const r = await rotateView(imgs, angle, { ratio, size, tier: tierSel, pitch }, setBusy);
+            const sources = await gatherRotateSources(rn, angle);
+            const r = await rotateView(sources.images, angle, { ratio, size, tier: tierSel, pitch, sourceAngles: sources.angles }, setBusy);
             rememberResult(r);
             setNodes(prev => prev.map(x => x.id === rn.id ? { ...x, image: r.image.value, resultId: r.id, angle } : x));
             setNotice(`${angle}° view rendered.`);
@@ -676,14 +748,14 @@ export default function WeaveView() {
 
     /** Full turntable: 8 views at 45° steps, laid out next to the node. */
     const run360 = async (rn: WeaveNode) => {
-        const imgs = rotateInputs(rn);
-        if (imgs.length === 0) { setNotice('Connect an image or hero to the node first.'); return; }
+        if (rotateInputs(rn).length === 0) { setNotice('Connect an image or asset to the node first.'); return; }
         const frames: string[] = [];
         for (let i = 0; i < 8; i++) {
             const angle = i * 45;
             setBusy(`360° turntable — ${i + 1}/8 (${angle}°)…`);
             try {
-                const r = await rotateView(imgs, angle, { ratio, size, tier: 'flash' }, setBusy);
+                const sources = await gatherRotateSources(rn, angle);
+                const r = await rotateView(sources.images, angle, { ratio, size, tier: 'flash', sourceAngles: sources.angles }, setBusy);
                 rememberResult(r);
                 frames.push(r.image.value);
                 add({ kind: 'output', image: r.image.value, resultId: r.id },
@@ -1306,7 +1378,7 @@ export default function WeaveView() {
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, height: fixed ? '100%' : undefined }}>
                                                 {nodeImages(nn).slice(0, 4).map((img, i) => (
                                                     <img key={i} src={img} alt="" draggable={false}
-                                                        style={{ width: '100%', height: fixed ? '100%' : undefined, aspectRatio: fixed ? undefined : '1', objectFit: 'cover', borderRadius: 6, display: 'block', minHeight: 0 }} />
+                                                        style={{ width: '100%', borderRadius: 6, display: 'block', minHeight: 0 }} />
                                                 ))}
                                             </div>
                                         ) : (
@@ -1419,8 +1491,6 @@ export default function WeaveView() {
                                                         {role === 'fusion' ? 'Vibe' : 'Idea'}
                                                     </button>
                                                 ))}
-                                                <button style={miniBtn} disabled={!!busy} onClick={() => { appendTarget.current = nn; appendRef.current?.click(); }}
-                                                    title="Merge more angles of the same subject into this node">Angles</button>
                                                 <button style={miniBtn} disabled={!!busy} onClick={() => decomposeNode(nn)}
                                                     title="Extract: split this image into light / palette / composition / material / texture / mood / space — then borrow ONLY the dimensions you pick">Extract</button>
                                                 <button style={miniBtn} disabled={!!busy} onClick={() => imageToPrompt(nn)}>Prompt</button>
@@ -1461,6 +1531,10 @@ export default function WeaveView() {
                                                     <span style={{ fontSize: 10, fontWeight: 800, minWidth: 14, textAlign: 'center' }}>{nn.quantity ?? 1}</span>
                                                     <button style={miniBtn} onClick={() => setNodes(prev => prev.map(x => x.id === nn.id ? { ...x, quantity: Math.min(10, (x.quantity ?? 1) + 1) } : x))}>+</button>
                                                 </span>
+                                                <button style={miniBtn} disabled={!!busy}
+                                                    onClick={() => { if (a) { appendTarget.current = a; appendRef.current?.click(); } }}
+                                                    title="Upload more photos of this asset from other angles — they persist on the asset and feed rotate + fidelity">Add angles</button>
+                                                {a && a.photos.length > 1 && <span style={{ fontSize: 9, color: '#a1a1aa', alignSelf: 'center' }}>{a.photos.length} angles</span>}
                                                 {a?.photos[0] && <button style={miniBtn} onClick={() => openLightbox(a.photos[0].image.value)}>View</button>}
                                             </>
                                         )}

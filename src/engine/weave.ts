@@ -46,6 +46,29 @@ Output JSON: { "facets": [ { "dimension", "description" } ] }`,
         .map(f => ({ dimension: String(f.dimension), description: String(f.description).trim() }));
 }
 
+const angularDistance = (a: number, b: number) => {
+    const d = Math.abs(a - b) % 360;
+    return d > 180 ? 360 - d : d;
+};
+
+/** Estimate each photo's camera azimuth around the SAME subject
+ *  (0 = front, 90 = right, 180 = back, 270 = left; null = can't judge). */
+export async function estimateAngles(images: string[]): Promise<Array<number | null>> {
+    const parsed = await generateJson<{ angles: Array<number | null> }>(
+        `The ${images.length} attached images show the SAME object photographed from different camera positions.
+For each image, in order, estimate the camera azimuth in degrees around the object's vertical axis:
+0 = the object's FRONT face, 90 = its RIGHT side, 180 = its BACK, 270 = its LEFT side.
+If an image is a close-up detail where the overall viewpoint cannot be judged, use null.
+Output JSON: { "angles": [${images.map(() => 'number|null').join(', ')}] }`,
+        images
+    );
+    const angles = parsed?.angles ?? [];
+    return images.map((_, i) => {
+        const value = angles[i];
+        return typeof value === 'number' && isFinite(value) ? ((Math.round(value) % 360) + 360) % 360 : null;
+    });
+}
+
 /** Derive the transferable aesthetic idea of an image (concept role). */
 export async function deriveIdea(image: string): Promise<string> {
     const parsed = await generateJson<{ idea: string }>(
@@ -96,7 +119,7 @@ Output JSON: { "prompt": string }`,
 export async function rotateView(
     sourceImages: string[],
     angleDegrees: number,
-    opts: { ratio: GenerationParams['ratio']; size?: GenerationParams['size']; tier: 'flash' | 'pro'; pitch?: number },
+    opts: { ratio: GenerationParams['ratio']; size?: GenerationParams['size']; tier: 'flash' | 'pro'; pitch?: number; sourceAngles?: Array<number | null> },
     onStatus?: (t: string) => void
 ): Promise<GenerationResult> {
     if (sourceImages.length === 0) throw new Error('Connect or add at least one image of the subject.');
@@ -115,10 +138,19 @@ export async function rotateView(
     const releaseBudget = reservePendingSpend(cost);
 
     const dir = ((angleDegrees % 360) + 360) % 360;
+    const known = (opts.sourceAngles ?? [])
+        .map((angle, index) => (angle == null ? null : { index, angle: ((Math.round(angle) % 360) + 360) % 360 }))
+        .filter((entry): entry is { index: number; angle: number } => !!entry);
+    const nearest = known.length > 0
+        ? known.reduce((best, entry) => angularDistance(entry.angle, dir) < angularDistance(best.angle, dir) ? entry : best)
+        : null;
+    const anglesBlock = nearest ? `
+KNOWN CAMERA ANGLES of the attached images (0° = the subject's front): ${known.map(entry => `image ${entry.index + 1} ≈ ${entry.angle}°`).join(', ')}.
+Image ${nearest.index + 1} (≈${nearest.angle}°) is the CLOSEST existing view to the ${dir}° target — treat it as the PRIMARY geometric reference and rotate from it; use the other images to confirm materials, colors and hidden-side details.` : '';
     const prompt = `TURNTABLE TASK. The attached image(s) show ONE subject (a hero, object or person) from ${sourceImages.length > 1 ? 'multiple angles' : 'one angle'}.
 
-Render the EXACT SAME subject rotated to the ${dir}° viewpoint (0° = the first image's front view; rotation is clockwise around the subject's vertical axis, camera distance unchanged).
-${pitchLine}
+Render the EXACT SAME subject rotated to the ${dir}° viewpoint (0° = ${nearest ? "the subject's FRONT face" : "the first image's front view"}; rotation is clockwise around the subject's vertical axis, camera distance unchanged).
+${pitchLine}${anglesBlock}
 
 STRICT IDENTITY: same geometry, proportions, materials, textures, colors, details${sourceImages.length > 1 ? ' — reconcile all provided angles into one consistent subject' : ''}. Infer hidden sides plausibly and consistently.
 BACKDROP: clean neutral studio backdrop, soft even light, gentle grounding shadow. NOTHING else in frame. No text.`;
