@@ -187,6 +187,8 @@ export default function WeaveView() {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [assetsOpen, setAssetsOpen] = useState(true);
     const [inspirationOpen, setInspirationOpen] = useState(true);
+    const [assetsRailWidth, setAssetsRailWidth] = useState(132);
+    const [inspirationRailWidth, setInspirationRailWidth] = useState(132);
     const [facetPick, setFacetPick] = useState<{ image: string; near: { x: number; y: number }; facets: Array<{ dimension: string; description: string }> } | null>(null);
     const [ratio, setRatio] = useState<GenerationParams['ratio']>('4:3');
     const [size, setSize] = useState<NonNullable<GenerationParams['size']>>('1K');
@@ -217,6 +219,7 @@ export default function WeaveView() {
     const orbit = useRef<{ id: string; sx: number; sy: number; a0: number; p0: number } | null>(null);
     /** Corner-handle resizing. */
     const resizing = useRef<{ id: string; dir: ResizeDir; sx: number; sy: number; x0: number; y0: number; w0: number; h0: number } | null>(null);
+    const railResize = useRef<{ rail: 'assets' | 'inspiration'; sx: number; w0: number } | null>(null);
     const boardRef = useRef<HTMLDivElement>(null);
     const [pan, setPan] = useState({ x: 40, y: 40 });
     const [scale, setScale] = useState(1);
@@ -227,6 +230,25 @@ export default function WeaveView() {
         storage.listElements().then(es => setElements(es.filter(e => e.enabled)));
         storage.listReferences().then(setReferences);
         storage.kvGet<WeaveConfig[]>(brandKey(CONFIGS_KEY)).then(c => setConfigs(c ?? []));
+    }, []);
+
+    useEffect(() => {
+        const onPointerMove = (event: PointerEvent) => {
+            const r = railResize.current;
+            if (!r) return;
+            const w = Math.max(84, Math.min(280, Math.round(r.w0 + event.clientX - r.sx)));
+            if (r.rail === 'assets') setAssetsRailWidth(w);
+            else setInspirationRailWidth(w);
+        };
+        const onPointerUp = () => { railResize.current = null; };
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+        window.addEventListener('pointercancel', onPointerUp);
+        return () => {
+            window.removeEventListener('pointermove', onPointerMove);
+            window.removeEventListener('pointerup', onPointerUp);
+            window.removeEventListener('pointercancel', onPointerUp);
+        };
     }, []);
 
     const toWorld = (clientX: number, clientY: number) => {
@@ -900,14 +922,14 @@ export default function WeaveView() {
             <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 8 }}>
             <aside style={{
                 flex: '0 0 auto',
-                width: (assetsOpen ? 132 : 28) + (inspirationOpen ? 132 : 28) + 8,
+                width: (assetsOpen ? assetsRailWidth : 28) + (inspirationOpen ? inspirationRailWidth : 28) + 8,
                 minHeight: 0,
                 display: 'flex',
                 gap: 8,
                 transition: 'width 180ms ease',
             }}>
                 {assetsOpen ? (
-                    <div style={{ ...S.card, flex: '0 0 132px', minWidth: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' }}>
+                    <div style={{ ...S.card, flex: `0 0 ${assetsRailWidth}px`, minWidth: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden', position: 'relative' }}>
                         <button
                             style={{ ...S.btnGhost, minHeight: 30, width: '100%', justifyContent: 'space-between', padding: '0 8px' }}
                             onClick={() => setAssetsOpen(false)}
@@ -916,7 +938,7 @@ export default function WeaveView() {
                             <span>Assets</span>
                             <span style={{ fontSize: 9, color: '#a1a1aa' }}>{assets.length}</span>
                         </button>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflow: 'auto', minHeight: 0 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(42px, 1fr))', gap: 6, overflow: 'auto', minHeight: 0 }}>
                             {assets.map(asset => (
                                 <button
                                     key={asset.id}
@@ -926,21 +948,26 @@ export default function WeaveView() {
                                         border: '1px solid rgba(212,212,216,0.58)',
                                         background: 'rgba(255,255,255,0.58)',
                                         borderRadius: 8,
-                                        padding: 5,
+                                        padding: 4,
                                         cursor: 'pointer',
-                                        textAlign: 'left',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 6,
-                                        minHeight: 38,
+                                        aspectRatio: '1',
+                                        display: 'block',
+                                        minWidth: 0,
                                     }}
                                 >
-                                    {asset.photos[0] && <img src={asset.photos[0].image.value} alt="" draggable={false} style={{ width: 28, height: 28, borderRadius: 5, objectFit: 'cover', flex: '0 0 auto' }} />}
-                                    <span style={{ fontSize: 10.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{asset.name}</span>
+                                    {asset.photos[0] && <img src={asset.photos[0].image.value} alt="" draggable={false} style={{ width: '100%', height: '100%', borderRadius: 5, objectFit: 'cover', display: 'block' }} />}
                                 </button>
                             ))}
                             {assets.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>Empty</span>}
                         </div>
+                        <div
+                            onPointerDown={event => {
+                                event.stopPropagation();
+                                railResize.current = { rail: 'assets', sx: event.clientX, w0: assetsRailWidth };
+                            }}
+                            title="Drag to resize Assets"
+                            style={{ position: 'absolute', right: -4, top: 42, bottom: 8, width: 8, cursor: 'col-resize', zIndex: 3 }}
+                        />
                     </div>
                 ) : (
                     <button
@@ -966,7 +993,7 @@ export default function WeaveView() {
                 )}
 
                 {inspirationOpen ? (
-                    <div style={{ ...S.card, flex: '0 0 132px', minWidth: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' }}>
+                    <div style={{ ...S.card, flex: `0 0 ${inspirationRailWidth}px`, minWidth: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden', position: 'relative' }}>
                         <button
                             style={{ ...S.btnGhost, minHeight: 30, width: '100%', justifyContent: 'space-between', padding: '0 8px' }}
                             onClick={() => setInspirationOpen(false)}
@@ -975,7 +1002,7 @@ export default function WeaveView() {
                             <span>Inspiration</span>
                             <span style={{ fontSize: 9, color: '#a1a1aa' }}>{references.length}</span>
                         </button>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflow: 'auto', minHeight: 0 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(42px, 1fr))', gap: 6, overflow: 'auto', minHeight: 0 }}>
                             {references.map(ref => (
                                 <button
                                     key={ref.id}
@@ -985,21 +1012,26 @@ export default function WeaveView() {
                                         border: '1px solid rgba(212,212,216,0.58)',
                                         background: 'rgba(255,255,255,0.58)',
                                         borderRadius: 8,
-                                        padding: 5,
+                                        padding: 4,
                                         cursor: 'pointer',
-                                        textAlign: 'left',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 6,
-                                        minHeight: 38,
+                                        aspectRatio: '1',
+                                        display: 'block',
+                                        minWidth: 0,
                                     }}
                                 >
-                                    <img src={ref.image.value} alt="" draggable={false} style={{ width: 28, height: 28, borderRadius: 5, objectFit: 'cover', flex: '0 0 auto' }} />
-                                    <span style={{ fontSize: 10.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ref.name}</span>
+                                    <img src={ref.image.value} alt="" draggable={false} style={{ width: '100%', height: '100%', borderRadius: 5, objectFit: 'cover', display: 'block' }} />
                                 </button>
                             ))}
                             {references.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>Empty</span>}
                         </div>
+                        <div
+                            onPointerDown={event => {
+                                event.stopPropagation();
+                                railResize.current = { rail: 'inspiration', sx: event.clientX, w0: inspirationRailWidth };
+                            }}
+                            title="Drag to resize Inspiration"
+                            style={{ position: 'absolute', right: -4, top: 42, bottom: 8, width: 8, cursor: 'col-resize', zIndex: 3 }}
+                        />
                     </div>
                 ) : (
                     <button
