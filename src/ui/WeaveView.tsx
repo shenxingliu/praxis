@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Asset, Element, GenerationParams, GenerationResult, Reference, SubjectType, KnowledgeRule } from '../domain/types';
 import { storage } from '../storage/local';
 import { brandKey, getCurrentBrandId } from '../domain/brand';
@@ -177,7 +177,12 @@ const fitImage = (fixed: boolean, extra: React.CSSProperties = {}): React.CSSPro
     ...extra,
 });
 
-export default function WeaveView() {
+export type WeaveViewHandle = {
+    addAssetToCanvas: (assetId: string) => void;
+    addReferenceToCanvas: (referenceId: string) => void;
+};
+
+const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
     const [assets, setAssets] = useState<Asset[]>([]);
     const [elements, setElements] = useState<Element[]>([]);
     const [references, setReferences] = useState<Reference[]>([]);
@@ -270,6 +275,19 @@ export default function WeaveView() {
         setNodes(prev => [...prev, node]);
         return node;
     };
+
+    useImperativeHandle(ref, () => ({
+        addAssetToCanvas: (assetId: string) => {
+            add({ kind: 'hero', assetId });
+            setNotice('Asset added to Canvas.');
+        },
+        addReferenceToCanvas: (referenceId: string) => {
+            const reference = references.find(r => r.id === referenceId);
+            if (!reference) return;
+            add({ kind: 'image', image: reference.image.value, role: 'fusion' });
+            setNotice('Inspiration added to Canvas.');
+        },
+    }));
 
     const remove = (id: string) => {
         setNodes(prev => prev.filter(nn => nn.id !== id));
@@ -1051,7 +1069,7 @@ export default function WeaveView() {
             )}
 
             <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 8 }}>
-            {/* Infinite canvas — fills the whole viewport; the library floats on top */}
+            {/* Infinite canvas — fills the whole viewport. Assets/Inspiration now come from the app sidebar. */}
             <DropZone onFiles={addImages} hint="Drop images — fusion sources" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex' }}>
                 <div ref={boardRef} onPointerDown={onBoardDown} onPointerMove={onMove} onPointerUp={onUp}
                     style={{
@@ -1063,112 +1081,6 @@ export default function WeaveView() {
                         {Math.round(scale * 100)}% · drag background to pan · wheel to zoom · click a node for actions
                     </div>
 
-                    {/* Library overlay — one animated container: width/height glide,
-                        open content and collapsed tag crossfade. */}
-                    <div
-                        ref={libRef}
-                        onPointerDown={e => e.stopPropagation()}
-                        style={{
-                            position: 'absolute', left: 10, top: 10, zIndex: 15,
-                            width: libOpen ? libWidth : 36,
-                            height: libOpen ? 'calc(100% - 20px)' : 172,
-                            background: 'rgba(255,255,255,0.95)',
-                            backdropFilter: 'blur(24px) saturate(1.18)', WebkitBackdropFilter: 'blur(24px) saturate(1.18)',
-                            border: '1px solid #e4e4e7', borderRadius: libOpen ? 12 : 10,
-                            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.08), 0 8px 10px -6px rgba(0,0,0,0.08)',
-                            overflow: 'hidden', boxSizing: 'border-box',
-                            transition: libResizing ? 'none'
-                                : 'width 300ms cubic-bezier(0.22,1,0.36,1), height 300ms cubic-bezier(0.22,1,0.36,1), border-radius 300ms cubic-bezier(0.22,1,0.36,1)',
-                        }}>
-                        {/* Open content — slides in and fades once the frame has grown */}
-                        <div style={{
-                            position: 'absolute', top: 6, left: 6, bottom: 6, width: libWidth - 12,
-                            display: 'flex', flexDirection: 'row', gap: 6,
-                            opacity: libOpen ? 1 : 0,
-                            pointerEvents: libOpen ? 'auto' : 'none',
-                            transform: libOpen ? 'translateX(0)' : 'translateX(-10px)',
-                            transition: 'opacity 170ms ease, transform 300ms cubic-bezier(0.22,1,0.36,1)',
-                            transitionDelay: libOpen ? '80ms' : '0ms',
-                        }}>
-                            <div style={{ width: 30, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                <button onClick={() => setLibOpen(false)} title="Collapse library"
-                                    style={{ border: 'none', background: 'rgba(244,244,245,0.9)', borderRadius: 8, color: '#52525b', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '4px 0' }}>‹</button>
-                                {(['assets', 'inspiration'] as const).map(t => (
-                                    <button key={t} onClick={() => setLibTab(t)}
-                                        title={t === 'assets' ? `Assets (${assets.length})` : `Inspiration (${references.length})`}
-                                        style={{
-                                            border: 'none', borderRadius: 8, cursor: 'pointer', padding: '10px 0 7px',
-                                            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-                                            fontSize: 9.5, fontWeight: 800, letterSpacing: 0.7,
-                                            background: libTab === t ? '#18181b' : 'rgba(244,244,245,0.9)',
-                                            color: libTab === t ? '#fff' : '#3f3f46',
-                                        }}>
-                                        <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>{t === 'assets' ? 'Assets' : 'Inspiration'}</span>
-                                        <span style={{ fontSize: 8.5, opacity: 0.72, letterSpacing: 0 }}>{t === 'assets' ? assets.length : references.length}</span>
-                                    </button>
-                                ))}
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(68px, 1fr))', gap: 6, overflowY: 'auto', minHeight: 0, flex: 1, alignContent: 'start' }}>
-                                {libTab === 'assets' && assets.map(asset => (
-                                    <button
-                                        key={asset.id}
-                                        onClick={() => add({ kind: 'hero', assetId: asset.id })}
-                                        title={`${asset.name} — add to board`}
-                                        style={{
-                                            border: '1px solid rgba(212,212,216,0.58)', background: 'rgba(255,255,255,0.58)',
-                                            borderRadius: 8, padding: 4, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0,
-                                        }}>
-                                        {asset.photos[0] && <img src={asset.photos[0].image.value} alt="" draggable={false} style={{ width: '100%', aspectRatio: '1', borderRadius: 5, objectFit: 'cover', display: 'block' }} />}
-                                        <span style={{ width: '100%', fontSize: 9, fontWeight: 700, color: '#3f3f46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{asset.name}</span>
-                                    </button>
-                                ))}
-                                {libTab === 'assets' && assets.length === 0 && <span style={{ fontSize: 10.5, color: '#a1a1aa' }}>No assets yet — add them in the Assets tab.</span>}
-                                {libTab === 'inspiration' && references.map(ref => (
-                                    <button
-                                        key={ref.id}
-                                        onClick={() => add({ kind: 'image', image: ref.image.value, role: 'fusion' })}
-                                        title={`${ref.name} — add as vibe reference`}
-                                        style={{
-                                            border: '1px solid rgba(212,212,216,0.58)', background: 'rgba(255,255,255,0.58)',
-                                            borderRadius: 8, padding: 4, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0,
-                                        }}>
-                                        <img src={ref.image.value} alt="" draggable={false} style={{ width: '100%', aspectRatio: '1', borderRadius: 5, objectFit: 'cover', display: 'block' }} />
-                                        <span style={{ width: '100%', fontSize: 9, fontWeight: 700, color: '#3f3f46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{ref.name}</span>
-                                    </button>
-                                ))}
-                                {libTab === 'inspiration' && references.length === 0 && <span style={{ fontSize: 10.5, color: '#a1a1aa' }}>No references yet — collect them in Inspiration.</span>}
-                            </div>
-                        </div>
-                        {/* Resize edge — active only while open */}
-                        <div
-                            onPointerDown={event => {
-                                if (!libOpen) return;
-                                event.stopPropagation();
-                                setLibResizing(true);
-                                railResize.current = { sx: event.clientX, w0: libWidth };
-                            }}
-                            title="Drag to resize the library"
-                            style={{ position: 'absolute', right: 0, top: 42, bottom: 8, width: 8, cursor: 'col-resize', zIndex: 3, pointerEvents: libOpen ? 'auto' : 'none' }}
-                        />
-                        {/* Collapsed tag — fades in as the frame shrinks */}
-                        <button
-                            onClick={() => setLibOpen(true)}
-                            title="Open the library (Assets + Inspiration)"
-                            style={{
-                                position: 'absolute', inset: 0, border: 'none', background: 'transparent', cursor: 'pointer',
-                                color: '#5f6068', fontSize: 10, fontWeight: 850, letterSpacing: 0.7,
-                                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between',
-                                padding: '10px 0', gap: 8,
-                                opacity: libOpen ? 0 : 1,
-                                pointerEvents: libOpen ? 'none' : 'auto',
-                                transition: 'opacity 160ms ease',
-                                transitionDelay: libOpen ? '0ms' : '150ms',
-                            }}>
-                            <span style={collapsedCountStyle}>{assets.length + references.length}</span>
-                            <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>Library</span>
-                            <span style={collapsedChevronStyle}>›</span>
-                        </button>
-                    </div>
                     {nodes.length === 0 && (
                         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a1a1aa', fontSize: 13, pointerEvents: 'none', textAlign: 'center', padding: 20 }}>
                             Add materials and prompts, drag port lines between nodes, wire groups into outputs, then Run — results appear inside the output node.
@@ -1660,4 +1572,6 @@ export default function WeaveView() {
             </div>
         </div>
     );
-}
+});
+
+export default WeaveView;

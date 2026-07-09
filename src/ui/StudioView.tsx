@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Asset, Element, GenerationResult, PraxisJob, Reference } from '../domain/types';
+import React, { useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { Asset, Element, GenerationResult, KnowledgeRule, PraxisJob, Reference } from '../domain/types';
 import { storage } from '../storage/local';
+import { getCurrentBrandId } from '../domain/brand';
 import {
     startJob, proposeConcepts, proposeWildcard, analyzeCompetitor, makePlan,
     makeMoodboard, anchorMood, executeJob, executeCampaign, reviewJob, closeJob,
@@ -8,7 +9,6 @@ import {
 import { recordSignal, maybeDistill } from '../learning/learning';
 import { attributeFeedback } from '../brain/soul';
 import { BudgetExceededError } from '../engine/engine';
-import { savePreset } from '../engine/presets';
 import { openLightbox } from './lightbox';
 import { DropZone } from './dropzone';
 import { S, chip } from './styles';
@@ -25,16 +25,31 @@ const STAGE_LABEL: Record<string, string> = {
     execute: '4 · Execute', review: '5 · Review', done: 'Done',
 };
 
-export default function StudioView() {
+type StudioViewProps = {
+    assets: Asset[];
+    refs: Reference[];
+    selectedAssets: Set<string>;
+    selectedRefs: Set<string>;
+    hideSidebar?: boolean;
+    onJobsChange?: (jobs: PraxisJob[], activeJobId: string | null) => void;
+    onNavigate?: (target: 'heroes' | 'library' | 'knowledge' | 'weave' | 'gallery' | 'system') => void;
+};
+
+export type StudioViewHandle = {
+    reset: () => void;
+    resume: (job: PraxisJob) => Promise<void>;
+    deleteThread: (job: PraxisJob) => Promise<void>;
+};
+
+const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function StudioView(
+    { assets, refs, selectedAssets, selectedRefs, hideSidebar = false, onJobsChange, onNavigate },
+    ref,
+) {
     const [job, setJob] = useState<PraxisJob | null>(null);
-    const [assets, setAssets] = useState<Asset[]>([]);
     const [elements, setElements] = useState<Element[]>([]);
-    const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
-    const [refs, setRefs] = useState<Reference[]>([]);
-    const [selectedRefs, setSelectedRefs] = useState<Set<string>>(new Set());
-    const [inspOpen, setInspOpen] = useState(false);
-    const [assetsOpen, setAssetsOpen] = useState(true);
     const [noteText, setNoteText] = useState('');
+    const [conceptFeedbackId, setConceptFeedbackId] = useState<string | null>(null);
+    const [conceptFeedbackText, setConceptFeedbackText] = useState('');
     const [jobs, setJobs] = useState<PraxisJob[]>([]);
     const [brief, setBrief] = useState('');
     const [count, setCount] = useState(2);
@@ -42,16 +57,21 @@ export default function StudioView() {
     const [busy, setBusy] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [feedback, setFeedback] = useState<Map<string, 'like' | 'dislike'>>(new Map());
+    const [critiqueFor, setCritiqueFor] = useState<string | null>(null);
     const [moodDrafts, setMoodDrafts] = useState<GenerationResult[]>([]);
-    const [competitorNote, setCompetitorNote] = useState('');
-    const competitorRef = useRef<HTMLInputElement>(null);
+    const [moodFeedbackFor, setMoodFeedbackFor] = useState<string | null>(null);
+    const [moodFeedbackText, setMoodFeedbackText] = useState('');
+    const [imageSparkNote, setImageSparkNote] = useState('');
+    const imageSparkRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        storage.listAssets().then(setAssets);
         storage.listElements().then(setElements);
-        storage.listReferences().then(rs => setRefs(rs.filter(r => r?.image?.kind === 'data' && r.kind !== 'plate'))).catch(err => console.warn('[studio] refs load failed:', err));
         storage.listJobs(30).then(setJobs).catch(() => {});
     }, []);
+
+    useEffect(() => {
+        onJobsChange?.(jobs, job?.id ?? null);
+    }, [jobs, job?.id, onJobsChange]);
 
     const guard = async (label: string, fn: () => Promise<void>) => {
         setBusy(label); setError(null);
@@ -86,27 +106,93 @@ export default function StudioView() {
         setJob(next);
     };
 
+    const saveDirectiveAsRule = async (text: string) => {
+        if (!job) return;
+        const now = Date.now();
+        const rule: KnowledgeRule = {
+            id: crypto.randomUUID(),
+            brandId: getCurrentBrandId(),
+            scope: {},
+            rule: text,
+            polarity: 'must',
+            confidence: 0.9,
+            sources: [],
+            enabled: true,
+            createdAt: now,
+            updatedAt: now,
+        };
+        await storage.upsertRule(rule);
+        setJob(await say(job, 'agent', `Saved as a brand rule: "${text.length > 72 ? `${text.slice(0, 72)}...` : text}"`));
+    };
+
+    const deleteThread = async (thread: PraxisJob) => {
+        if (!window.confirm(`Delete "${thread.brief.trim() ? thread.brief.slice(0, 48) : 'Open exploration'}"? The generated images stay in Gallery.`)) return;
+        await storage.deleteJob(thread.id);
+        setJobs(prev => prev.filter(j => j.id !== thread.id));
+        if (job?.id === thread.id) reset();
+    };
+
+    const sendConceptFeedback = async () => {
+        if (!job || !conceptFeedbackId || !conceptFeedbackText.trim()) return;
+        const concept = job.concepts.find(c => c.id === conceptFeedbackId);
+        const text = conceptFeedbackText.trim();
+        setConceptFeedbackText('');
+        setConceptFeedbackId(null);
+        let next = await say(job, 'user', `Feedback on "${concept?.title ?? 'this direction'}": ${text}`);
+        next = { ...next, directives: [...(next.directives ?? []), `For direction "${concept?.title ?? conceptFeedbackId}": ${text}`], updatedAt: Date.now() };
+        await storage.upsertJob(next);
+        setJob(await say(next, 'agent', 'Noted. Choose this direction if you want me to draft the plan with that adjustment, or ask for a wildcard if the set still feels off.'));
+    };
+
+    const regenerateConceptsWithNote = () => guard('Regenerating directions…', async () => {
+        if (!job) return;
+        const text = noteText.trim();
+        const existing = job.concepts;
+        setNoteText('');
+        setConceptFeedbackId(null);
+        setConceptFeedbackText('');
+        let next = await say(job, 'user', text ? `Overall brainstorm note: ${text}` : 'Generate three more different directions.');
+        next = text
+            ? { ...next, directives: [...(next.directives ?? []), `For the next concept set: ${text}`], updatedAt: Date.now() }
+            : { ...next, updatedAt: Date.now() };
+        await storage.upsertJob(next);
+        const generated = await proposeConcepts(next, selectedInspirationRefs());
+        const merged: PraxisJob = { ...generated, concepts: [...existing, ...generated.concepts], updatedAt: Date.now() };
+        await storage.upsertJob(merged);
+        setJob(await say(merged, 'agent', text
+            ? 'I added three more directions from that note. The earlier ideas are still here, so you can compare or keep brainstorming.'
+            : 'I added three more different directions. The earlier ideas are still here, so you can compare or keep brainstorming.'));
+    });
+
     const begin = () => guard('Concept agent thinking…', async () => {
         if (selectedAssets.size === 0) throw new Error('Pick at least one asset.');
-        const j = await startJob(brief.trim()); // empty brief = open exploration
-        setJob(await say(await proposeConcepts(j), 'agent', 'Three directions on the table — choose one, hit Wildcard for a collision, or type below to steer me.'));
+        let j = await startJob(brief.trim()); // empty brief = open exploration
+        j = await say(j, 'user', brief.trim() ? `Brief: ${brief.trim()}` : 'Start an open exploration.');
+        setJob(await say(await proposeConcepts(j, selectedInspirationRefs()), 'agent', 'I have three directions. Pick one to turn into a production plan, or ask for a collision if you want a stranger option.'));
     });
 
     const choose = (conceptId: string) => guard('Producer drafting the plan…', async () => {
         if (!job) return;
-        const planned = await makePlan(job, conceptId, Array.from(selectedAssets));
-        const withRefs = planned.plan && selectedRefs.size > 0
-            ? { ...planned, plan: { ...planned.plan, params: { ...planned.plan.params, referenceIds: Array.from(selectedRefs) } } }
+        const concept = job.concepts.find(c => c.id === conceptId);
+        const withChoice = await say(job, 'user', `Choose direction: ${concept?.title ?? conceptId}`);
+        const planned = await makePlan(withChoice, conceptId, Array.from(selectedAssets));
+        const planRefIds = Array.from(new Set([...Array.from(selectedRefs), ...(concept?.sourceRefIds ?? [])]));
+        const withRefs = planned.plan && planRefIds.length > 0
+            ? { ...planned, plan: { ...planned.plan, params: { ...planned.plan.params, referenceIds: planRefIds } } }
             : planned;
-        setJob(await say(withRefs, 'agent', 'Plan drafted — tune ratio/size, run a cheap moodboard first, or execute.'));
+        const summary = withRefs.plan
+            ? `Plan drafted: ${withRefs.plan.params.note || 'a concrete shot plan is ready'}`
+            : 'Plan drafted.';
+        setJob(await say(withRefs, 'agent', `${summary} Confirm it, run low-cost mood studies, or adjust the details.`));
     });
 
     const wildcard = () => guard('Colliding concepts…', async () => {
         if (!job) return;
-        setJob(await proposeWildcard(job));
+        const withAsk = await say(job, 'user', 'Give me a wildcard collision.');
+        setJob(await say(await proposeWildcard(withAsk), 'agent', 'I added a wilder collision direction to the list.'));
     });
 
-    const reverseBrief = (files: FileList | File[] | null) => guard('Decoding the competitor…', async () => {
+    const reverseBrief = (files: FileList | File[] | null) => guard('Reading the image…', async () => {
         const f = files?.[0];
         if (!f) return;
         const dataUrl = await new Promise<string>((res, rej) => {
@@ -116,33 +202,55 @@ export default function StudioView() {
             r.readAsDataURL(f);
         });
         const { argument, counterBrief } = await analyzeCompetitor(dataUrl);
-        setCompetitorNote(argument);
+        setImageSparkNote(argument);
         setBrief(counterBrief);
     });
 
     const moodboard = () => guard('Moodboard…', async () => {
         if (!job) return;
+        const withChoice = await say(job, 'user', 'Run low-cost mood studies first.');
         setMoodDrafts(await makeMoodboard(job, setBusy));
-        setJob(await say(job, 'agent', 'Three mood drafts below — anchor the one whose light feels right, then execute.'));
+        setJob(await say(withChoice, 'agent', 'Three mood studies are ready. Anchor the one whose light or atmosphere should lead the final shot.'));
+    });
+
+    const reviseMoodboard = (draft?: GenerationResult, quick?: string) => guard('Updating mood studies…', async () => {
+        if (!job) return;
+        const text = (quick ?? moodFeedbackText).trim();
+        if (!text) return;
+        const label = draft ? `Mood study ${draft.id.slice(0, 6)}` : 'Mood studies';
+        setMoodFeedbackFor(null);
+        setMoodFeedbackText('');
+        let next = await say(job, 'user', `${label} feedback: ${text}`);
+        next = {
+            ...next,
+            directives: [...(next.directives ?? []), `Mood study revision: ${text}`],
+            updatedAt: Date.now(),
+        };
+        await storage.upsertJob(next);
+        const revised = await makeMoodboard(next, setBusy);
+        setMoodDrafts(revised);
+        setJob(await say(next, 'agent', 'Updated mood studies are ready. Anchor the best one before shooting the final large image.'));
     });
 
     const anchor = (resultId: string) => guard('Anchoring…', async () => {
         if (!job) return;
-        setJob(await anchorMood(job, resultId));
+        setJob(await say(await anchorMood(job, resultId), 'user', 'Anchor this mood study for the final shot.'));
     });
 
     const campaign = () => guard('Campaign kit…', async () => {
         if (!job) return;
-        const { job: j, results: rs } = await executeCampaign(job, setBusy);
+        const withChoice = await say(job, 'user', 'Execute the full campaign kit.');
+        const { job: j, results: rs } = await executeCampaign(withChoice, setBusy);
         setResults(rs);
         setJob(await say(j, 'agent', 'Campaign kit done — one concept across all four purposes.'));
     });
 
     const execute = () => guard('Executing…', async () => {
         if (!job) return;
-        const { job: j, results: rs } = await executeJob(job, count, setBusy);
+        const withChoice = await say(job, 'user', `Execute ${count} final shot${count === 1 ? '' : 's'}.`);
+        const { job: j, results: rs } = await executeJob(withChoice, count, setBusy);
         setResults(rs);
-        setJob(await say(j, 'agent', `${rs.length} shot${rs.length === 1 ? '' : 's'} done — rate them; if something's off, type it below and re-execute.`));
+        setJob(await say(j, 'agent', `${rs.length} shot${rs.length === 1 ? '' : 's'} done. Mark what works, or tell me exactly what broke so the next pass learns from it.`));
     });
 
     const review = () => guard('Critic reviewing…', async () => {
@@ -175,6 +283,12 @@ export default function StudioView() {
         setResults(rs);
     };
 
+    useImperativeHandle(ref, () => ({
+        reset,
+        resume,
+        deleteThread,
+    }));
+
     /** Step back one stage — every decision is reversible. */
     const back = async () => {
         if (!job) return;
@@ -199,6 +313,40 @@ export default function StudioView() {
         if (prev.stage === 'plan') setResults([]);
     };
 
+    const goToStage = async (target: typeof STAGES[number]) => {
+        if (!job || busy) return;
+        const currentIndex = STAGES.indexOf(job.stage);
+        const targetIndex = STAGES.indexOf(target);
+        if (targetIndex < 0 || targetIndex > currentIndex || target === job.stage) return;
+        if (target === 'brief') {
+            setBrief(job.brief);
+            const j = { ...job, stage: 'brief' as const, updatedAt: Date.now() };
+            await storage.upsertJob(j);
+            setJob(null);
+            setResults([]);
+            setMoodDrafts([]);
+            return;
+        }
+        const patch: Partial<PraxisJob> =
+            target === 'concepts'
+                ? { stage: 'concepts', plan: undefined, chosenConceptId: undefined, review: undefined }
+                : target === 'plan'
+                    ? { stage: 'plan', review: undefined }
+                    : target === 'execute'
+                        ? { stage: 'execute', review: undefined }
+                        : target === 'review' && job.review
+                            ? { stage: 'review' }
+                            : target === 'done' && job.stage === 'done'
+                                ? { stage: 'done' }
+                                : {};
+        if (!patch.stage) return;
+        const j = { ...job, ...patch, updatedAt: Date.now() } as PraxisJob;
+        await storage.upsertJob(j);
+        setJob(j);
+        if (target === 'concepts' || target === 'plan') setResults([]);
+        if (target === 'concepts') setMoodDrafts([]);
+    };
+
     /** Edit plan params (ratio / size) before executing. */
     const updatePlan = async (patch: Partial<import('../domain/types').GenerationParams>) => {
         if (!job?.plan) return;
@@ -211,78 +359,247 @@ export default function StudioView() {
         setJob(j);
     };
 
-    const rate = async (r: GenerationResult, rating: 'like' | 'dislike') => {
-        const reason = rating === 'dislike'
-            ? window.prompt('What went wrong? (this teaches the studio — be specific)') ?? undefined
-            : undefined;
+    const rate = async (r: GenerationResult, rating: 'like' | 'dislike', reason?: string) => {
         await recordSignal(r, rating, reason);
         if (rating === 'dislike' && reason) attributeFeedback(reason); // fire-and-forget
         setFeedback(prev => new Map(prev).set(r.id, rating));
+        setCritiqueFor(null);
+        if (job) {
+            const text = rating === 'like'
+                ? `Keep result ${r.id.slice(0, 6)}: this direction works.`
+                : `Result ${r.id.slice(0, 6)} needs revision: ${reason ?? 'not right yet'}.`;
+            let next = await say(job, 'user', text);
+            if (rating === 'dislike' && reason) {
+                next = { ...next, directives: [...(next.directives ?? []), reason], updatedAt: Date.now() };
+                await storage.upsertJob(next);
+            }
+            next = await say(next, 'agent', rating === 'like'
+                ? 'Logged. I will treat this image as positive taste evidence.'
+                : 'Logged. I added that as a working directive for the next pass.');
+            setJob(next);
+        }
         maybeDistill();
     };
 
-    const download = async (r: GenerationResult) => {
-        const a = document.createElement('a');
-        a.href = r.image.value;
-        a.download = `praxis-${r.id.slice(0, 6)}.png`;
-        a.click();
-        await recordSignal(r, 'export');
-    };
-
-    /** Freeze this result's whole setup as a Quick preset (hero-free). */
-    const toPreset = async (r: GenerationResult) => {
-        if (!job?.plan) return;
-        const name = window.prompt('Preset name:',
-            job.concepts.find(c => c.id === job.chosenConceptId)?.title ?? 'My look')?.trim();
-        if (!name) return;
-        await savePreset(name, job.plan.params, job.plan.elementIds, r.image.value);
+    const saveResult = async (r: GenerationResult) => {
+        await recordSignal(r, 'save');
+        setFeedback(prev => new Map(prev).set(r.id, 'like'));
         setError(null);
         setBusy('');
-        window.alert(`Preset "${name}" saved — use it in the Quick tab: pick heroes, draft, execute.`);
+        if (job) {
+            setJob(await say(job, 'user', `Save result ${r.id.slice(0, 6)} as an approved output.`));
+        }
+        maybeDistill();
+    };
+
+    const discardResult = async (r: GenerationResult) => {
+        await recordSignal(r, 'discard');
+        setFeedback(prev => new Map(prev).set(r.id, 'dislike'));
+        setResults(prev => prev.filter(x => x.id !== r.id));
+        setCritiqueFor(null);
+        if (job) {
+            setJob(await say(job, 'user', `Discard result ${r.id.slice(0, 6)}.`));
+        }
+        maybeDistill();
     };
 
     const stage = job?.stage ?? 'brief';
     const elementById = (id: string) => elements.find(e => e.id === id);
+    const refById = (id: string) => refs.find(r => r.id === id);
+    const selectedInspirationRefs = () => refs.filter(r => selectedRefs.has(r.id));
+    const conceptSourceRefs = (c: { sourceRefIds?: string[] }) =>
+        (c.sourceRefIds ?? []).map(refById).filter((r): r is Reference => !!r);
+    const chosenConcept = job?.concepts.find(c => c.id === job.chosenConceptId);
+    const actionChip = (active = false): React.CSSProperties => ({
+        ...chip(active),
+        minHeight: 28,
+        fontSize: 10.5,
+        fontWeight: 800,
+        borderRadius: 999,
+    });
+    const agentBubble: React.CSSProperties = {
+        alignSelf: 'flex-start',
+        maxWidth: '82%',
+        padding: '9px 12px',
+        borderRadius: '13px 13px 13px 4px',
+        fontSize: 12,
+        lineHeight: 1.5,
+        background: 'rgba(255,255,255,0.72)',
+        color: '#18181b',
+        border: '1px solid rgba(212,212,216,0.5)',
+        backdropFilter: 'blur(18px)',
+        WebkitBackdropFilter: 'blur(18px)',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+    };
+    const conceptPanel: React.CSSProperties = {
+        width: '100%',
+        maxWidth: 'none',
+        alignSelf: 'stretch',
+        padding: 12,
+        borderRadius: 14,
+        background: 'rgba(255,255,255,0.54)',
+        color: '#18181b',
+        border: '1px solid rgba(212,212,216,0.52)',
+        backdropFilter: 'blur(22px)',
+        WebkitBackdropFilter: 'blur(22px)',
+        boxShadow: '0 18px 44px rgba(15,23,42,0.06)',
+        boxSizing: 'border-box',
+    };
+    const userBubble: React.CSSProperties = {
+        alignSelf: 'flex-end',
+        maxWidth: '78%',
+        padding: '8px 12px',
+        borderRadius: '13px 13px 4px 13px',
+        fontSize: 12,
+        lineHeight: 1.5,
+        background: '#18181b',
+        color: '#fff',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+    };
+    const critiqueChips = [
+        'Product shape is off',
+        'Material or texture changed',
+        'Light is wrong',
+        'Composition feels weak',
+        'Too staged',
+        'Not close enough to inspiration',
+        'Not on brand',
+    ];
+    const startCards = [
+        {
+            title: 'Campaign image',
+            detail: 'Start with a polished hero shot. Studio will propose directions, draft a production plan, and create final images with copy space.',
+            prompt: 'Campaign hero image — brand-led, polished, with clear copy space',
+        },
+        {
+            title: 'Product detail / PDP',
+            detail: 'Create clean product-focused imagery for ecommerce, detail pages, launch pages, and catalog systems.',
+            prompt: 'Product detail / PDP image — clean, accurate, premium but not over-staged',
+        },
+        {
+            title: 'Image spark',
+            detail: 'Drop any image, mood, texture, room, outfit, object, or visual fragment. Studio will turn the vibe into a usable creative brief.',
+            prompt: '',
+            action: () => imageSparkRef.current?.click(),
+        },
+        {
+            title: 'Open exploration',
+            detail: 'Start with no brief. Studio will inspect your selected sources and suggest what the brand should make next.',
+            prompt: '',
+        },
+    ];
+    const setupCards = [
+        {
+            title: 'Manage brand assets',
+            detail: 'Upload products, hero objects, people, packaging, or source-of-truth images. These keep generated work visually accurate.',
+            action: () => onNavigate?.('heroes'),
+            cta: 'Open Assets',
+        },
+        {
+            title: 'Build inspiration',
+            detail: 'Collect references for lighting, atmosphere, layout, color, materials, and art direction without copying their subjects.',
+            action: () => onNavigate?.('library'),
+            cta: 'Open Inspiration',
+        },
+        {
+            title: 'Define the brand',
+            detail: 'Maintain brand memory, rules, essence, and red lines so every task starts with the same strategic baseline.',
+            action: () => onNavigate?.('knowledge'),
+            cta: 'Open Brand',
+        },
+        {
+            title: 'Work on Canvas',
+            detail: 'Arrange assets, references, notes, and outputs on a persistent visual board when a task needs more structure.',
+            action: () => onNavigate?.('weave'),
+            cta: 'Open Canvas',
+        },
+    ];
+    const sourceSummary = `${selectedAssets.size} asset${selectedAssets.size === 1 ? '' : 's'} · ${selectedRefs.size} inspiration`;
 
     return (
-        <div style={{ maxWidth: 1180, margin: '0 auto', padding: '18px 22px', display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-            {/* Job history — every job is a conversation */}
-            <aside style={{ width: 200, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, position: 'sticky', top: 12 }}>
-                <button style={{ ...S.btn, width: '100%' }} onClick={reset}>＋ New job</button>
-                <span style={S.label}>JOBS</span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, overflowY: 'auto', maxHeight: 'calc(100vh - 140px)' }}>
+        <div style={{ maxWidth: 1480, margin: '0 auto', padding: '18px 22px', display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+            {/* Job history — rendered here only when Studio is used standalone. */}
+            {!hideSidebar && <aside style={{ width: 286, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 12, maxHeight: 'calc(100vh - 36px)' }}>
+                <button style={{ ...S.btn, width: '100%', minHeight: 38 }} onClick={reset}>New production thread</button>
+                <div style={{ border: '1px solid rgba(212,212,216,0.58)', background: 'rgba(255,255,255,0.52)', borderRadius: 13, padding: '9px 10px', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
+                    <span style={S.label}>SOURCES</span>
+                    <span style={{ fontSize: 10.5, color: '#71717a', fontWeight: 750 }}>{sourceSummary}</span>
+                </div>
+                <span style={S.label}>PROJECT THREADS</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto', minHeight: 0 }}>
                     {jobs.map(j => (
-                        <button key={j.id} onClick={() => resume(j)}
+                        <div key={j.id}
                             style={{
-                                textAlign: 'left', padding: '7px 10px', borderRadius: 10, cursor: 'pointer',
+                                position: 'relative',
+                                padding: '9px 34px 9px 10px',
+                                borderRadius: 12,
                                 border: job?.id === j.id ? '1.5px solid #18181b' : '1px solid rgba(212,212,216,0.5)',
-                                background: 'rgba(255,255,255,0.6)',
+                                background: job?.id === j.id ? 'rgba(255,255,255,0.86)' : 'rgba(255,255,255,0.54)',
+                                boxShadow: job?.id === j.id ? '0 8px 18px rgba(0,0,0,0.08)' : 'none',
                             }}>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: '#18181b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {j.brief.trim() ? j.brief.slice(0, 42) : 'Open exploration'}
-                            </div>
-                            <div style={{ fontSize: 9, color: '#a1a1aa', marginTop: 2 }}>
-                                {(STAGE_LABEL[j.stage] ?? j.stage)} · {new Date(j.updatedAt).toLocaleDateString()}
-                            </div>
-                        </button>
+                            <button
+                                onClick={() => resume(j)}
+                                style={{ border: 'none', background: 'transparent', padding: 0, margin: 0, width: '100%', textAlign: 'left', cursor: 'pointer', display: 'block' }}
+                            >
+                                <div style={{ fontSize: 11, fontWeight: 700, color: '#18181b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {j.brief.trim() ? j.brief.slice(0, 42) : 'Open exploration'}
+                                </div>
+                                <div style={{ fontSize: 9, color: '#71717a', marginTop: 4, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                                    <span>{(STAGE_LABEL[j.stage] ?? j.stage).replace(/^[0-9] · /, '')}</span>
+                                    <span>{j.resultIds.length} img</span>
+                                </div>
+                                <div style={{ fontSize: 9, color: '#a1a1aa', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {(j.transcript ?? []).at(-1)?.text ?? new Date(j.updatedAt).toLocaleDateString()}
+                                </div>
+                            </button>
+                            <button
+                                onClick={() => deleteThread(j)}
+                                title="Delete this project thread"
+                                style={{ position: 'absolute', right: 7, top: 7, width: 20, height: 20, borderRadius: 999, border: '1px solid rgba(212,212,216,0.7)', background: 'rgba(255,255,255,0.74)', color: '#a1a1aa', cursor: 'pointer', fontSize: 11, lineHeight: 1, padding: 0 }}
+                            >
+                                ×
+                            </button>
+                        </div>
                     ))}
                     {jobs.length === 0 && <span style={{ fontSize: 10.5, color: '#a1a1aa' }}>No jobs yet — describe one below.</span>}
                 </div>
-            </aside>
+            </aside>}
 
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
             {/* Stage rail */}
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                {STAGES.map((s, i) => (
-                    <React.Fragment key={s}>
-                        {i > 0 && <span style={{ color: '#d4d4d8' }}>→</span>}
-                        <span style={{
-                            fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 999,
-                            background: stage === s ? '#18181b' : '#f4f4f5',
-                            color: stage === s ? '#fff' : '#a1a1aa',
-                        }}>{STAGE_LABEL[s]}</span>
-                    </React.Fragment>
-                ))}
+                {STAGES.map((s, i) => {
+                    const currentIndex = STAGES.indexOf(stage as typeof STAGES[number]);
+                    const stepIndex = STAGES.indexOf(s);
+                    const reached = !!job && stepIndex <= currentIndex;
+                    const active = stage === s;
+                    const clickable = reached && !active && !busy;
+                    return (
+                        <React.Fragment key={s}>
+                            {i > 0 && <span style={{ color: '#d4d4d8' }}>→</span>}
+                            <button
+                                type="button"
+                                disabled={!clickable}
+                                onClick={() => goToStage(s)}
+                                title={clickable ? `Go back to ${STAGE_LABEL[s]}` : active ? 'Current step' : 'Not reached yet'}
+                                style={{
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    padding: '4px 10px',
+                                    borderRadius: 999,
+                                    border: '1px solid transparent',
+                                    background: active ? '#18181b' : reached ? 'rgba(255,255,255,0.72)' : '#f4f4f5',
+                                    color: active ? '#fff' : reached ? '#52525b' : '#a1a1aa',
+                                    cursor: clickable ? 'pointer' : 'default',
+                                    boxShadow: reached && !active ? 'inset 0 1px 0 rgba(255,255,255,0.72)' : 'none',
+                                    opacity: reached || active ? 1 : 0.68,
+                                }}
+                            >
+                                {STAGE_LABEL[s]}
+                            </button>
+                        </React.Fragment>
+                    );
+                })}
                 {job && (
                     <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
                         <button style={S.btnGhost} disabled={!!busy} onClick={back} title="Step back one stage">← Back</button>
@@ -291,188 +608,292 @@ export default function StudioView() {
                 )}
             </div>
 
-            {busy && <div style={{ ...S.card, fontSize: 12, color: '#52525b' }}>{busy}</div>}
             {error && <div style={S.err}>{error}</div>}
 
             {/* Conversation — the studio reports, the owner steers */}
             {job && (job.transcript ?? []).length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                     {(job.transcript ?? []).map((m, i) => (
                         <div key={i} style={{
-                            alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-                            maxWidth: '78%',
-                            padding: '7px 12px',
-                            borderRadius: m.role === 'user' ? '12px 12px 3px 12px' : '12px 12px 12px 3px',
-                            fontSize: 12, lineHeight: 1.5,
-                            background: m.role === 'user' ? '#18181b' : 'rgba(255,255,255,0.72)',
-                            color: m.role === 'user' ? '#fff' : '#18181b',
-                            border: m.role === 'user' ? 'none' : '1px solid rgba(212,212,216,0.5)',
-                            backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+                            ...(m.role === 'user' ? userBubble : agentBubble),
                             animation: 'praxis-pop 240ms cubic-bezier(0.22,1,0.36,1)',
                         }}>
                             {m.text}
                         </div>
                     ))}
+                    {busy && (
+                        <div className="praxis-running praxis-running-card" style={{ ...agentBubble, display: 'inline-flex', alignItems: 'center', gap: 10, color: '#52525b', background: 'rgba(255,255,255,0.82)', border: '1px solid rgba(212,212,216,0.68)' }}>
+                            <span className="praxis-busy-dot" />
+                            <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                <span style={{ fontSize: 9.5, fontWeight: 850, letterSpacing: 0.7, textTransform: 'uppercase', color: '#a1a1aa' }}>
+                                    Running
+                                </span>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, color: '#3f3f46' }}>
+                                    {busy}
+                                    <span className="praxis-busy-dots" aria-hidden="true"><span /><span /><span /></span>
+                                </span>
+                            </span>
+                        </div>
+                    )}
+                </div>
+            )}
+            {!job && busy && (
+                <div className="praxis-running praxis-running-card" style={{ ...agentBubble, display: 'inline-flex', alignItems: 'center', gap: 10, color: '#52525b', background: 'rgba(255,255,255,0.82)', border: '1px solid rgba(212,212,216,0.68)' }}>
+                    <span className="praxis-busy-dot" />
+                    <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <span style={{ fontSize: 9.5, fontWeight: 850, letterSpacing: 0.7, textTransform: 'uppercase', color: '#a1a1aa' }}>
+                            Running
+                        </span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, color: '#3f3f46' }}>
+                            {busy}
+                            <span className="praxis-busy-dots" aria-hidden="true"><span /><span /><span /></span>
+                        </span>
+                    </span>
                 </div>
             )}
 
             {/* Stage 1 — brief */}
             {!job && (
-                <DropZone onFiles={reverseBrief} hint="Drop a competitor's image — reverse brief">
-                <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ textAlign: 'center', padding: '26px 0 10px', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
-                        <div style={{ width: 46, height: 46, borderRadius: 999, background: 'radial-gradient(circle at 32% 28%, #d7dce6, #18181b)', boxShadow: '0 12px 26px rgba(0,0,0,0.18)' }} />
-                        <div style={{ fontSize: 21, fontWeight: 800, color: '#18181b' }}>What should the studio make?</div>
-                        <div style={{ fontSize: 12, color: '#71717a', maxWidth: 420, lineHeight: 1.6 }}>
-                            Describe it in the box below — or leave it empty for open exploration. Attach assets & inspiration here, then Send: the studio proposes, plans, shoots and learns from your feedback.
+                <DropZone onFiles={reverseBrief} hint="Drop any image to spark a creative brief">
+                <div style={{ minHeight: 'calc(100vh - 150px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, padding: '26px 0 42px' }}>
+                    <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', maxWidth: 760 }}>
+                        <div style={{ width: 52, height: 52, borderRadius: 999, background: 'radial-gradient(circle at 32% 28%, #d7dce6, #5b8def 58%, #18181b)', boxShadow: '0 16px 34px rgba(37,99,235,0.20)' }} />
+                        <div style={{ fontSize: 28, fontWeight: 850, color: '#18181b', letterSpacing: -0.2 }}>What are we making today?</div>
+                        <div style={{ fontSize: 13, color: '#71717a', maxWidth: 650, lineHeight: 1.65 }}>
+                            Describe the work you want, drop any image for vibe or ideas, or select Assets and Inspiration from the left sidebar. Praxis can use those sources to propose directions, plan the shot, generate images, and turn your feedback into reusable brand memory.
                         </div>
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center', marginTop: 4 }}>
-                            {['Spring campaign hero — fresh, optimistic', 'Clean silo set for the newest collection', 'Lifestyle scene for social — quiet morning'].map(sug => (
-                                <button key={sug} style={chip(brief === sug)} onClick={() => setBrief(sug)}>{sug}</button>
+                    </div>
+                    <div style={{ width: 'min(920px, 100%)', display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 24, background: 'rgba(255,255,255,0.82)', backdropFilter: 'blur(28px) saturate(1.16)', WebkitBackdropFilter: 'blur(28px) saturate(1.16)', border: '1px solid rgba(212,212,216,0.7)', boxShadow: '0 22px 54px rgba(15,23,42,0.12)' }}>
+                        <textarea
+                            value={brief}
+                            onChange={e => setBrief(e.target.value)}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) begin();
+                            }}
+                            placeholder="Example: Create a premium campaign hero using the selected product assets and the selected lighting references. Keep the product accurate, leave space for headline copy, and make it feel calm, expensive, and launch-ready."
+                            style={{ ...S.input, width: '100%', minHeight: 146, border: 'none', background: 'transparent', resize: 'vertical', fontSize: 16, lineHeight: 1.45, padding: '12px 10px' }}
+                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', borderTop: '1px solid rgba(228,228,231,0.72)', padding: '8px 4px 2px' }}>
+                            <span style={{ fontSize: 11, fontWeight: 800, color: '#71717a' }}>Sources · {sourceSummary}</span>
+                            <button style={S.btnGhost} disabled={!!busy} onClick={() => imageSparkRef.current?.click()} title="Attach any image to spark a creative brief">Attach image</button>
+                            <span style={{ marginLeft: 'auto', fontSize: 10.5, color: '#a1a1aa' }}>⌘ Enter</span>
+                            <button style={{ ...S.btn, minWidth: 82 }} disabled={!!busy} onClick={begin}>Send</button>
+                        </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, width: '100%', maxWidth: 920 }}>
+                        {startCards.map(card => (
+                            <button
+                                key={card.title}
+                                onClick={() => {
+                                    if (card.action) { card.action(); return; }
+                                    setBrief(card.prompt);
+                                }}
+                                style={{
+                                    minHeight: 128,
+                                    textAlign: 'left',
+                                    border: brief === card.prompt && card.prompt ? '1.5px solid #18181b' : '1px solid rgba(212,212,216,0.62)',
+                                    background: 'rgba(255,255,255,0.62)',
+                                    backdropFilter: 'blur(18px)',
+                                    WebkitBackdropFilter: 'blur(18px)',
+                                    borderRadius: 14,
+                                    padding: 14,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: 8,
+                                    boxShadow: '0 10px 26px rgba(0,0,0,0.05)',
+                                }}
+                            >
+                                <span style={{ fontSize: 12.5, fontWeight: 850, color: '#18181b' }}>{card.title}</span>
+                                <span style={{ fontSize: 11, color: '#71717a', lineHeight: 1.45, whiteSpace: 'normal' }}>{card.detail}</span>
+                            </button>
+                        ))}
+                    </div>
+                    <div style={{ width: '100%', maxWidth: 920, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                            <span style={{ ...S.label, color: '#71717a' }}>SET UP THE PLATFORM</span>
+                            <span style={{ fontSize: 11, color: '#a1a1aa' }}>These areas make each task smarter before you press Send.</span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
+                            {setupCards.map(card => (
+                                <button
+                                    key={card.title}
+                                    onClick={card.action}
+                                    style={{
+                                        minHeight: 148,
+                                        textAlign: 'left',
+                                        border: '1px solid rgba(212,212,216,0.68)',
+                                        background: 'rgba(255,255,255,0.68)',
+                                        borderRadius: 14,
+                                        padding: 14,
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: 9,
+                                        boxShadow: '0 10px 26px rgba(0,0,0,0.045)',
+                                    }}
+                                >
+                                    <span style={{ fontSize: 12.5, fontWeight: 850, color: '#18181b' }}>{card.title}</span>
+                                    <span style={{ flex: 1, fontSize: 11, color: '#71717a', lineHeight: 1.45, whiteSpace: 'normal' }}>{card.detail}</span>
+                                    <span style={{ fontSize: 10.5, fontWeight: 850, color: '#18181b' }}>{card.cta} →</span>
+                                </button>
                             ))}
                         </div>
                     </div>
-                    {brief.trim() && <div style={{ fontSize: 11, color: '#3f3f46', background: 'rgba(244,244,245,0.8)', borderRadius: 8, padding: '6px 10px' }}>Brief: {brief}</div>}
-                    <button
-                        onClick={() => setAssetsOpen(o => !o)}
-                        style={{
-                            ...S.btnGhost, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6,
-                            fontSize: 10, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase', color: '#71717a',
-                        }}
-                        title="Pick the assets (pixel truth) this job must feature">
-                        <span style={{ display: 'inline-block', transition: 'transform 200ms cubic-bezier(0.22,1,0.36,1)', transform: assetsOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>▸</span>
-                        Assets · {selectedAssets.size} selected
-                    </button>
-                    <div style={{
-                        overflow: 'hidden',
-                        maxHeight: assetsOpen ? 480 : 0,
-                        opacity: assetsOpen ? 1 : 0,
-                        transition: 'max-height 320ms cubic-bezier(0.22,1,0.36,1), opacity 200ms ease',
-                    }}>
-                    {/* Same card grid as the Canvas library — big thumbnails, names below, click to select */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 6, maxHeight: 470, overflowY: 'auto' }}>
-                        {assets.map(a => {
-                            const on = selectedAssets.has(a.id);
-                            return (
-                                <button key={a.id} onClick={() => setSelectedAssets(prev => {
-                                    const n = new Set(prev); n.has(a.id) ? n.delete(a.id) : n.add(a.id); return n;
-                                })}
-                                    title={`${a.name}${on ? ' — selected' : ''}`}
-                                    style={{
-                                        border: on ? '1.5px solid #18181b' : '1px solid rgba(212,212,216,0.58)',
-                                        background: 'rgba(255,255,255,0.58)',
-                                        borderRadius: 8, padding: 4, cursor: 'pointer',
-                                        display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0,
-                                    }}>
-                                    {a.photos[0] && <img src={a.photos[0].image.value} alt="" draggable={false}
-                                        onClick={e => { if (e.altKey) { e.stopPropagation(); openLightbox(a.photos[0].image.value); } }}
-                                        style={{ width: '100%', aspectRatio: '1', borderRadius: 5, objectFit: 'cover', display: 'block' }} />}
-                                    <span style={{ width: '100%', fontSize: 9, fontWeight: 700, color: '#3f3f46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>
-                                        {a.name}{a.photos.length > 1 ? ` · ${a.photos.length}` : ''}
-                                    </span>
-                                </button>
-                            );
-                        })}
-                        {assets.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No assets yet — add them in Assets.</span>}
-                    </div>
-                    </div>
-
-                    {/* Inspiration — collapsible; chosen refs lead the aesthetic stack */}
-                    <button
-                        onClick={() => setInspOpen(o => !o)}
-                        style={{
-                            ...S.btnGhost, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6,
-                            fontSize: 10, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase', color: '#71717a',
-                        }}
-                        title="Pick inspiration references — their look leads the generation's aesthetic references">
-                        <span style={{ display: 'inline-block', transition: 'transform 200ms cubic-bezier(0.22,1,0.36,1)', transform: inspOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>▸</span>
-                        Inspiration · {selectedRefs.size} selected
-                    </button>
-                    <div style={{
-                        overflow: 'hidden',
-                        maxHeight: inspOpen ? 480 : 0,
-                        opacity: inspOpen ? 1 : 0,
-                        transition: 'max-height 320ms cubic-bezier(0.22,1,0.36,1), opacity 200ms ease',
-                    }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 6, maxHeight: 470, overflowY: 'auto' }}>
-                            {refs.map(r => {
-                                const on = selectedRefs.has(r.id);
-                                return (
-                                    <button key={r.id} onClick={() => setSelectedRefs(prev => {
-                                        const n = new Set(prev); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n;
-                                    })}
-                                        title={`${r.name}${on ? ' — selected' : ''}`}
-                                        style={{
-                                            border: on ? '1.5px solid #18181b' : '1px solid rgba(212,212,216,0.58)',
-                                            background: 'rgba(255,255,255,0.58)',
-                                            borderRadius: 8, padding: 4, cursor: 'pointer',
-                                            display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0,
-                                        }}>
-                                        <img src={r.image.value} alt="" draggable={false}
-                                            style={{ width: '100%', aspectRatio: '1', borderRadius: 5, objectFit: 'cover', display: 'block' }} />
-                                        <span style={{ width: '100%', fontSize: 9, fontWeight: 700, color: '#3f3f46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{r.name}</span>
-                                    </button>
-                                );
-                            })}
-                            {refs.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No references yet — collect them in Inspiration.</span>}
-                        </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <button style={S.btnGhost} disabled={!!busy} onClick={() => competitorRef.current?.click()}>
-                            ↩ Reverse brief — answer a competitor's image
-                        </button>
-                        <input ref={competitorRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => reverseBrief(e.target.files)} />
-                    </div>
-                    {competitorNote && (
+                    {imageSparkNote && (
                         <div style={{ fontSize: 11, color: '#92400e', lineHeight: 1.5 }}>
-                            Their argument: {competitorNote} — counter-brief drafted above; edit it, pick heroes, then Start.
+                            Visual read: {imageSparkNote} — a draft brief is ready above. Edit it, select sources, then send.
                         </div>
                     )}
+                    <input ref={imageSparkRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => reverseBrief(e.target.files)} />
                 </div>
                 </DropZone>
             )}
 
             {/* Stage 2 — concepts */}
             {job && stage === 'concepts' && (
-                <>
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <button style={S.btnGhost} disabled={!!busy} onClick={wildcard} title="Collide two contradictory concepts">
-                        Wildcard — collide two opposites
-                    </button>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
+                <div style={{ ...conceptPanel, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <span style={{ ...S.label, color: '#71717a' }}>PICK ONE DIRECTION</span>
+                            <span style={{ fontSize: 11, color: '#a1a1aa' }}>{job.concepts.length} brainstorm directions · choose one or keep expanding</span>
+                        </div>
+                        <button style={actionChip(false)} disabled={!!busy} onClick={wildcard} title="Collide two contradictory concepts">
+                            Wildcard collision
+                        </button>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 360px), 1fr))', gap: 12, alignItems: 'stretch' }}>
                     {job.concepts.map(c => (
-                        <div key={c.id} style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            <div style={{ fontSize: 13, fontWeight: 700 }}>{c.title}</div>
+                        <div key={c.id} style={{ border: '1px solid rgba(212,212,216,0.58)', background: 'rgba(255,255,255,0.62)', borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 9, minHeight: 360, boxShadow: '0 12px 30px rgba(15,23,42,0.05)', minWidth: 0 }}>
+                            <div style={{ fontSize: 16, fontWeight: 850, lineHeight: 1.2 }}>{c.title}</div>
                             <div style={{ fontSize: 10, fontWeight: 700, color: '#a1a1aa', letterSpacing: 0.5 }}>
                                 {c.realism.toUpperCase()}{c.contextModeId ? ` · ${c.contextModeId}` : ''}
                             </div>
-                            <div style={{ fontSize: 11.5, lineHeight: 1.5 }}>{c.rationale}</div>
-                            <div style={{ fontSize: 10.5, color: '#71717a', lineHeight: 1.5 }}>{c.nsiSummary}</div>
-                            {c.elementIds.some(id => elementById(id)) && (
-                                <div style={{ fontSize: 10, color: '#71717a' }}>
-                                    Recombines: {c.elementIds.map(id => elementById(id)?.concept).filter(Boolean).map(s => `“${s}”`).join(' + ')}
+                            <div style={{ fontSize: 13, lineHeight: 1.55 }}>{c.rationale}</div>
+                            <div style={{ fontSize: 11.5, color: '#71717a', lineHeight: 1.5 }}>{c.nsiSummary}</div>
+                            {conceptSourceRefs(c).length > 0 && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                                    <span style={{ fontSize: 9.5, fontWeight: 800, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                        Inspired by
+                                    </span>
+                                    {conceptSourceRefs(c).map(r => (
+                                        <button
+                                            key={r.id}
+                                            type="button"
+                                            title={r.name}
+                                            onClick={() => openLightbox(r.image.value)}
+                                            style={{
+                                                width: 34,
+                                                height: 34,
+                                                borderRadius: 8,
+                                                border: '1px solid rgba(212,212,216,0.75)',
+                                                padding: 0,
+                                                overflow: 'hidden',
+                                                background: 'rgba(255,255,255,0.68)',
+                                                cursor: 'zoom-in',
+                                                boxShadow: '0 8px 18px rgba(15,23,42,0.08)',
+                                            }}
+                                        >
+                                            <img src={r.image.value} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                        </button>
+                                    ))}
                                 </div>
                             )}
-                            <button style={{ ...S.btn, marginTop: 'auto' }} disabled={!!busy} onClick={() => choose(c.id)}>
-                                Choose this direction
-                            </button>
+                            {c.elementIds.some(id => elementById(id)) && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                                    <span style={{ fontSize: 9.5, fontWeight: 800, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                        Mixes
+                                    </span>
+                                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', minWidth: 0 }}>
+                                        {c.elementIds.map(id => elementById(id)).filter((el): el is Element => !!el).slice(0, 4).map(el => {
+                                            const source = refById(el.sourceRefId)?.name;
+                                            return (
+                                                <span
+                                                    key={el.id}
+                                                    title={`${el.concept}${source ? ` from ${source}` : ''}`}
+                                                    style={{
+                                                        maxWidth: '100%',
+                                                        minWidth: 0,
+                                                        padding: '4px 7px',
+                                                        borderRadius: 999,
+                                                        border: '1px solid rgba(212,212,216,0.68)',
+                                                        background: 'rgba(250,250,250,0.72)',
+                                                        fontSize: 10,
+                                                        fontWeight: 750,
+                                                        color: '#71717a',
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis',
+                                                        whiteSpace: 'nowrap',
+                                                    }}
+                                                >
+                                                    {el.concept}
+                                                </span>
+                                            );
+                                        })}
+                                        {c.elementIds.length > 4 && (
+                                            <span style={{ padding: '4px 7px', borderRadius: 999, background: 'rgba(244,244,245,0.72)', fontSize: 10, fontWeight: 750, color: '#a1a1aa' }}>
+                                                +{c.elementIds.length - 4}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                            <div style={{ display: 'flex', gap: 7, marginTop: 'auto', flexWrap: 'wrap' }}>
+                                <button style={{ ...actionChip(false), flex: 1, justifyContent: 'center' }} disabled={!!busy} onClick={() => choose(c.id)}>
+                                    Choose
+                                </button>
+                                <button
+                                    style={actionChip(conceptFeedbackId === c.id)}
+                                    disabled={!!busy}
+                                    onClick={() => {
+                                        setConceptFeedbackId(prev => prev === c.id ? null : c.id);
+                                        setConceptFeedbackText('');
+                                    }}
+                                    title="Optional: steer this specific direction before choosing it"
+                                >
+                                    Feedback
+                                </button>
+                            </div>
+                            {conceptFeedbackId === c.id && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 7, borderRadius: 9, background: 'rgba(244,244,245,0.72)', border: '1px solid rgba(228,228,231,0.72)' }}>
+                                    <div style={{ fontSize: 10, color: '#71717a', lineHeight: 1.45 }}>
+                                        Optional: tell Studio how to adjust only this direction before you choose it.
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 5 }}>
+                                        <input
+                                            value={conceptFeedbackText}
+                                            onChange={e => setConceptFeedbackText(e.target.value)}
+                                            onKeyDown={e => { if (e.key === 'Enter') sendConceptFeedback(); }}
+                                            placeholder="e.g. keep this, but make it less staged"
+                                            style={{ ...S.input, minHeight: 30, flex: 1, fontSize: 11 }}
+                                        />
+                                        <button style={S.btn} disabled={!conceptFeedbackText.trim() || !!busy} onClick={sendConceptFeedback}>Send</button>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                        {['less staged', 'more premium', 'more copy space', 'closer to product truth'].map(s => (
+                                            <button key={s} style={actionChip(false)} onClick={() => setConceptFeedbackText(s)}>{s}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     ))}
+                    </div>
                 </div>
-                </>
             )}
 
             {/* Stage 3 — plan */}
             {job && stage === 'plan' && job.plan && (
-                <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <span style={S.label}>PRODUCTION PLAN — {job.concepts.find(c => c.id === job.chosenConceptId)?.title}</span>
+                <div style={{ ...agentBubble, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <span style={{ ...S.label, color: '#71717a' }}>CONFIRM THE PLAN — {chosenConcept?.title}</span>
+                    <div style={{ fontSize: 13, lineHeight: 1.55, color: '#18181b' }}>
+                        I am preparing to shoot <strong>{job.plan.params.purpose}</strong> in <strong>{job.plan.params.ratio}</strong>: {job.plan.params.note || 'a brand-led scene with the selected assets.'}
+                    </div>
                     <ol style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.7 }}>
                         {job.plan.steps.map((s, i) => <li key={i}>{s}</li>)}
                     </ol>
                     <div style={{ fontSize: 11, color: '#71717a', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        <span>purpose {job.plan.params.purpose} · {job.plan.elementIds.length} elements · note:</span>
+                        <span>Shot setup · {job.plan.params.purpose} · {job.plan.elementIds.length} mixed elements</span>
                     </div>
                     <textarea
                         value={job.plan.params.note ?? ''}
@@ -493,33 +914,56 @@ export default function StudioView() {
                     {/* Moodboard — pick direction on visuals, cheap flash drafts */}
                     <div style={{ borderTop: '1px solid #f4f4f5', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                            <button style={S.btnGhost} disabled={!!busy} onClick={moodboard}>
-                                Moodboard — 3 cheap drafts first
+                            <button style={actionChip(false)} disabled={!!busy} onClick={moodboard}>
+                                See mood studies first
                             </button>
                             {job.plan.moodAnchorResultId && <span style={{ fontSize: 10, color: '#059669' }}>mood anchored — its pixels will lead the final shot</span>}
                         </div>
                         {moodDrafts.length > 0 && (
-                            <div style={{ display: 'flex', gap: 8 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 300px))', gap: 12 }}>
                                 {moodDrafts.map(d => (
                                     <div key={d.id}
-                                        style={{ padding: 2, borderRadius: 10, background: '#fff', border: job.plan!.moodAnchorResultId === d.id ? '2.5px solid #059669' : '1px solid #e4e4e7' }}>
+                                        style={{ padding: 4, borderRadius: 12, background: 'rgba(255,255,255,0.72)', border: job.plan!.moodAnchorResultId === d.id ? '2.5px solid #059669' : '1px solid #e4e4e7', display: 'flex', flexDirection: 'column', gap: 5 }}>
                                         <img src={d.image.value} alt="" onClick={() => openLightbox(d.image.value)}
-                                            style={{ width: 130, borderRadius: 8, display: 'block', cursor: 'zoom-in' }} />
+                                            style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', borderRadius: 8, display: 'block', cursor: 'zoom-in' }} />
                                         <div style={{ display: 'flex', gap: 3, marginTop: 3 }}>
                                             <button onClick={() => anchor(d.id)} disabled={!!busy}
                                                 style={{ ...S.btnGhost, flex: 1, fontSize: 10 }}>
                                                 {job.plan!.moodAnchorResultId === d.id ? 'Anchored' : 'Anchor'}
                                             </button>
+                                            <button
+                                                title="Give feedback and regenerate the mood studies"
+                                                disabled={!!busy}
+                                                onClick={() => {
+                                                    setMoodFeedbackFor(prev => prev === d.id ? null : d.id);
+                                                    setMoodFeedbackText('');
+                                                }}
+                                                style={{ ...S.btnGhost, flex: 1, fontSize: 10 }}
+                                            >
+                                                Feedback
+                                            </button>
                                             <button title="Save to Gallery" disabled={!!busy}
                                                 onClick={async () => { await recordSignal(d, 'save'); window.alert('Saved to Gallery.'); }}
-                                                style={{ ...S.btnGhost, fontSize: 10 }}>Gallery</button>
-                                            <button title="Download" onClick={() => {
-                                                const a = document.createElement('a');
-                                                a.href = d.image.value;
-                                                a.download = `praxis-mood-${d.id.slice(0, 6)}.png`;
-                                                a.click();
-                                            }} style={{ ...S.btnGhost, fontSize: 10 }}>Save</button>
+                                                style={{ ...S.btnGhost, fontSize: 10 }}>Save</button>
                                         </div>
+                                        {moodFeedbackFor === d.id && (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: 6, borderRadius: 9, background: 'rgba(244,244,245,0.75)', border: '1px solid rgba(228,228,231,0.72)' }}>
+                                                <input
+                                                    value={moodFeedbackText}
+                                                    onChange={e => setMoodFeedbackText(e.target.value)}
+                                                    placeholder="e.g. warmer light, less empty"
+                                                    style={{ ...S.input, minHeight: 28, fontSize: 10.5 }}
+                                                />
+                                                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                                    {['warmer light', 'more copy space', 'less staged', 'closer to product truth'].map(s => (
+                                                        <button key={s} style={actionChip(moodFeedbackText === s)} disabled={!!busy} onClick={() => setMoodFeedbackText(s)}>{s}</button>
+                                                    ))}
+                                                </div>
+                                                <button style={{ ...S.btn, minHeight: 28, fontSize: 10.5 }} disabled={!moodFeedbackText.trim() || !!busy} onClick={() => reviseMoodboard(d)}>
+                                                    Update drafts
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -528,9 +972,9 @@ export default function StudioView() {
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         <span style={S.label}>VARIANTS</span>
                         {[1, 2, 3].map(n => <button key={n} style={chip(count === n)} onClick={() => setCount(n)}>{n}</button>)}
-                        <button style={S.btn} disabled={!!busy} onClick={execute}>Approve — execute</button>
-                        <button style={S.btnGhost} disabled={!!busy} onClick={campaign} title="hero 16:9 + pdp 4:3 + social 1:1 + seasonal 3:4">
-                            Campaign kit — all 4 purposes
+                        <button style={S.btn} disabled={!!busy} onClick={execute}>Yes, shoot it</button>
+                        <button style={actionChip(false)} disabled={!!busy} onClick={campaign} title="Generate a matched set from this same plan: hero 16:9 + PDP 4:3 + social 1:1 + seasonal 3:4">
+                            Campaign set
                         </button>
                     </div>
                 </div>
@@ -539,11 +983,16 @@ export default function StudioView() {
             {/* Stage 4/5 — results + review */}
             {job && (stage === 'execute' || stage === 'review' || stage === 'done') && (
                 <>
+                    <div style={{ ...agentBubble, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <span style={{ ...S.label, color: '#71717a' }}>RESULTS · SPEAK TO A SPECIFIC IMAGE</span>
+                        <div style={{ fontSize: 11.5, color: '#71717a', lineHeight: 1.5 }}>
+                            Feedback steers the next pass. Save approves the image. Discard removes it from this set.
+                        </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
                         {results.map(r => {
                             const fb = feedback.get(r.id);
                             return (
-                                <div key={r.id} style={{ ...S.card, padding: 0, overflow: 'hidden', position: 'relative' }}>
+                                <div key={r.id} style={{ border: '1px solid rgba(212,212,216,0.58)', background: 'rgba(255,255,255,0.58)', borderRadius: 12, padding: 0, overflow: 'hidden', position: 'relative' }}>
                                     <img src={r.image.value} alt="" onClick={() => openLightbox(r.image.value)}
                                         style={{ width: '100%', display: 'block', cursor: 'zoom-in' }} />
                                     {r.consistency && (
@@ -559,20 +1008,45 @@ export default function StudioView() {
                                             {r.consistency.pass ? (r.consistency.retried ? 'fixed' : 'exact') : 'check'}
                                         </span>
                                     )}
-                                    <div style={{ padding: '6px 10px', display: 'flex', justifyContent: 'space-between' }}>
-                                        <span style={{ display: 'flex', gap: 8 }}>
-                                            <button onClick={() => rate(r, 'like')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, opacity: fb === 'like' ? 1 : 0.35 }}>+</button>
-                                            <button onClick={() => rate(r, 'dislike')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, opacity: fb === 'dislike' ? 1 : 0.35 }}>-</button>
-                                        </span>
-                                        <span style={{ display: 'flex', gap: 6 }}>
-                                            <button style={S.btnGhost} title="Save to Gallery (curated set, used for training export)" onClick={async () => { await recordSignal(r, 'save'); setBusy(''); setError(null); window.alert('Saved — find it in Gallery.'); }}>Gallery</button>
-                                            <button style={S.btnGhost} title="Save this whole setup as a Quick preset — same look, swap assets" onClick={() => toPreset(r)}>Preset</button>
-                                            <button style={S.btnGhost} onClick={() => download(r)}>Save</button>
-                                        </span>
+                                    <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 7 }}>
+                                        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                                            <button
+                                                onClick={() => setCritiqueFor(prev => prev === r.id ? null : r.id)}
+                                                style={actionChip(fb === 'dislike' || critiqueFor === r.id)}
+                                                title="Tell Studio what should change before the next pass"
+                                            >
+                                                Feedback
+                                            </button>
+                                            <button
+                                                onClick={() => saveResult(r)}
+                                                style={actionChip(fb === 'like')}
+                                                title="Approve this image and keep it as a saved output"
+                                            >
+                                                Save
+                                            </button>
+                                            <button
+                                                onClick={() => discardResult(r)}
+                                                style={actionChip(false)}
+                                                title="Remove this option from the set and record a weak negative signal"
+                                            >
+                                                Discard
+                                            </button>
+                                        </div>
+                                        {critiqueFor === r.id && (
+                                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', padding: 6, borderRadius: 9, background: 'rgba(244,244,245,0.7)' }}>
+                                                <span style={{ flexBasis: '100%', fontSize: 9.5, fontWeight: 800, color: '#71717a', textTransform: 'uppercase', letterSpacing: 0.6 }}>What needs fixing?</span>
+                                                {critiqueChips.map(reason => (
+                                                    <button key={reason} style={actionChip(false)} disabled={!!busy} onClick={() => rate(r, 'dislike', reason)}>
+                                                        {reason}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             );
                         })}
+                    </div>
                     </div>
 
                     {stage === 'execute' && (
@@ -613,14 +1087,17 @@ export default function StudioView() {
                 </>
             )}
 
-            {/* Interjection composer — always available while a job runs */}
-            {job && (
+            {/* Concepts composer — brainstorm/regenerate only. Plan uses mood-study feedback instead. */}
+            {job && stage === 'concepts' && (
                 <div style={{ position: 'sticky', bottom: 10, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {(job.directives ?? []).length > 0 && (
                         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                            <span style={{ ...S.label, alignSelf: 'center', color: '#71717a' }}>DIRECTOR NOTES</span>
                             {(job.directives ?? []).map((d, i) => (
                                 <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 999, background: 'rgba(24,24,27,0.06)', border: '1px solid rgba(212,212,216,0.6)', color: '#3f3f46' }}>
                                     {d.length > 48 ? `${d.slice(0, 48)}…` : d}
+                                    <button onClick={() => saveDirectiveAsRule(d)} title="Save this note as a permanent brand rule"
+                                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#52525b', fontSize: 9, padding: 0, lineHeight: 1 }}>Rule</button>
                                     <button onClick={() => removeDirective(i)} title="Stop applying this directive"
                                         style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#a1a1aa', fontSize: 10, padding: 0, lineHeight: 1 }}>✕</button>
                                 </span>
@@ -631,29 +1108,30 @@ export default function StudioView() {
                         <input
                             value={noteText}
                             onChange={e => setNoteText(e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Enter') sendNote(); }}
-                            placeholder="Interject anytime — “colder morning light”, “leave copy space top-left”… applies to every next step"
+                            onKeyDown={e => {
+                                if (e.key !== 'Enter') return;
+                                regenerateConceptsWithNote();
+                            }}
+                            placeholder="Optional brainstorm note — “give me 3 quieter / more premium directions”…"
                             style={{ ...S.input, flex: 1, border: 'none', background: 'transparent' }}
                         />
-                        <button style={S.btn} disabled={!noteText.trim() || !!busy} onClick={sendNote}>Send</button>
+                        <button
+                            style={S.btn}
+                            disabled={!!busy}
+                            onClick={regenerateConceptsWithNote}
+                        >
+                            Generate more directions
+                        </button>
+                    </div>
+                    <div style={{ fontSize: 10.5, color: '#71717a', paddingLeft: 8 }}>
+                        Optional: use this box for overall brainstorm guidance, then generate 3 more directions.
                     </div>
                 </div>
             )}
 
-            {/* First-message composer — typing here IS the brief */}
-            {!job && (
-                <div style={{ position: 'sticky', bottom: 10, zIndex: 20, display: 'flex', gap: 6, padding: 6, borderRadius: 12, background: 'rgba(255,255,255,0.82)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(212,212,216,0.6)', boxShadow: '0 12px 28px rgba(0,0,0,0.10)' }}>
-                    <input
-                        value={brief}
-                        onChange={e => setBrief(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') begin(); }}
-                        placeholder="Describe what the studio should make — or leave empty and Send for open exploration…"
-                        style={{ ...S.input, flex: 1, border: 'none', background: 'transparent' }}
-                    />
-                    <button style={S.btn} disabled={!!busy} onClick={begin}>Send</button>
-                </div>
-            )}
         </div>
         </div>
     );
-}
+});
+
+export default StudioView;
