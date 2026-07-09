@@ -33,6 +33,7 @@ export default function StudioView() {
     const [refs, setRefs] = useState<Reference[]>([]);
     const [selectedRefs, setSelectedRefs] = useState<Set<string>>(new Set());
     const [inspOpen, setInspOpen] = useState(false);
+    const [assetsOpen, setAssetsOpen] = useState(true);
     const [brief, setBrief] = useState('');
     const [count, setCount] = useState(2);
     const [results, setResults] = useState<GenerationResult[]>([]);
@@ -229,9 +230,24 @@ export default function StudioView() {
                         placeholder='Optional — leave blank for open exploration (the studio proposes what the brand should make next). Or e.g. "Spring campaign hero image — fresh, optimistic, website banner"'
                         value={brief} onChange={e => setBrief(e.target.value)}
                     />
-                    <span style={S.label}>ASSETS · {selectedAssets.size} selected</span>
+                    <button
+                        onClick={() => setAssetsOpen(o => !o)}
+                        style={{
+                            ...S.btnGhost, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6,
+                            fontSize: 10, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase', color: '#71717a',
+                        }}
+                        title="Pick the assets (pixel truth) this job must feature">
+                        <span style={{ display: 'inline-block', transition: 'transform 200ms cubic-bezier(0.22,1,0.36,1)', transform: assetsOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>▸</span>
+                        Assets · {selectedAssets.size} selected
+                    </button>
+                    <div style={{
+                        overflow: 'hidden',
+                        maxHeight: assetsOpen ? 480 : 0,
+                        opacity: assetsOpen ? 1 : 0,
+                        transition: 'max-height 320ms cubic-bezier(0.22,1,0.36,1), opacity 200ms ease',
+                    }}>
                     {/* Same card grid as the Canvas library — big thumbnails, names below, click to select */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 6 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 6, maxHeight: 470, overflowY: 'auto' }}>
                         {assets.map(a => {
                             const on = selectedAssets.has(a.id);
                             return (
@@ -255,6 +271,7 @@ export default function StudioView() {
                             );
                         })}
                         {assets.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No assets yet — add them in Assets.</span>}
+                    </div>
                     </div>
 
                     {/* Inspiration — collapsible; chosen refs lead the aesthetic stack */}
