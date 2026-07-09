@@ -435,7 +435,7 @@ export default function WeaveView() {
                 // blend into one scale factor via the frame's aspect ratio at
                 // grab time, and height keeps following the content — so a
                 // diagonal (or vertical) pull resizes naturally, never crops.
-                if (nn.kind === 'rotate' || nn.kind === 'output' || nn.kind === 'image' || nn.kind === 'hero') {
+                if (nn.kind === 'rotate' || nn.kind === 'output' || nn.kind === 'image' || nn.kind === 'hero' || nn.kind === 'facet') {
                     const ar = rs.h0 > 0 ? rs.w0 / rs.h0 : 1;
                     const dwRaw = fromLeft ? -dx : dx;
                     const dhRaw = fromTop ? -dy : dy;
@@ -502,7 +502,7 @@ export default function WeaveView() {
     // what's inside (image aspect ratio, trackball, action rows) with no
     // cropping. Notes/facets keep a working default; others keep custom h.
     const H = (nn: WeaveNode) => {
-        if (nn.kind === 'rotate' || nn.kind === 'output' || nn.kind === 'image' || nn.kind === 'hero') return undefined;
+        if (nn.kind === 'rotate' || nn.kind === 'output' || nn.kind === 'image' || nn.kind === 'hero' || nn.kind === 'facet') return undefined;
         return nn.h ?? (
             nn.kind === 'note' ? 136 :
             nn.kind === 'facet' ? 132 :
@@ -1441,11 +1441,11 @@ export default function WeaveView() {
                                 )}
                                 {nn.kind === 'facet' && (
                                     <div onClick={() => toggleExpand(nn.id)}>
-                                        <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-                                            {nn.image && <img src={nn.image} alt="" draggable={false} style={{ width: 24, height: 24, borderRadius: 5, objectFit: 'cover' }} />}
-                                            <span style={{ fontSize: 10, fontWeight: 800, color: '#18181b' }}>{nn.dimension?.toUpperCase()}</span>
-                                        </div>
-                                        <div style={{ fontSize: 9, color: '#71717a', marginTop: 3, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{nn.description}</div>
+                                        {nn.image && <img src={nn.image} alt="" draggable={false}
+                                            onClick={e => { e.stopPropagation(); openLightbox(nn.image!); }}
+                                            style={{ width: '100%', borderRadius: 8, display: 'block', cursor: 'zoom-in' }} />}
+                                        <div style={{ fontSize: 10, fontWeight: 800, color: '#18181b', marginTop: 4 }}>{nn.dimension?.toUpperCase()}</div>
+                                        <div style={{ fontSize: 9, color: '#71717a', marginTop: 2, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{nn.description}</div>
                                     </div>
                                 )}
                                 {nn.kind === 'note' && (
