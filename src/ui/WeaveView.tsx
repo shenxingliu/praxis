@@ -187,7 +187,7 @@ export default function WeaveView() {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [libOpen, setLibOpen] = useState(true);
     const [libTab, setLibTab] = useState<'assets' | 'inspiration'>('assets');
-    const [libWidth, setLibWidth] = useState(132);
+    const [libWidth, setLibWidth] = useState(176);
     const [facetPick, setFacetPick] = useState<{ image: string; near: { x: number; y: number }; facets: Array<{ dimension: string; description: string }> } | null>(null);
     const [ratio, setRatio] = useState<GenerationParams['ratio']>('4:3');
     const [size, setSize] = useState<NonNullable<GenerationParams['size']>>('1K');
@@ -236,7 +236,7 @@ export default function WeaveView() {
         const onPointerMove = (event: PointerEvent) => {
             const r = railResize.current;
             if (!r) return;
-            setLibWidth(Math.max(84, Math.min(280, Math.round(r.w0 + event.clientX - r.sx))));
+            setLibWidth(Math.max(120, Math.min(340, Math.round(r.w0 + event.clientX - r.sx))));
         };
         const onPointerUp = () => { railResize.current = null; };
         window.addEventListener('pointermove', onPointerMove);
@@ -1011,7 +1011,7 @@ export default function WeaveView() {
                                 <button onClick={() => setLibOpen(false)} title="Collapse library"
                                     style={{ border: 'none', background: 'none', color: '#a1a1aa', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 2px' }}>‹</button>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(42px, 1fr))', gap: 6, overflowY: 'auto', minHeight: 0, flex: 1 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(68px, 1fr))', gap: 6, overflowY: 'auto', minHeight: 0, flex: 1, alignContent: 'start' }}>
                                 {libTab === 'assets' && assets.map(asset => (
                                     <button
                                         key={asset.id}
@@ -1019,9 +1019,10 @@ export default function WeaveView() {
                                         title={`${asset.name} — add to board`}
                                         style={{
                                             border: '1px solid rgba(212,212,216,0.58)', background: 'rgba(255,255,255,0.58)',
-                                            borderRadius: 8, padding: 4, cursor: 'pointer', aspectRatio: '1', display: 'block', minWidth: 0,
+                                            borderRadius: 8, padding: 4, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0,
                                         }}>
-                                        {asset.photos[0] && <img src={asset.photos[0].image.value} alt="" draggable={false} style={{ width: '100%', height: '100%', borderRadius: 5, objectFit: 'cover', display: 'block' }} />}
+                                        {asset.photos[0] && <img src={asset.photos[0].image.value} alt="" draggable={false} style={{ width: '100%', aspectRatio: '1', borderRadius: 5, objectFit: 'cover', display: 'block' }} />}
+                                        <span style={{ width: '100%', fontSize: 9, fontWeight: 700, color: '#3f3f46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{asset.name}</span>
                                     </button>
                                 ))}
                                 {libTab === 'assets' && assets.length === 0 && <span style={{ fontSize: 10.5, color: '#a1a1aa' }}>No assets yet — add them in the Assets tab.</span>}
@@ -1032,9 +1033,10 @@ export default function WeaveView() {
                                         title={`${ref.name} — add as vibe reference`}
                                         style={{
                                             border: '1px solid rgba(212,212,216,0.58)', background: 'rgba(255,255,255,0.58)',
-                                            borderRadius: 8, padding: 4, cursor: 'pointer', aspectRatio: '1', display: 'block', minWidth: 0,
+                                            borderRadius: 8, padding: 4, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0,
                                         }}>
-                                        <img src={ref.image.value} alt="" draggable={false} style={{ width: '100%', height: '100%', borderRadius: 5, objectFit: 'cover', display: 'block' }} />
+                                        <img src={ref.image.value} alt="" draggable={false} style={{ width: '100%', aspectRatio: '1', borderRadius: 5, objectFit: 'cover', display: 'block' }} />
+                                        <span style={{ width: '100%', fontSize: 9, fontWeight: 700, color: '#3f3f46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{ref.name}</span>
                                     </button>
                                 ))}
                                 {libTab === 'inspiration' && references.length === 0 && <span style={{ fontSize: 10.5, color: '#a1a1aa' }}>No references yet — collect them in Inspiration.</span>}
