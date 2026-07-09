@@ -188,6 +188,7 @@ export default function WeaveView() {
     const [libOpen, setLibOpen] = useState(true);
     const [libTab, setLibTab] = useState<'assets' | 'inspiration'>('assets');
     const [libWidth, setLibWidth] = useState(208);
+    const [libResizing, setLibResizing] = useState(false);
     const [facetPick, setFacetPick] = useState<{ image: string; near: { x: number; y: number }; facets: Array<{ dimension: string; description: string }> } | null>(null);
     const [ratio, setRatio] = useState<GenerationParams['ratio']>('4:3');
     const [size, setSize] = useState<NonNullable<GenerationParams['size']>>('1K');
@@ -238,7 +239,7 @@ export default function WeaveView() {
             if (!r) return;
             setLibWidth(Math.max(150, Math.min(380, Math.round(r.w0 + event.clientX - r.sx))));
         };
-        const onPointerUp = () => { railResize.current = null; };
+        const onPointerUp = () => { railResize.current = null; setLibResizing(false); };
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp);
         window.addEventListener('pointercancel', onPointerUp);
@@ -807,30 +808,6 @@ export default function WeaveView() {
         setExpandedId(prev => prev === id ? null : id);
     };
 
-    const collapsedRailWidth = 36;
-    const collapsedRailStyle: React.CSSProperties = {
-        flex: `0 0 ${collapsedRailWidth}px`,
-        alignSelf: 'stretch',
-        border: '1px solid rgba(212,212,216,0.68)',
-        borderRightColor: 'rgba(161,161,170,0.66)',
-        background: 'linear-gradient(180deg, rgba(255,255,255,0.76), rgba(255,255,255,0.44))',
-        backdropFilter: 'blur(18px) saturate(1.18)',
-        WebkitBackdropFilter: 'blur(18px) saturate(1.18)',
-        borderRadius: 10,
-        boxShadow: 'inset 1px 0 0 rgba(255,255,255,0.86), inset -1px 0 0 rgba(161,161,170,0.12)',
-        cursor: 'pointer',
-        color: '#5f6068',
-        fontSize: 10,
-        fontWeight: 850,
-        letterSpacing: 0.7,
-        padding: '8px 0',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 8,
-        transition: 'transform 160ms ease, background 160ms ease, border-color 160ms ease',
-    };
     const collapsedCountStyle: React.CSSProperties = {
         minWidth: 18,
         height: 18,
@@ -982,19 +959,33 @@ export default function WeaveView() {
                         {Math.round(scale * 100)}% · drag background to pan · wheel to zoom · click a node for actions
                     </div>
 
-                    {/* Library overlay — Assets + Inspiration in ONE floating layer */}
-                    {libOpen ? (
-                        <div
-                            ref={libRef}
-                            onPointerDown={e => e.stopPropagation()}
-                            style={{
-                                position: 'absolute', left: 10, top: 10, bottom: 10, width: libWidth, zIndex: 15,
-                                background: 'rgba(255,255,255,0.95)',
-                                backdropFilter: 'blur(24px) saturate(1.18)', WebkitBackdropFilter: 'blur(24px) saturate(1.18)',
-                                border: '1px solid #e4e4e7', borderRadius: 12,
-                                boxShadow: '0 20px 25px -5px rgba(0,0,0,0.08), 0 8px 10px -6px rgba(0,0,0,0.08)',
-                                display: 'flex', flexDirection: 'row', gap: 6, padding: 6, boxSizing: 'border-box',
-                            }}>
+                    {/* Library overlay — one animated container: width/height glide,
+                        open content and collapsed tag crossfade. */}
+                    <div
+                        ref={libRef}
+                        onPointerDown={e => e.stopPropagation()}
+                        style={{
+                            position: 'absolute', left: 10, top: 10, zIndex: 15,
+                            width: libOpen ? libWidth : 36,
+                            height: libOpen ? 'calc(100% - 20px)' : 172,
+                            background: 'rgba(255,255,255,0.95)',
+                            backdropFilter: 'blur(24px) saturate(1.18)', WebkitBackdropFilter: 'blur(24px) saturate(1.18)',
+                            border: '1px solid #e4e4e7', borderRadius: libOpen ? 12 : 10,
+                            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.08), 0 8px 10px -6px rgba(0,0,0,0.08)',
+                            overflow: 'hidden', boxSizing: 'border-box',
+                            transition: libResizing ? 'none'
+                                : 'width 300ms cubic-bezier(0.22,1,0.36,1), height 300ms cubic-bezier(0.22,1,0.36,1), border-radius 300ms cubic-bezier(0.22,1,0.36,1)',
+                        }}>
+                        {/* Open content — slides in and fades once the frame has grown */}
+                        <div style={{
+                            position: 'absolute', top: 6, left: 6, bottom: 6, width: libWidth - 12,
+                            display: 'flex', flexDirection: 'row', gap: 6,
+                            opacity: libOpen ? 1 : 0,
+                            pointerEvents: libOpen ? 'auto' : 'none',
+                            transform: libOpen ? 'translateX(0)' : 'translateX(-10px)',
+                            transition: 'opacity 170ms ease, transform 300ms cubic-bezier(0.22,1,0.36,1)',
+                            transitionDelay: libOpen ? '80ms' : '0ms',
+                        }}>
                             <div style={{ width: 30, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
                                 <button onClick={() => setLibOpen(false)} title="Collapse library"
                                     style={{ border: 'none', background: 'rgba(244,244,245,0.9)', borderRadius: 8, color: '#52525b', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '4px 0' }}>‹</button>
@@ -1007,6 +998,7 @@ export default function WeaveView() {
                                             fontSize: 9.5, fontWeight: 800, letterSpacing: 0.7,
                                             background: libTab === t ? '#18181b' : 'rgba(244,244,245,0.9)',
                                             color: libTab === t ? '#fff' : '#3f3f46',
+                                            transition: 'background 160ms ease, color 160ms ease',
                                         }}>
                                         <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>{t === 'assets' ? 'Assets' : 'Inspiration'}</span>
                                         <span style={{ fontSize: 8.5, opacity: 0.72, letterSpacing: 0 }}>{t === 'assets' ? assets.length : references.length}</span>
@@ -1043,30 +1035,37 @@ export default function WeaveView() {
                                 ))}
                                 {libTab === 'inspiration' && references.length === 0 && <span style={{ fontSize: 10.5, color: '#a1a1aa' }}>No references yet — collect them in Inspiration.</span>}
                             </div>
-                            <div
-                                onPointerDown={event => {
-                                    event.stopPropagation();
-                                    railResize.current = { sx: event.clientX, w0: libWidth };
-                                }}
-                                title="Drag to resize the library"
-                                style={{ position: 'absolute', right: -5, top: 42, bottom: 8, width: 10, cursor: 'col-resize', zIndex: 3, borderRadius: 999 }}
-                            />
                         </div>
-                    ) : (
+                        {/* Resize edge — active only while open */}
+                        <div
+                            onPointerDown={event => {
+                                if (!libOpen) return;
+                                event.stopPropagation();
+                                setLibResizing(true);
+                                railResize.current = { sx: event.clientX, w0: libWidth };
+                            }}
+                            title="Drag to resize the library"
+                            style={{ position: 'absolute', right: 0, top: 42, bottom: 8, width: 8, cursor: 'col-resize', zIndex: 3, pointerEvents: libOpen ? 'auto' : 'none' }}
+                        />
+                        {/* Collapsed tag — fades in as the frame shrinks */}
                         <button
                             onClick={() => setLibOpen(true)}
                             title="Open the library (Assets + Inspiration)"
-                            onPointerDown={e => e.stopPropagation()}
                             style={{
-                                ...collapsedRailStyle,
-                                position: 'absolute', left: 10, top: 10, zIndex: 15,
-                                flex: undefined, alignSelf: undefined, width: collapsedRailWidth, maxHeight: 168,
+                                position: 'absolute', inset: 0, border: 'none', background: 'transparent', cursor: 'pointer',
+                                color: '#5f6068', fontSize: 10, fontWeight: 850, letterSpacing: 0.7,
+                                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between',
+                                padding: '10px 0', gap: 8,
+                                opacity: libOpen ? 0 : 1,
+                                pointerEvents: libOpen ? 'none' : 'auto',
+                                transition: 'opacity 160ms ease',
+                                transitionDelay: libOpen ? '0ms' : '150ms',
                             }}>
                             <span style={collapsedCountStyle}>{assets.length + references.length}</span>
                             <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>Library</span>
                             <span style={collapsedChevronStyle}>›</span>
                         </button>
-                    )}
+                    </div>
                     {nodes.length === 0 && (
                         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a1a1aa', fontSize: 13, pointerEvents: 'none', textAlign: 'center', padding: 20 }}>
                             Add materials and prompts, drag port lines between nodes, wire groups into outputs, then Run — results appear inside the output node.
