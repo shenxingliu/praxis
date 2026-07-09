@@ -89,6 +89,10 @@ export default function App() {
                 button:disabled { cursor: progress; }
                 input, select, textarea { font-family: inherit; }
                 @keyframes praxis-pulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
+                @keyframes praxis-pop {
+                    from { opacity: 0; transform: scale(.92) translateY(5px); }
+                    to { opacity: 1; transform: scale(1) translateY(0); }
+                }
                 .praxis-running { animation: praxis-pulse 1.2s ease-in-out infinite; }
             `}</style>
             <aside style={{

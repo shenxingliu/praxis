@@ -190,7 +190,7 @@ export default function WeaveView() {
     const [libTab, setLibTab] = useState<'assets' | 'inspiration'>('assets');
     const [libWidth, setLibWidth] = useState(208);
     const [libResizing, setLibResizing] = useState(false);
-    const [facetPick, setFacetPick] = useState<{ image: string; near: { x: number; y: number }; chosen: string[] } | null>(null);
+    const [facetPick, setFacetPick] = useState<{ image: string; near: { x: number; y: number } } | null>(null);
     const [ratio, setRatio] = useState<GenerationParams['ratio']>('4:3');
     const [size, setSize] = useState<NonNullable<GenerationParams['size']>>('1K');
     const [tierSel, setTierSel] = useState<'flash' | 'pro'>('flash');
@@ -511,25 +511,16 @@ export default function WeaveView() {
         return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
     };
 
-    // --- facets: PICK dimensions first, then extract only those ---
+    // --- facets: a popover on the node — one click extracts one dimension ---
     const decomposeImage = (image: string | undefined, near: { x: number; y: number }) => {
         if (!image) return;
-        setFacetPick({ image, near, chosen: [] });
+        setFacetPick({ image, near });
     };
     const decomposeNode = (node: WeaveNode) => decomposeImage(node.image, { x: node.x + 150, y: node.y });
 
-    const toggleFacetDim = (dim: string) => {
-        setFacetPick(prev => prev ? {
-            ...prev,
-            chosen: prev.chosen.includes(dim) ? prev.chosen.filter(d => d !== dim) : [...prev.chosen, dim],
-        } : prev);
-    };
-
-    const runExtract = async (dims?: string[]) => {
+    const runExtract = async (chosen: string[]) => {
         const pick = facetPick;
-        if (!pick) return;
-        const chosen = dims ?? pick.chosen;
-        if (chosen.length === 0) { setNotice('Pick at least one dimension.'); return; }
+        if (!pick || chosen.length === 0) return;
         setFacetPick(null);
         setBusy(`Extracting ${chosen.length} dimension${chosen.length === 1 ? '' : 's'}…`);
         setNotice('');
@@ -1008,42 +999,6 @@ export default function WeaveView() {
                 </span>
             </div>
 
-            {/* Extract chooser — pick dimensions BEFORE the vision call */}
-            {facetPick && (
-                <div style={{ ...S.card, display: 'flex', gap: 10, alignItems: 'center', border: '1.5px dashed #a1a1aa', padding: 10 }}>
-                    <img
-                        src={facetPick.image}
-                        alt=""
-                        draggable={false}
-                        style={{ width: 54, height: 54, borderRadius: 8, objectFit: 'cover', flex: '0 0 auto', border: '1px solid rgba(0,0,0,0.08)' }}
-                    />
-                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-                        <span style={S.label}>EXTRACT · pick what to decompose{facetPick.chosen.length > 0 ? ` · ${facetPick.chosen.length} selected` : ''}</span>
-                        <span style={{ display: 'flex', gap: 6 }}>
-                            <button style={{ ...S.btn, fontSize: 11 }} disabled={!!busy || facetPick.chosen.length === 0} onClick={() => runExtract()}>
-                                Extract{facetPick.chosen.length > 0 ? ` ${facetPick.chosen.length}` : ''}
-                            </button>
-                            <button style={S.btnGhost} disabled={!!busy} onClick={() => runExtract([...FACET_DIMENSIONS])}>All 12</button>
-                            <button style={S.btnGhost} onClick={() => setFacetPick(null)}>Close</button>
-                        </span>
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
-                        {FACET_DIMENSIONS.map(dim => (
-                            <button
-                                key={dim}
-                                onClick={() => toggleFacetDim(dim)}
-                                title={FACET_HINTS[dim]}
-                                style={{ ...chip(facetPick.chosen.includes(dim)), minHeight: 30, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.2 }}
-                            >
-                                <div>{dim.toUpperCase()}</div>
-                            </button>
-                        ))}
-                    </div>
-                    </div>
-                </div>
-            )}
-
             {/* Save dialog */}
             {showSaveDialog && (
                 <div style={{ ...S.card, display: 'flex', gap: 8, alignItems: 'center', border: '1px solid #c9c9cf', background: 'rgba(255,255,255,0.82)' }}>
@@ -1239,6 +1194,47 @@ export default function WeaveView() {
                                 stroke="#18181b" strokeWidth={1.8} fill="none" strokeDasharray="5 4" />;
                         })()}
                     </svg>
+                    {facetPick && (
+                        <div
+                            onPointerDown={e => e.stopPropagation()}
+                            style={{
+                                position: 'absolute', left: facetPick.near.x, top: facetPick.near.y, width: 216, zIndex: 30,
+                                background: 'rgba(255,255,255,0.95)',
+                                backdropFilter: 'blur(24px) saturate(1.18)', WebkitBackdropFilter: 'blur(24px) saturate(1.18)',
+                                border: '1px solid #e4e4e7', borderRadius: 12,
+                                boxShadow: '0 20px 25px -5px rgba(0,0,0,0.14), 0 8px 10px -6px rgba(0,0,0,0.12)',
+                                padding: 8, boxSizing: 'border-box',
+                                transformOrigin: 'top left',
+                                animation: 'praxis-pop 240ms cubic-bezier(0.22,1,0.36,1)',
+                            }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px 6px' }}>
+                                <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase', color: '#71717a' }}>
+                                    Extract · pick one
+                                </span>
+                                <button onClick={() => setFacetPick(null)} title="Close"
+                                    style={{ border: 'none', background: 'none', color: '#a1a1aa', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                                {FACET_DIMENSIONS.map(dim => (
+                                    <button
+                                        key={dim}
+                                        disabled={!!busy}
+                                        onClick={() => runExtract([dim])}
+                                        title={FACET_HINTS[dim]}
+                                        style={{ ...miniBtn, padding: '7px 0', textAlign: 'center', fontWeight: 800, letterSpacing: 0.4 }}>
+                                        {dim.toUpperCase()}
+                                    </button>
+                                ))}
+                            </div>
+                            <button
+                                disabled={!!busy}
+                                onClick={() => runExtract([...FACET_DIMENSIONS])}
+                                title="Decompose every dimension at once"
+                                style={{ ...miniBtn, width: '100%', marginTop: 4, padding: '6px 0', textAlign: 'center', color: '#71717a' }}>
+                                all 12
+                            </button>
+                        </div>
+                    )}
                     {nodes.map(nn => {
                         const a = assetOf(nn.assetId);
                         const el = elementOf(nn.elementId);
