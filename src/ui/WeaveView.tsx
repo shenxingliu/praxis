@@ -900,22 +900,22 @@ export default function WeaveView() {
             <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 8 }}>
             <aside style={{
                 flex: '0 0 auto',
-                width: (assetsOpen ? 132 : 42) + (inspirationOpen ? 132 : 42) + 8,
+                width: (assetsOpen ? 132 : 28) + (inspirationOpen ? 132 : 28) + 8,
                 minHeight: 0,
                 display: 'flex',
                 gap: 8,
                 transition: 'width 180ms ease',
             }}>
-                <div style={{ ...S.card, flex: `0 0 ${assetsOpen ? 132 : 42}px`, minWidth: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' }}>
-                    <button
-                        style={{ ...S.btnGhost, minHeight: 30, width: '100%', justifyContent: assetsOpen ? 'space-between' : 'center', padding: assetsOpen ? '0 8px' : 0 }}
-                        onClick={() => setAssetsOpen(v => !v)}
-                        title={assetsOpen ? 'Collapse Assets' : 'Expand Assets'}
-                    >
-                        <span>{assetsOpen ? 'Assets' : 'A'}</span>
-                        {assetsOpen && <span style={{ fontSize: 9, color: '#a1a1aa' }}>{assets.length}</span>}
-                    </button>
-                    {assetsOpen && (
+                {assetsOpen ? (
+                    <div style={{ ...S.card, flex: '0 0 132px', minWidth: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' }}>
+                        <button
+                            style={{ ...S.btnGhost, minHeight: 30, width: '100%', justifyContent: 'space-between', padding: '0 8px' }}
+                            onClick={() => setAssetsOpen(false)}
+                            title="Close Assets"
+                        >
+                            <span>Assets</span>
+                            <span style={{ fontSize: 9, color: '#a1a1aa' }}>{assets.length}</span>
+                        </button>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflow: 'auto', minHeight: 0 }}>
                             {assets.map(asset => (
                                 <button
@@ -941,19 +941,40 @@ export default function WeaveView() {
                             ))}
                             {assets.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>Empty</span>}
                         </div>
-                    )}
-                </div>
-
-                <div style={{ ...S.card, flex: `0 0 ${inspirationOpen ? 132 : 42}px`, minWidth: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' }}>
+                    </div>
+                ) : (
                     <button
-                        style={{ ...S.btnGhost, minHeight: 30, width: '100%', justifyContent: inspirationOpen ? 'space-between' : 'center', padding: inspirationOpen ? '0 8px' : 0 }}
-                        onClick={() => setInspirationOpen(v => !v)}
-                        title={inspirationOpen ? 'Collapse Inspiration' : 'Expand Inspiration'}
+                        onClick={() => setAssetsOpen(true)}
+                        title="Open Assets"
+                        style={{
+                            flex: '0 0 28px',
+                            border: '1px solid rgba(212,212,216,0.58)',
+                            background: 'rgba(255,255,255,0.58)',
+                            borderRadius: 8,
+                            cursor: 'pointer',
+                            color: '#71717a',
+                            fontSize: 10,
+                            fontWeight: 800,
+                            letterSpacing: 0.6,
+                            writingMode: 'vertical-rl',
+                            textOrientation: 'mixed',
+                            padding: '10px 0',
+                        }}
                     >
-                        <span>{inspirationOpen ? 'Inspiration' : 'I'}</span>
-                        {inspirationOpen && <span style={{ fontSize: 9, color: '#a1a1aa' }}>{references.length}</span>}
+                        Assets
                     </button>
-                    {inspirationOpen && (
+                )}
+
+                {inspirationOpen ? (
+                    <div style={{ ...S.card, flex: '0 0 132px', minWidth: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' }}>
+                        <button
+                            style={{ ...S.btnGhost, minHeight: 30, width: '100%', justifyContent: 'space-between', padding: '0 8px' }}
+                            onClick={() => setInspirationOpen(false)}
+                            title="Close Inspiration"
+                        >
+                            <span>Inspiration</span>
+                            <span style={{ fontSize: 9, color: '#a1a1aa' }}>{references.length}</span>
+                        </button>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflow: 'auto', minHeight: 0 }}>
                             {references.map(ref => (
                                 <button
@@ -979,8 +1000,29 @@ export default function WeaveView() {
                             ))}
                             {references.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>Empty</span>}
                         </div>
-                    )}
-                </div>
+                    </div>
+                ) : (
+                    <button
+                        onClick={() => setInspirationOpen(true)}
+                        title="Open Inspiration"
+                        style={{
+                            flex: '0 0 28px',
+                            border: '1px solid rgba(212,212,216,0.58)',
+                            background: 'rgba(255,255,255,0.58)',
+                            borderRadius: 8,
+                            cursor: 'pointer',
+                            color: '#71717a',
+                            fontSize: 10,
+                            fontWeight: 800,
+                            letterSpacing: 0.6,
+                            writingMode: 'vertical-rl',
+                            textOrientation: 'mixed',
+                            padding: '10px 0',
+                        }}
+                    >
+                        Inspiration
+                    </button>
+                )}
             </aside>
 
             {/* Infinite canvas — fills the whole remaining viewport */}
