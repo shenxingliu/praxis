@@ -1,6 +1,6 @@
 import {
     Asset, Reference, Element, KnowledgeRule, GenerationParams, GenerationResult,
-    Brand, ContextMode, Realism,
+    Brand, ContextMode, Realism, SubjectType,
 } from '../domain/types';
 import { storage } from '../storage/local';
 import { getCurrentBrand, getCurrentBrandId } from '../domain/brand';
@@ -180,7 +180,7 @@ export async function generate(
         `Images 1-${n}: HERO SOURCE OF TRUTH. Reconstruct the hero EXACTLY and ONLY from these — silhouette, geometry, color, material, hardware. If any other attached image shows a similar hero, IGNORE that rendering completely. The decorative styling in these photos (bedding, props, dressing) is NOT part of the hero — restyle it per the creative direction.`,
         extraRefImages.length > 0 && `Image ${anchorIdx}${extraRefImages.length > 1 ? `-${anchorIdx + extraRefImages.length - 1}` : ''}: MOOD ANCHOR — an approved rough draft. Inherit its light, palette, atmosphere and composition energy ONLY. Its hero rendering is APPROXIMATE and WRONG — never copy any object geometry from it.`,
         plate && `Image ${plateIdx}: BACKDROP PLATE — reconstruct this exact backdrop with zero drift.`,
-        aesthetic.length > 0 && `Images ${aestheticStart}-${aestheticStart + aesthetic.length - 1}: AESTHETIC REFERENCES — style, light and material language only. NEVER copy their subjects or furniture.`,
+        aesthetic.length > 0 && `Images ${aestheticStart}-${aestheticStart + aesthetic.length - 1}: AESTHETIC REFERENCES — style, light and material language only. NEVER copy their subjects or objects.`,
         heroReminder.length > 0 && `LAST image: the hero photo repeated as a REMINDER — this is what the hero must look like.`,
     ].filter(Boolean);
     const prompt = `${recipe.buildPrompt(ctx)}
@@ -189,9 +189,9 @@ export async function generate(
 ${manifestLines.join('\n')}
 
 ### FINAL, NON-NEGOTIABLE ###
-1. The hero must be pixel-faithful to images 1-${n}: same silhouette, proportions, construction, material, color, hardware.
-2. The listed hero(s) are the ONLY furniture in the image — zero invented companion pieces.
-3. The hero must be fully styled per the direction (dressed bed, curated surfaces) — styling changes, the hero never does.`;
+1. The hero must be pixel-faithful to images 1-${n} in every attribute its subject type demands.
+2. ${subjectExclusivityRule(assets)}
+3. The hero must be fully staged per the direction — staging changes, the hero itself never does.`;
 
     // Concept half-life: touch lastUsedAt on every concept used.
     for (const el of elements) {
@@ -219,10 +219,10 @@ ${manifestLines.join('\n')}
                 `The first ${Math.min(assetImages.length, 5)} attached image(s) are OFFICIAL HERO PHOTOS. The LAST attached image is an AI-generated marketing image featuring this hero.
 
 Check TWO things:
-1. HERO FIDELITY: silhouette, proportions, structure/construction, material and grain, color/finish, hardware. IGNORE styling (bedding, props, dressing), environment, lighting and camera angle — those are allowed to differ.
-2. FURNITURE EXCLUSIVITY: the generated image must contain NO furniture other than the hero(s) shown in the official photos. Extra nightstands, chairs, tables, dressers or other beds are violations. Rugs, curtains, plants, wall art, lighting and small decor are fine.
+1. HERO FIDELITY: ${subjectInspectorCriteria(assets)}. IGNORE styling/staging, environment, lighting and camera angle — those are allowed to differ.
+2. EXCLUSIVITY: ${subjectExclusivityRule(assets)}
 
-Output JSON: { "pass": boolean (true only if the hero is faithfully identical AND no extra furniture exists), "issues": [up to 4 CONCRETE deviations, each one actionable, e.g. "headboard slats are vertical but should be horizontal" or "remove the invented nightstand on the left"] }`,
+Output JSON: { "pass": boolean (true only if the hero is faithfully identical AND the exclusivity rule holds), "issues": [up to 4 CONCRETE deviations, each one actionable, e.g. "headboard slats are vertical but should be horizontal" or "remove the invented nightstand on the left"] }`,
                 [...assetImages.slice(0, 5), img]
             );
             return { pass: !!parsed?.pass, issues: (parsed?.issues ?? []).map(String).slice(0, 4) };
@@ -313,17 +313,76 @@ export const REALISM_SKELETON: Record<Realism, { opener: string; physics: string
     },
 };
 
+// ---------------------------------------------------------------------------
+// Subject profiles — Praxis is not furniture-only. Each asset declares what
+// KIND of subject it is; fidelity, staging and exclusivity language adapt.
+// ---------------------------------------------------------------------------
+const SUBJECT_PROFILES: Record<SubjectType, { fidelity: string; styling: string; exclusivity: string; inspect: string }> = {
+    product: {
+        fidelity: 'reconstruct its exact silhouette, geometry, construction, color, material texture and hardware',
+        styling: "decorative styling is NOT the hero: bedding, pillows, throws, tabletop objects, vases, books, plants and any dressing visible in the hero photos are disposable staging. REPLACE them with styling that serves THIS generation's creative direction. STYLING IS MANDATORY, not optional: a bed MUST be fully dressed (mattress, layered bedding, pillows) in the direction's palette and mood; tables/desks/consoles MUST carry a few curated objects; shelves must not be empty. A bare, unstyled hero is a FAILED image unless the direction explicitly asks for bare. Styling must never alter or obscure the hero's own structure, material or color",
+        exclusivity: 'the listed hero(s) are the ONLY products of their kind in the frame. NEVER invent companion pieces that compete with them (for furniture: no extra nightstands, side tables, chairs, benches, dressers, shelving or other beds). Architecture, rugs, curtains, plants, wall art, lighting fixtures and small decor are fine',
+        inspect: 'silhouette, proportions, structure/construction, material and grain, color/finish, hardware — and NO competing products of the same kind were invented',
+    },
+    person: {
+        fidelity: "preserve the person's IDENTITY exactly — facial features and their proportions, bone structure, skin tone, hair color and texture, body build, and any visible distinguishing marks",
+        styling: 'wardrobe, grooming, pose and props are staging: restyle them per the direction unless it says otherwise; the identity itself never changes',
+        exclusivity: 'the listed person(s) are the ONLY people in the frame unless the direction explicitly adds others',
+        inspect: 'facial identity, skin tone, hair, body proportions — and no additional people were invented',
+    },
+    food: {
+        fidelity: 'preserve the dish/food product exactly — overall form, portion, plating geometry, ingredient identity, surface texture, doneness cues and color; never substitute or add ingredients',
+        styling: 'tableware, linens, garnish placement, surface and backdrop are staging: restyle per the direction without altering the food itself',
+        exclusivity: 'the listed dish(es) are the ONLY hero food in the frame; supporting props and ingredients must not compete for attention',
+        inspect: 'dish form, plating, ingredient identity, texture and color — and no competing hero dishes were invented',
+    },
+    apparel: {
+        fidelity: 'preserve the garment exactly — cut, seam and stitch lines, fabric weave and texture, print/pattern scale and placement, colorway, and hardware (zips, buttons, buckles); draping may follow the pose naturally',
+        styling: 'the model, pose, layering pieces and environment are staging: restyle per the direction; the garment itself never changes',
+        exclusivity: 'the listed garment(s) are the hero apparel; any other clothing in frame is clearly supporting and must not compete',
+        inspect: 'garment cut, fabric texture, pattern placement, colorway, hardware — and the hero garment stays the clear focus',
+    },
+    space: {
+        fidelity: 'preserve the space itself exactly — wall/window/door geometry, floor and ceiling materials, built-in elements, spatial proportions and sight lines',
+        styling: 'loose furnishing and decor may be restaged per the direction; the architecture never changes',
+        exclusivity: 'the composition stays inside this space; never invent structural elements (walls, windows, stairs) that are not in the source photos',
+        inspect: 'architecture, openings, materials and proportions of the space — and no invented structural elements',
+    },
+    other: {
+        fidelity: 'reconstruct the subject exactly — overall form, proportions, surface materials, colors and distinguishing details',
+        styling: 'surrounding staging and environment may change per the direction; the subject itself never does',
+        exclusivity: 'the listed subject(s) are the only heroes in the frame; nothing invented may compete with them',
+        inspect: 'form, proportions, materials, colors and distinguishing details — and nothing competing was invented',
+    },
+};
+
+const profileOf = (a: Asset) => SUBJECT_PROFILES[a.subjectType ?? 'product'];
+
+/** Frame-exclusivity rule(s) for the given assets, deduped across types. */
+export const subjectExclusivityRule = (assets: Asset[]): string => {
+    const rules = [...new Set((assets.length > 0 ? assets : []).map(a => profileOf(a).exclusivity))];
+    const chosen = rules.length > 0 ? rules : [SUBJECT_PROFILES.product.exclusivity];
+    return chosen.map(r => r.charAt(0).toUpperCase() + r.slice(1) + '.').join(' ');
+};
+
+/** Inspector criteria for the given assets, deduped across types. */
+export const subjectInspectorCriteria = (assets: Asset[]): string => {
+    const lines = [...new Set((assets.length > 0 ? assets : []).map(a => profileOf(a).inspect))];
+    return (lines.length > 0 ? lines : [SUBJECT_PROFILES.product.inspect]).join('; ');
+};
+
 /** Shared prompt fragments used by all recipes. */
 export const promptBlocks = {
     heroFidelity(assets: Asset[], brand: Brand | null): string {
         const essence = brand?.heroEssence?.trim();
-        return assets.map(a =>
-            `HERO: ${a.name}${a.category ? ` (${a.category})` : ''}
+        return assets.map(a => {
+            const prof = profileOf(a);
+            return `HERO: ${a.name}${a.category ? ` (${a.category})` : ''} — subject type: ${a.subjectType ?? 'product'}
 SOURCE OF TRUTH: the attached reference photos for this hero. Use ONLY them.
-FIDELITY RULE — applies to the HERO ITSELF ONLY: reconstruct its exact silhouette, geometry, construction, color, material texture and hardware${essence ? `, with special care for: ${essence}` : ''}. ZERO deviation, no creative reinterpretation.
-STYLING RULE — decorative styling is NOT the hero: bedding, pillows, throws, tabletop objects, vases, books, plants and any dressing visible in the hero photos are disposable staging. REPLACE them with styling that serves THIS generation's creative direction. STYLING IS MANDATORY, not optional: a bed MUST be fully dressed (mattress, layered bedding, pillows) in the direction's palette and mood; tables/desks/consoles MUST carry a few curated objects; shelves must not be empty. A bare, unstyled hero is a FAILED image unless the direction explicitly asks for bare. Styling must never alter or obscure the hero's own structure, material or color.
-EXCLUSIVITY RULE — the listed hero(s) are the ONLY furniture in the frame. NEVER invent companion furniture: no extra nightstands, side tables, chairs, benches, dressers, shelving or other beds. The environment may include architecture, rugs, curtains, plants, wall art, lighting fixtures and small decor objects — but anything that qualifies as furniture and is not a listed hero makes the image a FAILURE.`
-        ).join('\n\n');
+FIDELITY RULE — applies to the HERO ITSELF ONLY: ${prof.fidelity}${essence ? `, with special care for: ${essence}` : ''}. ZERO deviation, no creative reinterpretation.
+STYLING RULE — ${prof.styling}.
+EXCLUSIVITY RULE — ${prof.exclusivity}. Anything that violates this rule makes the image a FAILURE.`;
+        }).join('\n\n');
     },
     brand(brand: Brand | null): string {
         if (!brand) return '';

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Asset } from '../domain/types';
+import { Asset, SubjectType } from '../domain/types';
 import { storage } from '../storage/local';
 import { getCurrentBrandId } from '../domain/brand';
 import { INVENTORY_CHANGED_EVENT } from './events';
@@ -103,6 +103,13 @@ export default function HeroView() {
         refresh();
     };
 
+    const SUBJECT_TYPES: SubjectType[] = ['product', 'person', 'food', 'apparel', 'space', 'other'];
+    const setType = async (a: Asset, subjectType: SubjectType) => {
+        await storage.upsertAsset({ ...a, subjectType, updatedAt: Date.now() });
+        announce();
+        refresh();
+    };
+
     const rename = async (a: Asset) => {
         const name = window.prompt('Asset name:', a.name)?.trim();
         if (!name) return;
@@ -112,7 +119,7 @@ export default function HeroView() {
     };
 
     const remove = async (a: Asset) => {
-        if (!window.confirm(`Delete hero "${a.name}" and its ${a.photos.length} photo${a.photos.length === 1 ? '' : 's'}?`)) return;
+        if (!window.confirm(`Delete asset "${a.name}" and its ${a.photos.length} photo${a.photos.length === 1 ? '' : 's'}?`)) return;
         await storage.deleteAsset(a.id);
         setNotice(`"${a.name}" deleted`);
         announce();
@@ -135,7 +142,7 @@ export default function HeroView() {
             )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={S.label}>HEROES · {assets.length}</span>
+                <span style={S.label}>ASSETS · {assets.length}</span>
                 <button style={S.btn} disabled={!!busy} onClick={() => newRef.current?.click()}>＋ New asset (upload photos)</button>
                 <span style={{ fontSize: 10, color: '#a1a1aa' }}>Source of truth — or drag & drop photos: onto the page = new asset, onto a card = add to that asset.</span>
                 <input ref={newRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={e => { createHero(e.target.files); e.target.value = ''; }} />
@@ -161,7 +168,16 @@ export default function HeroView() {
                                 </div>
                             ))}
                         </div>
-                        <div style={{ display: 'flex', gap: 6, marginTop: 'auto' }}>
+                        <div style={{ display: 'flex', gap: 6, marginTop: 'auto', alignItems: 'center' }}>
+                            <select
+                                value={a.subjectType ?? 'product'}
+                                disabled={!!busy}
+                                onChange={e => setType(a, e.target.value as SubjectType)}
+                                title="Subject type — drives fidelity, staging and exclusivity rules in every prompt"
+                                style={{ fontSize: 10, fontWeight: 700, padding: '3px 4px', borderRadius: 6, border: '1px solid #d4d4d8', background: '#fff', color: '#3f3f46' }}
+                            >
+                                {SUBJECT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
                             <button style={S.btnGhost} disabled={!!busy} onClick={() => { setAddTarget(a); addRef.current?.click(); }}>＋ Photos</button>
                             <button style={S.btnGhost} disabled={!!busy} onClick={() => rename(a)}>Rename</button>
                             <button style={{ ...S.btnGhost, color: '#18181b', marginLeft: 'auto' }} disabled={!!busy} onClick={() => remove(a)}>Delete</button>

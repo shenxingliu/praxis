@@ -7,6 +7,7 @@ import { recordSignal } from '../learning/learning';
 import { BudgetExceededError } from '../engine/engine';
 import { openLightbox } from './lightbox';
 import { DropZone, imageFiles } from './dropzone';
+import { encodeSpinGif } from './gif';
 import { S, chip } from './styles';
 
 /**
@@ -570,18 +571,45 @@ export default function WeaveView() {
     const run360 = async (rn: WeaveNode) => {
         const imgs = rotateInputs(rn);
         if (imgs.length === 0) { setNotice('Connect an image or hero to the node first.'); return; }
+        const frames: string[] = [];
         for (let i = 0; i < 8; i++) {
             const angle = i * 45;
             setBusy(`360° turntable — ${i + 1}/8 (${angle}°)…`);
             try {
                 const r = await rotateView(imgs, angle, { ratio, size, tier: 'flash' }, setBusy);
                 rememberResult(r);
+                frames.push(r.image.value);
                 add({ kind: 'output', image: r.image.value, resultId: r.id },
                     { x: rn.x + 160 + (i % 4) * 215, y: rn.y + Math.floor(i / 4) * 215 });
             } catch (err: any) { setNotice(`${angle}°: ${err?.message || err}`); break; }
         }
+        // Stash the frames on the node — they feed the spin-GIF export.
+        if (frames.length >= 2) {
+            setNodes(prev => prev.map(x => x.id === rn.id ? { ...x, images: frames } : x));
+        }
         setBusy('');
-        setNotice('Turntable done — 8 views on the board.');
+        setNotice(frames.length >= 2
+            ? `Turntable done — ${frames.length} views on the board. Press GIF on the node to export a spin animation.`
+            : 'Turntable done — 8 views on the board.');
+    };
+
+    /** Encode the stored turntable frames into a looping spin GIF. */
+    const exportSpinGif = async (rn: WeaveNode) => {
+        const frames = rn.images ?? [];
+        if (frames.length < 2) { setNotice('Run 360° first — its views become the GIF frames.'); return; }
+        setBusy('Encoding spin GIF…');
+        setNotice('');
+        try {
+            const blob = await encodeSpinGif(frames);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `praxis-turntable-${rn.id.slice(0, 6)}.gif`;
+            a.click();
+            URL.revokeObjectURL(url);
+            setNotice('Spin GIF downloaded.');
+        } catch (err: any) { setNotice(`${err?.message || err}`); }
+        setBusy('');
     };
 
     const saveResult = async (nn: WeaveNode) => {
@@ -1084,6 +1112,7 @@ export default function WeaveView() {
                                             <>
                                                 <button style={{ ...miniBtn, background: '#18181b', color: '#fff' }} disabled={!!busy} onClick={() => runRotate(nn)}>Render {nn.angle ?? 90}°</button>
                                                 <button style={miniBtn} disabled={!!busy} onClick={() => run360(nn)} title="8 views at 45° steps (flash) — laid out on the board">360°</button>
+                                                <button style={miniBtn} disabled={!!busy || (nn.images?.length ?? 0) < 2} onClick={() => exportSpinGif(nn)} title="Encode the turntable views into a looping spin GIF (client-side, free)">GIF</button>
                                                 {nn.image && <>
                                                     <button style={miniBtn} onClick={() => download(nn)}>Save</button>
                                                     <button style={miniBtn} disabled={!!busy} onClick={() => saveResult(nn)}>Gallery</button>

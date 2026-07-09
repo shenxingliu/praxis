@@ -3,7 +3,7 @@ import { storage } from '../storage/local';
 import { getCurrentBrand, getCurrentBrandId } from '../domain/brand';
 import { getBrandSoul } from '../brain/soul';
 import { generateImage, generateJson, MODELS, COST_ESTIMATE_USD } from './gemini';
-import { BudgetExceededError, pendingSpendUsd, reservePendingSpend, promptBlocks } from './engine';
+import { BudgetExceededError, pendingSpendUsd, reservePendingSpend, promptBlocks, subjectExclusivityRule, subjectInspectorCriteria } from './engine';
 
 /**
  * Weave — freeform canvas generation (the Figma-Weave-inspired mode).
@@ -211,12 +211,12 @@ export async function weaveGenerate(
     const facetStart = conceptStart + concepts.length;
     const facetManifest = facetImages.map((img, i) => {
         const dims = (facetGroups.get(img) ?? []).map(f => f.dimension.toUpperCase()).join(' + ');
-        return `Image ${facetStart + i}: FACET SOURCE — take ONLY its ${dims} as described in the DIMENSIONAL EXTRACTION section; ignore everything else about this image (subjects, furniture, and all other dimensions).`;
+        return `Image ${facetStart + i}: FACET SOURCE — take ONLY its ${dims} as described in the DIMENSIONAL EXTRACTION section; ignore everything else about this image (subjects, objects, and all other dimensions).`;
     });
     const manifest = [
         n > 0 && `Images 1-${n}: HERO SOURCE OF TRUTH. Reconstruct the hero(es) EXACTLY and ONLY from these. Their decorative styling is disposable staging — restyle it per the direction.`,
         viewpoints.length > 0 && `Image${viewpoints.length > 1 ? `s ${vpStart}-${vpStart + viewpoints.length - 1}` : ` ${vpStart}`}: VIEWPOINT TRUTH — the user chose this exact camera angle on the hero. The hero MUST appear in the final image from EXACTLY this viewpoint (same rotation, same camera elevation). ${n > 0 ? 'Use images 1-' + n + ' only for material and detail fidelity;' : ''} the viewpoint image defines HOW the hero faces the camera.`,
-        fusion.length > 0 && `Images ${fusionStart}-${fusionStart + fusion.length - 1}: FUSION SOURCES. Blend their aesthetic ideas — light behavior, palette logic, material language, mood, formal energy — into ONE new coherent image. NEVER copy their subjects, furniture or composition literally.`,
+        fusion.length > 0 && `Images ${fusionStart}-${fusionStart + fusion.length - 1}: FUSION SOURCES. Blend their aesthetic ideas — light behavior, palette logic, material language, mood, formal energy — into ONE new coherent image. NEVER copy their subjects, objects or composition literally.`,
         concepts.length > 0 && `Images ${conceptStart}-${conceptStart + concepts.length - 1}: CONCEPT SOURCES. Embody each one's stated idea (see CONCEPT IDEAS section); never copy its composition or subjects.`,
         ...facetManifest,
         hasHeroes && heroReminder.length > 0 && `LAST image: hero repeated as a REMINDER of what the hero must look like.`,
@@ -245,7 +245,7 @@ ${manifest || '(no images attached — work from the concepts and direction alon
 
 ### REQUIREMENTS ###
 One coherent, museum-grade image where every board input coexists and reinforces the others. 8k.${hasHeroes ? `
-- The listed hero(s) are the ONLY furniture in the frame — zero invented companion pieces.
+- ${subjectExclusivityRule(input.assets)}
 - The hero(es) must be fully styled per the direction (dressed beds, curated surfaces); styling changes, the hero never does.
 - FINAL: the hero must be pixel-faithful to its source photos.` : ''}`;
 
@@ -264,7 +264,7 @@ One coherent, museum-grade image where every board input coexists and reinforces
         const check = async (img: string) => {
             const parsed = await generateJson<{ pass: boolean; issues: string[] }>(
                 `The first ${Math.min(assetImages.length, 5)} attached image(s) are OFFICIAL HERO PHOTOS. The LAST attached image is AI-generated.
-Check: 1) HERO FIDELITY (silhouette, proportions, construction, material, color, hardware — ignore styling/environment); 2) FURNITURE EXCLUSIVITY (no furniture other than the hero).
+Check: 1) HERO FIDELITY: ${subjectInspectorCriteria(input.assets)} (ignore styling/environment); 2) EXCLUSIVITY: ${subjectExclusivityRule(input.assets)}
 Output JSON: { "pass": boolean, "issues": [up to 4 concrete actionable deviations] }`,
                 [...assetImages.slice(0, 5), img]
             );

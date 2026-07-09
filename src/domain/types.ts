@@ -73,10 +73,16 @@ export interface AssetPhoto {
     role: PhotoRole;
 }
 
+/** What kind of subject an asset is — drives fidelity, staging and
+ *  exclusivity language across every generation prompt. */
+export type SubjectType = 'product' | 'person' | 'food' | 'apparel' | 'space' | 'other';
+
 export interface Asset {
     id: string;
     brandId: string;
     name: string;
+    /** Defaults to 'product' when absent (pre-migration assets). */
+    subjectType?: SubjectType;
     category?: string;
     collection?: string;
     finish?: string;
