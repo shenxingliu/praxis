@@ -185,6 +185,7 @@ export default function WeaveView() {
     const [edges, setEdges] = useState<WeaveEdge[]>([]);
     const [linking, setLinking] = useState<{ from: string; x: number; y: number } | null>(null);
     const [expandedId, setExpandedId] = useState<string | null>(null);
+    const [hoverId, setHoverId] = useState<string | null>(null);
     const [libOpen, setLibOpen] = useState(true);
     const [libTab, setLibTab] = useState<'assets' | 'inspiration'>('assets');
     const [libWidth, setLibWidth] = useState(208);
@@ -1108,7 +1109,7 @@ export default function WeaveView() {
                     {nodes.map(nn => {
                         const a = assetOf(nn.assetId);
                         const el = elementOf(nn.elementId);
-                        const open = expandedId === nn.id;
+                        const open = expandedId === nn.id || hoverId === nn.id;
                         const fixed = !!H(nn);
                         return (
                             <div key={nn.id}
@@ -1122,6 +1123,8 @@ export default function WeaveView() {
                                     onDown(e, nn);
                                 }}
                                 onPointerUp={e => { if (linking) { e.stopPropagation(); completeLink(nn.id); } }}
+                                onMouseEnter={() => setHoverId(nn.id)}
+                                onMouseLeave={() => setHoverId(prev => (prev === nn.id ? null : prev))}
                                 style={{
                                     position: 'absolute', left: nn.x, top: nn.y, width: W(nn),
                                     ...(H(nn) ? { height: H(nn) } : {}),
@@ -1319,9 +1322,9 @@ export default function WeaveView() {
                                         {/* 3D trackball — the WHOLE body orbits; click for actions */}
                                         <div
                                             onClick={() => toggleExpand(nn.id)}
-                                            style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'move', touchAction: 'none', justifyContent: 'center', padding: '2px 0' }}>
-                                            <Ball az={nn.angle ?? 90} pi={nn.pitch ?? 0} size={nn.image ? 44 : 76} />
-                                            <div style={{ textAlign: 'left' }}>
+                                            style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'move', touchAction: 'none', justifyContent: 'center', padding: '2px 0', ...(nn.image ? {} : { aspectRatio: '1', flexDirection: 'column' as const }) }}>
+                                            <Ball az={nn.angle ?? 90} pi={nn.pitch ?? 0} size={nn.image ? 44 : 150} />
+                                            <div style={{ textAlign: nn.image ? 'left' : 'center' }}>
                                                 <div style={{ fontSize: 12, fontWeight: 800, color: '#18181b' }}>{nn.angle ?? 90}°</div>
                                                 <div style={{ fontSize: 10, fontWeight: 700, color: '#71717a' }}>{(nn.pitch ?? 0) > 0 ? '+' : ''}{nn.pitch ?? 0}°</div>
                                             </div>
@@ -1367,19 +1370,22 @@ export default function WeaveView() {
                                 )}
                                 </div>
 
-                                {/* --- expanded action row --- */}
-                                {open && (
+                                {/* --- action row — hover/click reveals it with a silky slide --- */}
                                     <div onPointerDown={e => e.stopPropagation()}
                                         style={{
                                             flex: '0 0 auto',
                                             display: 'flex',
                                             gap: 3,
                                             flexWrap: 'wrap',
-                                            marginTop: 5,
-                                            maxHeight: fixed ? 58 : undefined,
-                                            overflow: fixed ? 'auto' : undefined,
+                                            marginTop: open ? 5 : 0,
+                                            maxHeight: open ? (fixed ? 58 : 200) : 0,
+                                            overflow: open && fixed ? 'auto' : 'hidden',
+                                            opacity: open ? 1 : 0,
+                                            transform: open ? 'translateY(0)' : 'translateY(-5px)',
+                                            pointerEvents: open ? 'auto' : 'none',
+                                            transition: 'max-height 280ms cubic-bezier(0.22,1,0.36,1), opacity 170ms ease, transform 280ms cubic-bezier(0.22,1,0.36,1), margin-top 280ms cubic-bezier(0.22,1,0.36,1)',
                                             borderRadius: 8,
-                                            padding: fixed ? 4 : 0,
+                                            padding: open && fixed ? 4 : 0,
                                         }}>
                                         {nn.kind === 'output' && (
                                             <>
@@ -1462,7 +1468,6 @@ export default function WeaveView() {
                                             </button>
                                         )}
                                     </div>
-                                )}
                                 </div>
                             </div>
                         );
