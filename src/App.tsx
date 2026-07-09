@@ -64,13 +64,24 @@ export default function App() {
             <style>{`
                 * { box-sizing: border-box; }
                 button {
-                    transition: opacity .15s ease, transform .06s ease, background .15s ease, border-color .15s ease;
+                    transition: transform .18s cubic-bezier(.22,1,.36,1), box-shadow .18s cubic-bezier(.22,1,.36,1),
+                        filter .15s ease, opacity .15s ease, background .15s ease, color .15s ease, border-color .15s ease;
                     font-family: inherit;
                     line-height: 1;
                     white-space: nowrap;
+                    will-change: transform;
                 }
-                button:not(:disabled):hover { opacity: .86; }
-                button:not(:disabled):active { transform: scale(.96); }
+                button:not(:disabled):hover {
+                    transform: translateY(-1px);
+                    filter: brightness(1.05);
+                    box-shadow: 0 3px 10px rgba(0,0,0,.10);
+                }
+                button:not(:disabled):active {
+                    transform: translateY(0) scale(.96);
+                    filter: brightness(.97);
+                    box-shadow: none;
+                    transition-duration: .07s;
+                }
                 button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible {
                     outline: 2px solid rgba(24, 24, 27, 0.62);
                     outline-offset: 2px;

@@ -1009,7 +1009,6 @@ export default function WeaveView() {
                                             fontSize: 9.5, fontWeight: 800, letterSpacing: 0.7,
                                             background: libTab === t ? '#18181b' : 'rgba(244,244,245,0.9)',
                                             color: libTab === t ? '#fff' : '#3f3f46',
-                                            transition: 'background 160ms ease, color 160ms ease',
                                         }}>
                                         <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>{t === 'assets' ? 'Assets' : 'Inspiration'}</span>
                                         <span style={{ fontSize: 8.5, opacity: 0.72, letterSpacing: 0 }}>{t === 'assets' ? assets.length : references.length}</span>
