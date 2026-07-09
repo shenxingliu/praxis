@@ -807,6 +807,66 @@ export default function WeaveView() {
         setExpandedId(prev => prev === id ? null : id);
     };
 
+    const collapsedRailWidth = 36;
+    const railHeaderStyle: React.CSSProperties = {
+        ...S.btnGhost,
+        minHeight: 32,
+        width: '100%',
+        justifyContent: 'space-between',
+        padding: '0 8px 0 10px',
+        borderRadius: 8,
+        background: 'rgba(255,255,255,0.54)',
+        border: '1px solid rgba(212,212,216,0.46)',
+    };
+    const collapsedRailStyle: React.CSSProperties = {
+        flex: `0 0 ${collapsedRailWidth}px`,
+        alignSelf: 'stretch',
+        border: '1px solid rgba(212,212,216,0.68)',
+        borderRightColor: 'rgba(161,161,170,0.66)',
+        background: 'linear-gradient(180deg, rgba(255,255,255,0.76), rgba(255,255,255,0.44))',
+        backdropFilter: 'blur(18px) saturate(1.18)',
+        WebkitBackdropFilter: 'blur(18px) saturate(1.18)',
+        borderRadius: 10,
+        boxShadow: 'inset 1px 0 0 rgba(255,255,255,0.86), inset -1px 0 0 rgba(161,161,170,0.12)',
+        cursor: 'pointer',
+        color: '#5f6068',
+        fontSize: 10,
+        fontWeight: 850,
+        letterSpacing: 0.7,
+        padding: '8px 0',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+        transition: 'transform 160ms ease, background 160ms ease, border-color 160ms ease',
+    };
+    const collapsedCountStyle: React.CSSProperties = {
+        minWidth: 18,
+        height: 18,
+        borderRadius: 999,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'rgba(24,24,27,0.07)',
+        color: '#71717a',
+        fontSize: 9,
+        letterSpacing: 0,
+    };
+    const collapsedChevronStyle: React.CSSProperties = {
+        width: 19,
+        height: 19,
+        borderRadius: 999,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        border: '1px solid rgba(161,161,170,0.48)',
+        background: 'rgba(255,255,255,0.64)',
+        color: '#52525b',
+        fontSize: 14,
+        lineHeight: 1,
+    };
+
     return (
         <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 14px', boxSizing: 'border-box' }}>
             {(busy || notice) && (
@@ -922,7 +982,7 @@ export default function WeaveView() {
             <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 8 }}>
             <aside style={{
                 flex: '0 0 auto',
-                width: (assetsOpen ? assetsRailWidth : 40) + (inspirationOpen ? inspirationRailWidth : 40) + 8,
+                width: (assetsOpen ? assetsRailWidth : collapsedRailWidth) + (inspirationOpen ? inspirationRailWidth : collapsedRailWidth) + 8,
                 minHeight: 0,
                 display: 'flex',
                 gap: 8,
@@ -931,12 +991,15 @@ export default function WeaveView() {
                 {assetsOpen ? (
                     <div style={{ ...S.card, flex: `0 0 ${assetsRailWidth}px`, minWidth: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden', position: 'relative' }}>
                         <button
-                            style={{ ...S.btnGhost, minHeight: 30, width: '100%', justifyContent: 'space-between', padding: '0 8px' }}
+                            style={railHeaderStyle}
                             onClick={() => setAssetsOpen(false)}
                             title="Close Assets"
                         >
                             <span>Assets</span>
-                            <span style={{ fontSize: 9, color: '#a1a1aa' }}>{assets.length}</span>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ fontSize: 9, color: '#a1a1aa' }}>{assets.length}</span>
+                                <span style={{ fontSize: 13, color: '#71717a', lineHeight: 1 }}>‹</span>
+                            </span>
                         </button>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(42px, 1fr))', gap: 6, overflow: 'auto', minHeight: 0 }}>
                             {assets.map(asset => (
@@ -966,7 +1029,7 @@ export default function WeaveView() {
                                 railResize.current = { rail: 'assets', sx: event.clientX, w0: assetsRailWidth };
                             }}
                             title="Drag to resize Assets"
-                            style={{ position: 'absolute', right: -4, top: 42, bottom: 8, width: 8, cursor: 'col-resize', zIndex: 3 }}
+                            style={{ position: 'absolute', right: -5, top: 42, bottom: 8, width: 10, cursor: 'col-resize', zIndex: 3, borderRadius: 999 }}
                         />
                     </div>
                 ) : (
@@ -974,50 +1037,35 @@ export default function WeaveView() {
                         onClick={() => setAssetsOpen(true)}
                         title="Open Assets"
                         onMouseEnter={event => {
-                            event.currentTarget.style.background = 'rgba(255,255,255,0.9)';
-                            event.currentTarget.style.transform = 'translateX(2px)';
+                            event.currentTarget.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.56))';
+                            event.currentTarget.style.borderColor = 'rgba(161,161,170,0.78)';
+                            event.currentTarget.style.transform = 'translateX(1px)';
                         }}
                         onMouseLeave={event => {
-                            event.currentTarget.style.background = 'rgba(255,255,255,0.72)';
+                            event.currentTarget.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.76), rgba(255,255,255,0.44))';
+                            event.currentTarget.style.borderColor = 'rgba(212,212,216,0.68)';
                             event.currentTarget.style.transform = 'translateX(0)';
                         }}
-                        style={{
-                            flex: '0 0 40px',
-                            border: '1px solid rgba(161,161,170,0.56)',
-                            background: 'rgba(255,255,255,0.72)',
-                            backdropFilter: 'blur(18px) saturate(1.18)',
-                            WebkitBackdropFilter: 'blur(18px) saturate(1.18)',
-                            borderRadius: 12,
-                            boxShadow: '0 18px 34px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.62)',
-                            cursor: 'pointer',
-                            color: '#52525b',
-                            fontSize: 10,
-                            fontWeight: 800,
-                            letterSpacing: 0.8,
-                            padding: '10px 0 8px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 8,
-                            transition: 'transform 160ms ease, background 160ms ease, box-shadow 160ms ease',
-                        }}
+                        style={collapsedRailStyle}
                     >
-                        <span style={{ fontSize: 14, lineHeight: 1 }}>›</span>
+                        <span style={collapsedCountStyle}>{assets.length}</span>
                         <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>Assets</span>
-                        <span style={{ minWidth: 18, minHeight: 18, borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(24,24,27,0.08)', color: '#71717a', fontSize: 9, letterSpacing: 0 }}>{assets.length}</span>
+                        <span style={collapsedChevronStyle}>›</span>
                     </button>
                 )}
 
                 {inspirationOpen ? (
                     <div style={{ ...S.card, flex: `0 0 ${inspirationRailWidth}px`, minWidth: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden', position: 'relative' }}>
                         <button
-                            style={{ ...S.btnGhost, minHeight: 30, width: '100%', justifyContent: 'space-between', padding: '0 8px' }}
+                            style={railHeaderStyle}
                             onClick={() => setInspirationOpen(false)}
                             title="Close Inspiration"
                         >
                             <span>Inspiration</span>
-                            <span style={{ fontSize: 9, color: '#a1a1aa' }}>{references.length}</span>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ fontSize: 9, color: '#a1a1aa' }}>{references.length}</span>
+                                <span style={{ fontSize: 13, color: '#71717a', lineHeight: 1 }}>‹</span>
+                            </span>
                         </button>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(42px, 1fr))', gap: 6, overflow: 'auto', minHeight: 0 }}>
                             {references.map(ref => (
@@ -1047,7 +1095,7 @@ export default function WeaveView() {
                                 railResize.current = { rail: 'inspiration', sx: event.clientX, w0: inspirationRailWidth };
                             }}
                             title="Drag to resize Inspiration"
-                            style={{ position: 'absolute', right: -4, top: 42, bottom: 8, width: 8, cursor: 'col-resize', zIndex: 3 }}
+                            style={{ position: 'absolute', right: -5, top: 42, bottom: 8, width: 10, cursor: 'col-resize', zIndex: 3, borderRadius: 999 }}
                         />
                     </div>
                 ) : (
@@ -1055,38 +1103,20 @@ export default function WeaveView() {
                         onClick={() => setInspirationOpen(true)}
                         title="Open Inspiration"
                         onMouseEnter={event => {
-                            event.currentTarget.style.background = 'rgba(255,255,255,0.9)';
-                            event.currentTarget.style.transform = 'translateX(2px)';
+                            event.currentTarget.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.56))';
+                            event.currentTarget.style.borderColor = 'rgba(161,161,170,0.78)';
+                            event.currentTarget.style.transform = 'translateX(1px)';
                         }}
                         onMouseLeave={event => {
-                            event.currentTarget.style.background = 'rgba(255,255,255,0.72)';
+                            event.currentTarget.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.76), rgba(255,255,255,0.44))';
+                            event.currentTarget.style.borderColor = 'rgba(212,212,216,0.68)';
                             event.currentTarget.style.transform = 'translateX(0)';
                         }}
-                        style={{
-                            flex: '0 0 40px',
-                            border: '1px solid rgba(161,161,170,0.56)',
-                            background: 'rgba(255,255,255,0.72)',
-                            backdropFilter: 'blur(18px) saturate(1.18)',
-                            WebkitBackdropFilter: 'blur(18px) saturate(1.18)',
-                            borderRadius: 12,
-                            boxShadow: '0 18px 34px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.62)',
-                            cursor: 'pointer',
-                            color: '#52525b',
-                            fontSize: 10,
-                            fontWeight: 800,
-                            letterSpacing: 0.8,
-                            padding: '10px 0 8px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 8,
-                            transition: 'transform 160ms ease, background 160ms ease, box-shadow 160ms ease',
-                        }}
+                        style={collapsedRailStyle}
                     >
-                        <span style={{ fontSize: 14, lineHeight: 1 }}>›</span>
+                        <span style={collapsedCountStyle}>{references.length}</span>
                         <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>Inspiration</span>
-                        <span style={{ minWidth: 18, minHeight: 18, borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(24,24,27,0.08)', color: '#71717a', fontSize: 9, letterSpacing: 0 }}>{references.length}</span>
+                        <span style={collapsedChevronStyle}>›</span>
                     </button>
                 )}
             </aside>
