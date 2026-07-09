@@ -234,7 +234,10 @@ Images 2-${1 + Math.min(assetImages.length, 6)}: HERO SOURCE OF TRUTH.`,
                     imageSize: params.size,
                 });
                 out = corrected;
-                const second = await check(out.image).catch(() => ({ pass: true, issues: [] }));
+                const second = await check(out.image).catch(() => (
+                    // Re-check failed (network etc.) — report honestly instead of a fake pass.
+                    { pass: false, issues: ['Consistency re-check failed — result unverified'] }
+                ));
                 consistency = { ...second, retried: true };
             }
         } catch (err) {

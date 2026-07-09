@@ -96,7 +96,9 @@ export class LocalProvider implements StorageProvider {
         return all.sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
     }
     async getResult(id: string): Promise<GenerationResult | null> {
-        return (await tx<GenerationResult | undefined>('results', 'readonly', s => s.get(id))) ?? null;
+        const result = (await tx<GenerationResult | undefined>('results', 'readonly', s => s.get(id))) ?? null;
+        // Brand-scoped like every other read — an id must not cross brands.
+        return result && result.brandId === getCurrentBrandId() ? result : null;
     }
     upsertResult(result: GenerationResult) { return put('results', result); }
     deleteResult(id: string) { return del('results', id); }

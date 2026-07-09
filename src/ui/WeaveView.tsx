@@ -192,6 +192,18 @@ export default function WeaveView() {
     const [saveName, setSaveName] = useState('');
     const [showLoadMenu, setShowLoadMenu] = useState(false);
     const resultsRef = useRef<Map<string, GenerationResult>>(new Map());
+    /** Session cache of results behind board nodes. Capped — each entry
+     *  carries a full base64 image and an unbounded map eats hundreds of
+     *  MB over a long canvas session. */
+    const rememberResult = (r: GenerationResult) => {
+        const cache = resultsRef.current;
+        cache.set(r.id, r);
+        while (cache.size > 60) {
+            const oldest = cache.keys().next().value;
+            if (oldest === undefined) break;
+            cache.delete(oldest);
+        }
+    };
     const fileRef = useRef<HTMLInputElement>(null);
     const drag = useRef<{ id: string; dx: number; dy: number; moved: boolean } | null>(null);
     /** 3D orbit-drag on rotate nodes: horizontal = azimuth, vertical = pitch. */
@@ -448,7 +460,7 @@ export default function WeaveView() {
             setBusy(`Rendering viewpoint ${rn.angle ?? 90}° first…`);
             try {
                 const rv = await rotateView(imgs, rn.angle ?? 90, { ratio, size, tier: 'flash', pitch: rn.pitch ?? 0 }, setBusy);
-                resultsRef.current.set(rv.id, rv);
+                rememberResult(rv);
                 setNodes(prev => prev.map(x => x.id === rn.id ? { ...x, image: rv.image.value, resultId: rv.id } : x));
                 viewpointImages.push(rv.image.value);
             } catch (err) { console.warn('[weave] viewpoint pre-render failed:', err); }
@@ -477,7 +489,7 @@ export default function WeaveView() {
                 { assets: boardAssets, elements: boardElements, fusionImages, adhocHeroImages, viewpointImages, viewpoint, conceptIdeas, facets, note, ratio, size, tier },
                 setBusy
             );
-            resultsRef.current.set(r.id, r);
+            rememberResult(r);
             setNotice('Woven.');
             return r;
         } catch (err: any) {
@@ -547,7 +559,7 @@ export default function WeaveView() {
         setNotice('');
         try {
             const r = await rotateView(imgs, angle, { ratio, size, tier: tierSel, pitch }, setBusy);
-            resultsRef.current.set(r.id, r);
+            rememberResult(r);
             setNodes(prev => prev.map(x => x.id === rn.id ? { ...x, image: r.image.value, resultId: r.id, angle } : x));
             setNotice(`${angle}° view rendered.`);
         } catch (err: any) { setNotice(`${err?.message || err}`); }
@@ -563,7 +575,7 @@ export default function WeaveView() {
             setBusy(`360° turntable — ${i + 1}/8 (${angle}°)…`);
             try {
                 const r = await rotateView(imgs, angle, { ratio, size, tier: 'flash' }, setBusy);
-                resultsRef.current.set(r.id, r);
+                rememberResult(r);
                 add({ kind: 'output', image: r.image.value, resultId: r.id },
                     { x: rn.x + 160 + (i % 4) * 215, y: rn.y + Math.floor(i / 4) * 215 });
             } catch (err: any) { setNotice(`${angle}°: ${err?.message || err}`); break; }

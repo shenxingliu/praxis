@@ -123,20 +123,29 @@ async function prepareInlineParts(images: string[], mode: 'image' | 'json'): Pro
     const perImageBudget = mode === 'image' ? 520_000 : 380_000;
     const maxEdge = mode === 'image' ? 1280 : 960;
     const quality = mode === 'image' ? 0.74 : 0.7;
+    const capped = images.slice(0, maxImages);
     const parts: ImagePart[] = [];
-    let used = 0;
-
-    for (const img of images.slice(0, maxImages)) {
+    for (const img of capped) {
         const resized = await shrinkDataUrl(img, { maxEdge, quality, maxDataChars: perImageBudget });
-        const part = toInlinePart(resized);
-        const size = part.inlineData.data.length;
-        if (parts.length > 0 && used + size > totalBudget) continue;
-        parts.push(part);
-        used += size;
-        if (used >= totalBudget) break;
+        parts.push(toInlinePart(resized));
     }
+    const used = parts.reduce((sum, part) => sum + part.inlineData.data.length, 0);
+    if (used <= totalBudget) return parts;
 
-    return parts;
+    // Over budget: recompress EVERYTHING harder instead of dropping images —
+    // dropping desyncs the prompt's image-role manifest (image N no longer
+    // means what the prompt says it means).
+    const perImage = Math.max(120_000, Math.floor(totalBudget / Math.max(1, capped.length)));
+    const recompressed: ImagePart[] = [];
+    for (const img of capped) {
+        const resized = await shrinkDataUrl(img, {
+            maxEdge: Math.round(maxEdge * 0.7),
+            quality: Math.max(0.5, quality - 0.14),
+            maxDataChars: perImage,
+        });
+        recompressed.push(toInlinePart(resized));
+    }
+    return recompressed;
 }
 
 /**

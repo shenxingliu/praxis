@@ -32,6 +32,11 @@ function appSafeEqual(a, b) {
 
 function checkAppAccess(req, res) {
   const expected = process.env.APP_ACCESS_TOKEN;
+  if (!expected || expected.trim().length === 0) {
+    // Auth is optional by design, but a missing env var must not be silent —
+    // an open endpoint burns API quota for whoever finds it.
+    console.warn('[api/generate] APP_ACCESS_TOKEN is not set — endpoint accepts unauthenticated requests');
+  }
   if (expected && expected.trim().length > 0) {
     const got = req.headers && req.headers['x-app-token'];
     const token = Array.isArray(got) ? got[0] : got;

@@ -118,7 +118,7 @@ export default function CreateView() {
             for (let i = 0; i < count; i++) {
                 setStatus(count > 1 ? `Generating ${i + 1}/${count}…` : 'Generating…');
                 const result = await generate(params, Array.from(selected), setStatus);
-                setResults(prev => [result, ...prev]);
+                setResults(prev => [result, ...prev].slice(0, 60)); // cap in-memory base64 results
             }
         } catch (err: any) {
             setError(err instanceof BudgetExceededError ? err.message : err?.message || 'Generation failed');

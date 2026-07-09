@@ -122,7 +122,8 @@ export class SupabaseProvider implements StorageProvider {
         return this.brandRows<GenerationResult>(TABLE.results, `&order=updated_at.desc&limit=${limit}`);
     }
     async getResult(id: string): Promise<GenerationResult | null> {
-        const rows = await this.rows<GenerationResult>(TABLE.results, `&id=eq.${encodeURIComponent(id)}`);
+        // Brand-scoped like every other read — an id must not cross brands.
+        const rows = await this.brandRows<GenerationResult>(TABLE.results, `&id=eq.${encodeURIComponent(id)}`);
         return rows[0] ?? null;
     }
     upsertResult(result: GenerationResult) { return this.upsert(TABLE.results, [{ id: result.id, data: result }]); }
