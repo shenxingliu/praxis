@@ -186,14 +186,14 @@ export default function WeaveView() {
     const [linking, setLinking] = useState<{ from: string; x: number; y: number } | null>(null);
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [hoverId, setHoverId] = useState<string | null>(null);
-    const [libOpen, setLibOpen] = useState(true);
+    const [libOpen, setLibOpen] = useState(false);
     const [libTab, setLibTab] = useState<'assets' | 'inspiration'>('assets');
     const [libWidth, setLibWidth] = useState(208);
     const [libResizing, setLibResizing] = useState(false);
     const [facetPick, setFacetPick] = useState<{ image: string; near: { x: number; y: number }; facets: Array<{ dimension: string; description: string }> } | null>(null);
     const [ratio, setRatio] = useState<GenerationParams['ratio']>('4:3');
     const [size, setSize] = useState<NonNullable<GenerationParams['size']>>('1K');
-    const [tierSel, setTierSel] = useState<'flash' | 'pro'>('pro');
+    const [tierSel, setTierSel] = useState<'flash' | 'pro'>('flash');
     const [busy, setBusy] = useState('');
     const [notice, setNotice] = useState('');
     // Workflow save/load
