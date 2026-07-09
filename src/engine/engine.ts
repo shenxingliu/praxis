@@ -191,8 +191,11 @@ export async function generate(
         aesthetic.length > 0 && `Images ${aestheticStart}-${aestheticStart + aesthetic.length - 1}: AESTHETIC REFERENCES — style, light and material language only. NEVER copy their subjects or objects.`,
         heroReminder.length > 0 && `LAST image: the hero photo repeated as a REMINDER — this is what the hero must look like.`,
     ].filter(Boolean);
+    const directivesBlock = (params.directives ?? []).length > 0
+        ? `\n### OWNER DIRECTIVES (interjected mid-job — obey ALL; the newest wins on conflict) ###\n${(params.directives ?? []).map(d => `- ${d}`).join('\n')}\n`
+        : '';
     const prompt = `${recipe.buildPrompt(ctx)}
-
+${directivesBlock}
 ### ATTACHED IMAGE ROLES (obey strictly) ###
 ${manifestLines.join('\n')}
 

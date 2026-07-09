@@ -214,6 +214,8 @@ export interface GenerationParams {
     /** Inspiration references explicitly chosen in the brief — attached
      *  FIRST among aesthetic refs, never dropped by the budget cap. */
     referenceIds?: string[];
+    /** Owner interjections accumulated during the job — every call obeys them. */
+    directives?: string[];
 
     // --- Studio (expert) controls — ported from V1.3. All optional;
     // 'Auto'/undefined lets brand soul + recipe defaults decide. ---
@@ -289,6 +291,13 @@ export interface ReviewReport {
     suggestions: string[];
 }
 
+/** One turn in a job's conversation — the owner steering, or the studio reporting. */
+export interface JobMessage {
+    role: 'user' | 'agent';
+    text: string;
+    at: number;
+}
+
 export interface PraxisJob {
     id: string;
     brandId: string;
@@ -299,6 +308,10 @@ export interface PraxisJob {
     plan?: ProductionPlan;
     resultIds: string[];
     review?: ReviewReport;
+    /** Owner interjections — injected into EVERY subsequent model call. */
+    directives?: string[];
+    /** The job's conversation log. */
+    transcript?: JobMessage[];
     createdAt: number;
     updatedAt: number;
 }

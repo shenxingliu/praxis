@@ -28,6 +28,11 @@ const REALISMS: Realism[] = ['photographic', 'surreal', 'abstract'];
 // Stage 1 — Concept agent
 // ---------------------------------------------------------------------------
 
+const directivesBlock = (job: PraxisJob): string =>
+    (job.directives ?? []).length > 0
+        ? `\n### OWNER DIRECTIVES (interjected during this job — obey ALL; the newest wins on conflict) ###\n${(job.directives ?? []).map(d => `- ${d}`).join('\n')}\n`
+        : '';
+
 export async function startJob(brief: string): Promise<PraxisJob> {
     const job: PraxisJob = {
         id: crypto.randomUUID(),
@@ -74,7 +79,7 @@ Let KEPT pairings inform which concepts you recombine; avoid DISCARDED pairings 
 
 ### CLIENT BRIEF ###
 ${job.brief.trim() || '(no brief — OPEN EXPLORATION: propose what this brand should make next. Ground every direction in the soul and the concept library; surprise the owner with directions they would not have briefed but will recognize as their own.)'}
-
+${directivesBlock(job)}
 ### BRAND SOUL (locked fields are red-lines) ###
 ${(soul?.fields ?? []).filter(f => f.value.trim()).map(f => `${f.key}${f.locked ? ' [LOCKED]' : ''} (w${f.weight}): ${f.value}`).join('\n') || '(no soul yet — derive from brand description)'}
 ${complaints}${fusionMemory}
@@ -194,7 +199,7 @@ export async function makePlan(job: PraxisJob, conceptId: string, assetIds: stri
 
 BRAND: ${brand.name} — ${brand.description}
 BRIEF: ${job.brief.trim() || '(open exploration — judge against the brand soul alone)'}
-CHOSEN CONCEPT: ${concept.title} — ${concept.rationale}
+${directivesBlock(job)}CHOSEN CONCEPT: ${concept.title} — ${concept.rationale}
 N/S/I: ${concept.nsiSummary}
 REALISM: ${concept.realism}
 HEROES: ${assets.map(a => `${a.name}${a.category ? ` (${a.category})` : ''}`).join('; ') || '(none picked)'}
@@ -251,7 +256,7 @@ export async function makeMoodboard(
         onStatus?.(`Moodboard draft ${i + 1}/3 (flash)…`);
         try {
             const r = await generate(
-                { ...job.plan.params, modelTier: 'flash', note: `${job.plan.params.note ?? ''} — mood study variant ${i + 1}, prioritize atmosphere over hero perfection.` },
+                { ...job.plan.params, directives: job.directives, modelTier: 'flash', note: `${job.plan.params.note ?? ''} — mood study variant ${i + 1}, prioritize atmosphere over hero perfection.` },
                 job.plan.assetIds, onStatus
             );
             await storage.upsertResult({ ...r, jobId: job.id });
@@ -292,7 +297,7 @@ export async function executeJob(
     const results: GenerationResult[] = [];
     for (let i = 0; i < count; i++) {
         onStatus?.(count > 1 ? `Executing ${i + 1}/${count}…` : 'Executing…');
-        const r = await generate(job.plan.params, job.plan.assetIds, onStatus, anchor);
+        const r = await generate({ ...job.plan.params, directives: job.directives }, job.plan.assetIds, onStatus, anchor);
         await storage.upsertResult({ ...r, jobId: job.id });
         results.push({ ...r, jobId: job.id });
     }
@@ -327,7 +332,7 @@ export async function executeCampaign(
         onStatus?.(`Campaign ${i + 1}/4 — ${slot.purpose}…`);
         try {
             const r = await generate(
-                { ...job.plan.params, purpose: slot.purpose, ratio: slot.ratio },
+                { ...job.plan.params, directives: job.directives, purpose: slot.purpose, ratio: slot.ratio },
                 job.plan.assetIds, onStatus, anchor
             );
             await storage.upsertResult({ ...r, jobId: job.id });

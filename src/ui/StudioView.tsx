@@ -34,6 +34,7 @@ export default function StudioView() {
     const [selectedRefs, setSelectedRefs] = useState<Set<string>>(new Set());
     const [inspOpen, setInspOpen] = useState(false);
     const [assetsOpen, setAssetsOpen] = useState(true);
+    const [noteText, setNoteText] = useState('');
     const [brief, setBrief] = useState('');
     const [count, setCount] = useState(2);
     const [results, setResults] = useState<GenerationResult[]>([]);
@@ -57,18 +58,45 @@ export default function StudioView() {
         } finally { setBusy(''); }
     };
 
+    /** Append a message to the job's conversation and persist. */
+    const say = async (j: PraxisJob, role: 'user' | 'agent', text: string): Promise<PraxisJob> => {
+        const next: PraxisJob = { ...j, transcript: [...(j.transcript ?? []), { role, text, at: Date.now() }], updatedAt: Date.now() };
+        await storage.upsertJob(next);
+        return next;
+    };
+
+    /** Owner interjection: lands in the transcript AND the directives that
+     *  every subsequent model call obeys. Free — no API call. */
+    const sendNote = async () => {
+        if (!job || !noteText.trim()) return;
+        const text = noteText.trim();
+        setNoteText('');
+        let next = await say(job, 'user', text);
+        next = { ...next, directives: [...(next.directives ?? []), text] };
+        next = await say(next, 'agent', 'Noted — this steers every step from here.');
+        setJob(next);
+    };
+
+    const removeDirective = async (index: number) => {
+        if (!job) return;
+        const next: PraxisJob = { ...job, directives: (job.directives ?? []).filter((_, i) => i !== index), updatedAt: Date.now() };
+        await storage.upsertJob(next);
+        setJob(next);
+    };
+
     const begin = () => guard('Concept agent thinking…', async () => {
         if (selectedAssets.size === 0) throw new Error('Pick at least one asset.');
         const j = await startJob(brief.trim()); // empty brief = open exploration
-        setJob(await proposeConcepts(j));
+        setJob(await say(await proposeConcepts(j), 'agent', 'Three directions on the table — choose one, hit Wildcard for a collision, or type below to steer me.'));
     });
 
     const choose = (conceptId: string) => guard('Producer drafting the plan…', async () => {
         if (!job) return;
         const planned = await makePlan(job, conceptId, Array.from(selectedAssets));
-        setJob(planned.plan && selectedRefs.size > 0
+        const withRefs = planned.plan && selectedRefs.size > 0
             ? { ...planned, plan: { ...planned.plan, params: { ...planned.plan.params, referenceIds: Array.from(selectedRefs) } } }
-            : planned);
+            : planned;
+        setJob(await say(withRefs, 'agent', 'Plan drafted — tune ratio/size, run a cheap moodboard first, or execute.'));
     });
 
     const wildcard = () => guard('Colliding concepts…', async () => {
@@ -93,6 +121,7 @@ export default function StudioView() {
     const moodboard = () => guard('Moodboard…', async () => {
         if (!job) return;
         setMoodDrafts(await makeMoodboard(job, setBusy));
+        setJob(await say(job, 'agent', 'Three mood drafts below — anchor the one whose light feels right, then execute.'));
     });
 
     const anchor = (resultId: string) => guard('Anchoring…', async () => {
@@ -104,19 +133,19 @@ export default function StudioView() {
         if (!job) return;
         const { job: j, results: rs } = await executeCampaign(job, setBusy);
         setResults(rs);
-        setJob(j);
+        setJob(await say(j, 'agent', 'Campaign kit done — one concept across all four purposes.'));
     });
 
     const execute = () => guard('Executing…', async () => {
         if (!job) return;
         const { job: j, results: rs } = await executeJob(job, count, setBusy);
         setResults(rs);
-        setJob(j);
+        setJob(await say(j, 'agent', `${rs.length} shot${rs.length === 1 ? '' : 's'} done — rate them; if something's off, type it below and re-execute.`));
     });
 
     const review = () => guard('Critic reviewing…', async () => {
         if (!job) return;
-        setJob(await reviewJob(job, results));
+        setJob(await say(await reviewJob(job, results), 'agent', "The critic's read is in — close the job, or step back and iterate."));
     });
 
     const finish = () => guard('Closing…', async () => {
@@ -219,6 +248,29 @@ export default function StudioView() {
 
             {busy && <div style={{ ...S.card, fontSize: 12, color: '#52525b' }}>{busy}</div>}
             {error && <div style={S.err}>{error}</div>}
+
+            {/* Conversation — the studio reports, the owner steers */}
+            {job && (job.transcript ?? []).length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {(job.transcript ?? []).map((m, i) => (
+                        <div key={i} style={{
+                            alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+                            maxWidth: '78%',
+                            padding: '7px 12px',
+                            borderRadius: m.role === 'user' ? '12px 12px 3px 12px' : '12px 12px 12px 3px',
+                            fontSize: 12, lineHeight: 1.5,
+                            background: m.role === 'user' ? '#18181b' : 'rgba(255,255,255,0.72)',
+                            color: m.role === 'user' ? '#fff' : '#18181b',
+                            border: m.role === 'user' ? 'none' : '1px solid rgba(212,212,216,0.5)',
+                            backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+                            animation: 'praxis-pop 240ms cubic-bezier(0.22,1,0.36,1)',
+                        }}>
+                            {m.text}
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {/* Stage 1 — brief */}
             {!job && (
@@ -503,6 +555,33 @@ export default function StudioView() {
                         </div>
                     )}
                 </>
+            )}
+
+            {/* Interjection composer — always available while a job runs */}
+            {job && (
+                <div style={{ position: 'sticky', bottom: 10, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {(job.directives ?? []).length > 0 && (
+                        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                            {(job.directives ?? []).map((d, i) => (
+                                <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 999, background: 'rgba(24,24,27,0.06)', border: '1px solid rgba(212,212,216,0.6)', color: '#3f3f46' }}>
+                                    {d.length > 48 ? `${d.slice(0, 48)}…` : d}
+                                    <button onClick={() => removeDirective(i)} title="Stop applying this directive"
+                                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#a1a1aa', fontSize: 10, padding: 0, lineHeight: 1 }}>✕</button>
+                                </span>
+                            ))}
+                        </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 6, padding: 6, borderRadius: 12, background: 'rgba(255,255,255,0.82)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(212,212,216,0.6)', boxShadow: '0 12px 28px rgba(0,0,0,0.10)' }}>
+                        <input
+                            value={noteText}
+                            onChange={e => setNoteText(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') sendNote(); }}
+                            placeholder="Interject anytime — “colder morning light”, “leave copy space top-left”… applies to every next step"
+                            style={{ ...S.input, flex: 1, border: 'none', background: 'transparent' }}
+                        />
+                        <button style={S.btn} disabled={!noteText.trim() || !!busy} onClick={sendNote}>Send</button>
+                    </div>
+                </div>
             )}
         </div>
     );
