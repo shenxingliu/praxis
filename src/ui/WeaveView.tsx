@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Asset, Element, GenerationParams, GenerationResult } from '../domain/types';
+import { Asset, Element, GenerationParams, GenerationResult, SubjectType } from '../domain/types';
 import { storage } from '../storage/local';
-import { brandKey } from '../domain/brand';
+import { brandKey, getCurrentBrandId } from '../domain/brand';
+import { INVENTORY_CHANGED_EVENT } from './events';
 import { weaveGenerate, extractFacets, deriveIdea, describeAsPrompt, analyzeImage, rotateView, distillWeaveApproach, WeaveFacet } from '../engine/weave';
 import { recordSignal } from '../learning/learning';
 import { BudgetExceededError } from '../engine/engine';
@@ -381,6 +382,44 @@ export default function WeaveView() {
         if (!facetPick) return;
         add({ kind: 'facet', image: facetPick.image, dimension: f.dimension, description: f.description },
             { x: facetPick.near.x + (i % 2) * 145, y: facetPick.near.y + Math.floor(i / 2) * 105 });
+    };
+
+    // --- promote an uploaded image node into a library Asset ---
+    const SUBJECT_TYPES: SubjectType[] = ['product', 'person', 'food', 'apparel', 'space', 'other'];
+    const saveNodeAsAsset = async (nn: WeaveNode, subjectType: SubjectType) => {
+        const imgs = nodeImages(nn);
+        if (imgs.length === 0) return;
+        const name = window.prompt('Asset name:', 'New asset')?.trim();
+        if (!name) return;
+        setBusy('Saving to Assets…');
+        setNotice('');
+        try {
+            const now = Date.now();
+            const asset: Asset = {
+                id: crypto.randomUUID(),
+                brandId: getCurrentBrandId(),
+                name,
+                subjectType,
+                tags: [],
+                photos: imgs.map((value, i) => ({
+                    id: crypto.randomUUID(),
+                    image: { kind: 'data' as const, value },
+                    role: (i === 0 ? 'hero' : 'detail') as 'hero' | 'detail',
+                })),
+                createdAt: now,
+                updatedAt: now,
+            };
+            await storage.upsertAsset(asset);
+            setAssets(prev => [...prev, asset]);
+            window.dispatchEvent(new CustomEvent(INVENTORY_CHANGED_EVENT));
+            // The node becomes a real library-asset node — same pixels, but
+            // now with full fidelity rules and reusable across the app.
+            setNodes(prev => prev.map(x => x.id === nn.id
+                ? { id: x.id, kind: 'hero' as const, x: x.x, y: x.y, assetId: asset.id, w: x.w, h: x.h }
+                : x));
+            setNotice(`Asset "${name}" saved as ${subjectType} — the node is now a library asset.`);
+        } catch (err: any) { setNotice(`${err?.message || err}`); }
+        setBusy('');
     };
 
     // --- role / prompt derivation ---
@@ -1106,6 +1145,16 @@ export default function WeaveView() {
                                                 <button style={miniBtn} disabled={!!busy} onClick={() => imageToPrompt(nn)}>Prompt</button>
                                                 <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>View</button>
                                                 <button style={miniBtn} onClick={() => download(nn)}>Save</button>
+                                                <span style={{ flexBasis: '100%', display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap', marginTop: 2 }}>
+                                                    <span style={{ fontSize: 9, fontWeight: 800, color: '#71717a' }}>→ ASSET:</span>
+                                                    {SUBJECT_TYPES.map(t => (
+                                                        <button key={t} style={miniBtn} disabled={!!busy}
+                                                            onClick={() => saveNodeAsAsset(nn, t)}
+                                                            title={`Save this image (all merged angles) into the Assets library as ${t} — the node becomes a library asset`}>
+                                                            {t}
+                                                        </button>
+                                                    ))}
+                                                </span>
                                             </>
                                         )}
                                         {nn.kind === 'rotate' && (
