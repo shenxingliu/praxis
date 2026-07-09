@@ -403,7 +403,7 @@ export default function WeaveView() {
     const W = (nn: WeaveNode) => nn.w ?? (
         nn.kind === 'output' ? 300 :
         nn.kind === 'facet' ? 190 :
-        nn.kind === 'rotate' ? 220 :
+        nn.kind === 'rotate' ? 300 :
         nn.kind === 'note' ? 220 :
         220
     );
@@ -1356,7 +1356,7 @@ export default function WeaveView() {
                                             <img src={nn.image} alt="" draggable={false}
                                                 style={fitImage(fixed, { borderRadius: 9 })} />
                                         ) : (
-                                            <div style={{ background: 'rgba(244,244,245,0.28)', border: '1px solid rgba(212,212,216,0.40)', borderRadius: 8, padding: '18px 6px', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.36)' }}>
+                                            <div style={{ background: 'rgba(244,244,245,0.28)', border: '1px solid rgba(212,212,216,0.40)', borderRadius: 8, aspectRatio: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.36)' }}>
                                                 <div style={{ fontSize: 13, fontWeight: 800, color: '#71717a' }}>OUTPUT</div>
                                                 <div style={{ fontSize: 9, color: '#a1a1aa', marginTop: 3 }}>
                                                     {Math.max(0, componentOf(nn.id).size - 1)} linked · click for Run
