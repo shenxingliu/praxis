@@ -953,7 +953,7 @@ export default function WeaveView() {
                                 style={{
                                     position: 'absolute', left: nn.x, top: nn.y, width: W(nn),
                                     ...(H(nn) ? { height: H(nn) } : {}),
-                                    background: 'rgba(255,255,255,0.82)',
+                                    background: 'rgba(255,255,255,0.95)',
                                     backdropFilter: 'blur(24px)',
                                     WebkitBackdropFilter: 'blur(24px)',
                                     borderRadius: 12,
