@@ -185,10 +185,9 @@ export default function WeaveView() {
     const [edges, setEdges] = useState<WeaveEdge[]>([]);
     const [linking, setLinking] = useState<{ from: string; x: number; y: number } | null>(null);
     const [expandedId, setExpandedId] = useState<string | null>(null);
-    const [assetsOpen, setAssetsOpen] = useState(true);
-    const [inspirationOpen, setInspirationOpen] = useState(true);
-    const [assetsRailWidth, setAssetsRailWidth] = useState(132);
-    const [inspirationRailWidth, setInspirationRailWidth] = useState(132);
+    const [libOpen, setLibOpen] = useState(true);
+    const [libTab, setLibTab] = useState<'assets' | 'inspiration'>('assets');
+    const [libWidth, setLibWidth] = useState(132);
     const [facetPick, setFacetPick] = useState<{ image: string; near: { x: number; y: number }; facets: Array<{ dimension: string; description: string }> } | null>(null);
     const [ratio, setRatio] = useState<GenerationParams['ratio']>('4:3');
     const [size, setSize] = useState<NonNullable<GenerationParams['size']>>('1K');
@@ -219,7 +218,8 @@ export default function WeaveView() {
     const orbit = useRef<{ id: string; sx: number; sy: number; a0: number; p0: number } | null>(null);
     /** Corner-handle resizing. */
     const resizing = useRef<{ id: string; dir: ResizeDir; sx: number; sy: number; x0: number; y0: number; w0: number; h0: number } | null>(null);
-    const railResize = useRef<{ rail: 'assets' | 'inspiration'; sx: number; w0: number } | null>(null);
+    const railResize = useRef<{ sx: number; w0: number } | null>(null);
+    const libRef = useRef<HTMLDivElement>(null);
     const boardRef = useRef<HTMLDivElement>(null);
     const [pan, setPan] = useState({ x: 40, y: 40 });
     const [scale, setScale] = useState(1);
@@ -236,9 +236,7 @@ export default function WeaveView() {
         const onPointerMove = (event: PointerEvent) => {
             const r = railResize.current;
             if (!r) return;
-            const w = Math.max(84, Math.min(280, Math.round(r.w0 + event.clientX - r.sx)));
-            if (r.rail === 'assets') setAssetsRailWidth(w);
-            else setInspirationRailWidth(w);
+            setLibWidth(Math.max(84, Math.min(280, Math.round(r.w0 + event.clientX - r.sx))));
         };
         const onPointerUp = () => { railResize.current = null; };
         window.addEventListener('pointermove', onPointerMove);
@@ -383,6 +381,8 @@ export default function WeaveView() {
         const el = boardRef.current;
         if (!el) return;
         const handler = (e: WheelEvent) => {
+            // Scrolling the library overlay must scroll its grid, not zoom.
+            if (libRef.current && e.target instanceof Node && libRef.current.contains(e.target)) return;
             e.preventDefault();
             e.stopPropagation();
             const rect = el.getBoundingClientRect();
@@ -808,16 +808,6 @@ export default function WeaveView() {
     };
 
     const collapsedRailWidth = 36;
-    const railHeaderStyle: React.CSSProperties = {
-        ...S.btnGhost,
-        minHeight: 32,
-        width: '100%',
-        justifyContent: 'space-between',
-        padding: '0 8px 0 10px',
-        borderRadius: 8,
-        background: 'rgba(255,255,255,0.54)',
-        border: '1px solid rgba(212,212,216,0.46)',
-    };
     const collapsedRailStyle: React.CSSProperties = {
         flex: `0 0 ${collapsedRailWidth}px`,
         alignSelf: 'stretch',
@@ -980,148 +970,7 @@ export default function WeaveView() {
             )}
 
             <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 8 }}>
-            <aside style={{
-                flex: '0 0 auto',
-                width: (assetsOpen ? assetsRailWidth : collapsedRailWidth) + (inspirationOpen ? inspirationRailWidth : collapsedRailWidth) + 8,
-                minHeight: 0,
-                display: 'flex',
-                gap: 8,
-                transition: 'width 180ms ease',
-            }}>
-                {assetsOpen ? (
-                    <div style={{ ...S.card, flex: `0 0 ${assetsRailWidth}px`, minWidth: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden', position: 'relative' }}>
-                        <button
-                            style={railHeaderStyle}
-                            onClick={() => setAssetsOpen(false)}
-                            title="Close Assets"
-                        >
-                            <span>Assets</span>
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{ fontSize: 9, color: '#a1a1aa' }}>{assets.length}</span>
-                                <span style={{ fontSize: 13, color: '#71717a', lineHeight: 1 }}>‹</span>
-                            </span>
-                        </button>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(42px, 1fr))', gap: 6, overflow: 'auto', minHeight: 0 }}>
-                            {assets.map(asset => (
-                                <button
-                                    key={asset.id}
-                                    onClick={() => add({ kind: 'hero', assetId: asset.id })}
-                                    title={asset.name}
-                                    style={{
-                                        border: '1px solid rgba(212,212,216,0.58)',
-                                        background: 'rgba(255,255,255,0.58)',
-                                        borderRadius: 8,
-                                        padding: 4,
-                                        cursor: 'pointer',
-                                        aspectRatio: '1',
-                                        display: 'block',
-                                        minWidth: 0,
-                                    }}
-                                >
-                                    {asset.photos[0] && <img src={asset.photos[0].image.value} alt="" draggable={false} style={{ width: '100%', height: '100%', borderRadius: 5, objectFit: 'cover', display: 'block' }} />}
-                                </button>
-                            ))}
-                            {assets.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>Empty</span>}
-                        </div>
-                        <div
-                            onPointerDown={event => {
-                                event.stopPropagation();
-                                railResize.current = { rail: 'assets', sx: event.clientX, w0: assetsRailWidth };
-                            }}
-                            title="Drag to resize Assets"
-                            style={{ position: 'absolute', right: -5, top: 42, bottom: 8, width: 10, cursor: 'col-resize', zIndex: 3, borderRadius: 999 }}
-                        />
-                    </div>
-                ) : (
-                    <button
-                        onClick={() => setAssetsOpen(true)}
-                        title="Open Assets"
-                        onMouseEnter={event => {
-                            event.currentTarget.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.56))';
-                            event.currentTarget.style.borderColor = 'rgba(161,161,170,0.78)';
-                            event.currentTarget.style.transform = 'translateX(1px)';
-                        }}
-                        onMouseLeave={event => {
-                            event.currentTarget.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.76), rgba(255,255,255,0.44))';
-                            event.currentTarget.style.borderColor = 'rgba(212,212,216,0.68)';
-                            event.currentTarget.style.transform = 'translateX(0)';
-                        }}
-                        style={collapsedRailStyle}
-                    >
-                        <span style={collapsedCountStyle}>{assets.length}</span>
-                        <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>Assets</span>
-                        <span style={collapsedChevronStyle}>›</span>
-                    </button>
-                )}
-
-                {inspirationOpen ? (
-                    <div style={{ ...S.card, flex: `0 0 ${inspirationRailWidth}px`, minWidth: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden', position: 'relative' }}>
-                        <button
-                            style={railHeaderStyle}
-                            onClick={() => setInspirationOpen(false)}
-                            title="Close Inspiration"
-                        >
-                            <span>Inspiration</span>
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{ fontSize: 9, color: '#a1a1aa' }}>{references.length}</span>
-                                <span style={{ fontSize: 13, color: '#71717a', lineHeight: 1 }}>‹</span>
-                            </span>
-                        </button>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(42px, 1fr))', gap: 6, overflow: 'auto', minHeight: 0 }}>
-                            {references.map(ref => (
-                                <button
-                                    key={ref.id}
-                                    onClick={() => add({ kind: 'image', image: ref.image.value, role: 'fusion' })}
-                                    title={ref.name}
-                                    style={{
-                                        border: '1px solid rgba(212,212,216,0.58)',
-                                        background: 'rgba(255,255,255,0.58)',
-                                        borderRadius: 8,
-                                        padding: 4,
-                                        cursor: 'pointer',
-                                        aspectRatio: '1',
-                                        display: 'block',
-                                        minWidth: 0,
-                                    }}
-                                >
-                                    <img src={ref.image.value} alt="" draggable={false} style={{ width: '100%', height: '100%', borderRadius: 5, objectFit: 'cover', display: 'block' }} />
-                                </button>
-                            ))}
-                            {references.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>Empty</span>}
-                        </div>
-                        <div
-                            onPointerDown={event => {
-                                event.stopPropagation();
-                                railResize.current = { rail: 'inspiration', sx: event.clientX, w0: inspirationRailWidth };
-                            }}
-                            title="Drag to resize Inspiration"
-                            style={{ position: 'absolute', right: -5, top: 42, bottom: 8, width: 10, cursor: 'col-resize', zIndex: 3, borderRadius: 999 }}
-                        />
-                    </div>
-                ) : (
-                    <button
-                        onClick={() => setInspirationOpen(true)}
-                        title="Open Inspiration"
-                        onMouseEnter={event => {
-                            event.currentTarget.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.56))';
-                            event.currentTarget.style.borderColor = 'rgba(161,161,170,0.78)';
-                            event.currentTarget.style.transform = 'translateX(1px)';
-                        }}
-                        onMouseLeave={event => {
-                            event.currentTarget.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.76), rgba(255,255,255,0.44))';
-                            event.currentTarget.style.borderColor = 'rgba(212,212,216,0.68)';
-                            event.currentTarget.style.transform = 'translateX(0)';
-                        }}
-                        style={collapsedRailStyle}
-                    >
-                        <span style={collapsedCountStyle}>{references.length}</span>
-                        <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>Inspiration</span>
-                        <span style={collapsedChevronStyle}>›</span>
-                    </button>
-                )}
-            </aside>
-
-            {/* Infinite canvas — fills the whole remaining viewport */}
+            {/* Infinite canvas — fills the whole viewport; the library floats on top */}
             <DropZone onFiles={addImages} hint="Drop images — fusion sources" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex' }}>
                 <div ref={boardRef} onPointerDown={onBoardDown} onPointerMove={onMove} onPointerUp={onUp}
                     style={{
@@ -1132,6 +981,88 @@ export default function WeaveView() {
                     <div style={{ position: 'absolute', top: 8, right: 12, zIndex: 10, fontSize: 10, color: '#a1a1aa', pointerEvents: 'none' }}>
                         {Math.round(scale * 100)}% · drag background to pan · wheel to zoom · click a node for actions
                     </div>
+
+                    {/* Library overlay — Assets + Inspiration in ONE floating layer */}
+                    {libOpen ? (
+                        <div
+                            ref={libRef}
+                            onPointerDown={e => e.stopPropagation()}
+                            style={{
+                                position: 'absolute', left: 10, top: 10, bottom: 10, width: libWidth, zIndex: 15,
+                                background: 'rgba(255,255,255,0.95)',
+                                backdropFilter: 'blur(24px) saturate(1.18)', WebkitBackdropFilter: 'blur(24px) saturate(1.18)',
+                                border: '1px solid #e4e4e7', borderRadius: 12,
+                                boxShadow: '0 20px 25px -5px rgba(0,0,0,0.08), 0 8px 10px -6px rgba(0,0,0,0.08)',
+                                display: 'flex', flexDirection: 'column', gap: 8, padding: 8, boxSizing: 'border-box',
+                            }}>
+                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                                {(['assets', 'inspiration'] as const).map(t => (
+                                    <button key={t} onClick={() => setLibTab(t)}
+                                        title={t === 'assets' ? `Assets (${assets.length})` : `Inspiration (${references.length})`}
+                                        style={{
+                                            flex: 1, border: 'none', borderRadius: 8, padding: '5px 0', cursor: 'pointer',
+                                            fontSize: 9.5, fontWeight: 800, letterSpacing: 0.4,
+                                            background: libTab === t ? '#18181b' : 'rgba(244,244,245,0.9)',
+                                            color: libTab === t ? '#fff' : '#3f3f46',
+                                        }}>
+                                        {t === 'assets' ? `Assets · ${assets.length}` : `Inspo · ${references.length}`}
+                                    </button>
+                                ))}
+                                <button onClick={() => setLibOpen(false)} title="Collapse library"
+                                    style={{ border: 'none', background: 'none', color: '#a1a1aa', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 2px' }}>‹</button>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(42px, 1fr))', gap: 6, overflowY: 'auto', minHeight: 0, flex: 1 }}>
+                                {libTab === 'assets' && assets.map(asset => (
+                                    <button
+                                        key={asset.id}
+                                        onClick={() => add({ kind: 'hero', assetId: asset.id })}
+                                        title={`${asset.name} — add to board`}
+                                        style={{
+                                            border: '1px solid rgba(212,212,216,0.58)', background: 'rgba(255,255,255,0.58)',
+                                            borderRadius: 8, padding: 4, cursor: 'pointer', aspectRatio: '1', display: 'block', minWidth: 0,
+                                        }}>
+                                        {asset.photos[0] && <img src={asset.photos[0].image.value} alt="" draggable={false} style={{ width: '100%', height: '100%', borderRadius: 5, objectFit: 'cover', display: 'block' }} />}
+                                    </button>
+                                ))}
+                                {libTab === 'assets' && assets.length === 0 && <span style={{ fontSize: 10.5, color: '#a1a1aa' }}>No assets yet — add them in the Assets tab.</span>}
+                                {libTab === 'inspiration' && references.map(ref => (
+                                    <button
+                                        key={ref.id}
+                                        onClick={() => add({ kind: 'image', image: ref.image.value, role: 'fusion' })}
+                                        title={`${ref.name} — add as vibe reference`}
+                                        style={{
+                                            border: '1px solid rgba(212,212,216,0.58)', background: 'rgba(255,255,255,0.58)',
+                                            borderRadius: 8, padding: 4, cursor: 'pointer', aspectRatio: '1', display: 'block', minWidth: 0,
+                                        }}>
+                                        <img src={ref.image.value} alt="" draggable={false} style={{ width: '100%', height: '100%', borderRadius: 5, objectFit: 'cover', display: 'block' }} />
+                                    </button>
+                                ))}
+                                {libTab === 'inspiration' && references.length === 0 && <span style={{ fontSize: 10.5, color: '#a1a1aa' }}>No references yet — collect them in Inspiration.</span>}
+                            </div>
+                            <div
+                                onPointerDown={event => {
+                                    event.stopPropagation();
+                                    railResize.current = { sx: event.clientX, w0: libWidth };
+                                }}
+                                title="Drag to resize the library"
+                                style={{ position: 'absolute', right: -5, top: 42, bottom: 8, width: 10, cursor: 'col-resize', zIndex: 3, borderRadius: 999 }}
+                            />
+                        </div>
+                    ) : (
+                        <button
+                            onClick={() => setLibOpen(true)}
+                            title="Open the library (Assets + Inspiration)"
+                            onPointerDown={e => e.stopPropagation()}
+                            style={{
+                                ...collapsedRailStyle,
+                                position: 'absolute', left: 10, top: 10, zIndex: 15,
+                                flex: undefined, alignSelf: undefined, width: collapsedRailWidth, maxHeight: 168,
+                            }}>
+                            <span style={collapsedCountStyle}>{assets.length + references.length}</span>
+                            <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>Library</span>
+                            <span style={collapsedChevronStyle}>›</span>
+                        </button>
+                    )}
                     {nodes.length === 0 && (
                         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a1a1aa', fontSize: 13, pointerEvents: 'none', textAlign: 'center', padding: 20 }}>
                             Add materials and prompts, drag port lines between nodes, wire groups into outputs, then Run — results appear inside the output node.
