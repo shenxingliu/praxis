@@ -348,8 +348,10 @@ export default function WeaveView() {
             const y = fromTop ? rs.y0 + (rs.h0 - h) : rs.y0;
             setNodes(prev => prev.map(nn => {
                 if (nn.id !== rs.id) return nn;
-                // Image nodes scale by width; height follows the picture.
-                if (nn.kind === 'image' && nodeImages(nn).length === 1) return { ...nn, x, w, h: undefined };
+                // Content-driven nodes scale by width; height follows content.
+                if (nn.kind === 'rotate' || nn.kind === 'output' || (nn.kind === 'image' && nodeImages(nn).length === 1)) {
+                    return { ...nn, x, w, h: undefined };
+                }
                 return { ...nn, x, y, w, h };
             }));
             return;
@@ -405,15 +407,15 @@ export default function WeaveView() {
         nn.kind === 'note' ? 220 :
         220
     );
-    // Single-image nodes ignore any stored height — the frame always
-    // follows the image's own aspect ratio, never cropping it.
+    // Content-driven nodes never take a fixed height — the frame follows
+    // what's inside (image aspect ratio, trackball, action rows) with no
+    // cropping. Notes/facets keep a working default; others keep custom h.
     const H = (nn: WeaveNode) => {
+        if (nn.kind === 'rotate' || nn.kind === 'output') return undefined;
         if (nn.kind === 'image' && nodeImages(nn).length === 1) return undefined;
         return nn.h ?? (
             nn.kind === 'note' ? 136 :
-            nn.kind === 'output' ? 260 :
             nn.kind === 'facet' ? 132 :
-            nn.kind === 'rotate' ? 236 :
             220
         );
     };
