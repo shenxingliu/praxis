@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Asset, Element, GenerationParams, GenerationResult, Reference, SubjectType } from '../domain/types';
+import { Asset, Element, GenerationParams, GenerationResult, Reference, SubjectType, KnowledgeRule } from '../domain/types';
 import { storage } from '../storage/local';
 import { brandKey, getCurrentBrandId } from '../domain/brand';
 import { INVENTORY_CHANGED_EVENT } from './events';
@@ -721,6 +721,27 @@ export default function WeaveView() {
             const r = await weaveNodes(nodes.filter(nn => comp.has(nn.id) && nn.id !== o.id), tier);
             if (r) assignToOutput(o.id, r);
         }
+    };
+
+    /** Promote a facet into a persistent brand rule — every future
+     *  generation (Studio, Canvas, Quick) injects it automatically. */
+    const facetToRule = async (nn: WeaveNode) => {
+        if (!nn.dimension || !nn.description) return;
+        const now = Date.now();
+        const rule: KnowledgeRule = {
+            id: crypto.randomUUID(),
+            brandId: getCurrentBrandId(),
+            scope: {},
+            rule: `${nn.dimension.toUpperCase()}: ${nn.description}`,
+            polarity: 'must',
+            confidence: 1,
+            sources: [],
+            enabled: true,
+            createdAt: now,
+            updatedAt: now,
+        };
+        await storage.upsertRule(rule);
+        setNotice(`Saved as a brand rule — future generations honor it (manage in Brain).`);
     };
 
     /** Solo-run one facet: spawn an output next to it. */
@@ -1543,7 +1564,12 @@ export default function WeaveView() {
                                             </>
                                         )}
                                         {nn.kind === 'facet' && (
-                                            <button style={miniBtn} disabled={!!busy} onClick={() => runFacet(nn)}>solo (flash)</button>
+                                            <>
+                                                <button style={miniBtn} disabled={!!busy} onClick={() => runFacet(nn)}>solo (flash)</button>
+                                                <button style={{ ...miniBtn, background: '#18181b', color: '#fff', border: '1px solid #18181b' }} disabled={!!busy}
+                                                    onClick={() => facetToRule(nn)}
+                                                    title="Save this dimension as a permanent brand rule — every future generation will honor it (toggle/delete in Brain)">→ Rule</button>
+                                            </>
                                         )}
                                         {nn.kind === 'hero' && (
                                             <>

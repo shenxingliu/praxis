@@ -27,7 +27,22 @@ export interface WeaveFacet {
     description: string;
 }
 
-export const FACET_DIMENSIONS = ['light', 'palette', 'composition', 'material', 'texture', 'mood', 'space'] as const;
+export const FACET_DIMENSIONS = ['light', 'palette', 'composition', 'material', 'texture', 'mood', 'space', 'camera', 'styling', 'grading', 'narrative'] as const;
+
+/** What each dimension means — keeps the extraction model on-target. */
+const FACET_HINTS: Record<(typeof FACET_DIMENSIONS)[number], string> = {
+    light: 'direction, quality (hard/soft), temperature, shadow behavior',
+    palette: 'the actual colors and their proportions/logic',
+    composition: 'framing geometry, balance, focal placement, negative space',
+    material: 'named surface materials and their finish',
+    texture: 'tactile surface qualities and grain',
+    mood: 'the emotional tone and atmosphere',
+    space: 'spatial depth, scale feeling, architectural envelope',
+    camera: 'lens language — focal-length feel (wide/normal/tele compression), depth of field, camera height and distance',
+    styling: 'propping logic — staging density, prop families, arrangement rhythm and curation style',
+    grading: 'color treatment — contrast curve, shadow/highlight tinting, saturation strategy, film-like character (distinct from WHICH colors)',
+    narrative: 'the implied story or human moment — time of day, traces of presence, what just happened',
+};
 
 /** Multi-dimensional decomposition: one vision call → all 7 facets. */
 export async function extractFacets(image: string): Promise<Array<{ dimension: string; description: string }>> {
@@ -35,7 +50,7 @@ export async function extractFacets(image: string): Promise<Array<{ dimension: s
         `Decompose the attached image into its INDEPENDENT visual dimensions, so each can be transferred to a different image on its own.
 
 For each dimension output a CONCRETE, promptable description (specific hues, light direction/quality, named materials, compositional geometry — never vague):
-${FACET_DIMENSIONS.map(d => `- ${d}`).join('\n')}
+${FACET_DIMENSIONS.map(d => `- ${d}: ${FACET_HINTS[d]}`).join('\n')}
 
 Output JSON: { "facets": [ { "dimension", "description" } ] }`,
         [image]
