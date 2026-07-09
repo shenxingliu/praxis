@@ -27,7 +27,7 @@ export interface WeaveFacet {
     description: string;
 }
 
-export const FACET_DIMENSIONS = ['light', 'palette', 'composition', 'material', 'texture', 'mood', 'space', 'camera', 'styling', 'grading', 'narrative'] as const;
+export const FACET_DIMENSIONS = ['light', 'palette', 'composition', 'material', 'texture', 'mood', 'space', 'form', 'camera', 'styling', 'grading', 'narrative'] as const;
 
 /** What each dimension means — keeps the extraction model on-target. */
 const FACET_HINTS: Record<(typeof FACET_DIMENSIONS)[number], string> = {
@@ -38,6 +38,7 @@ const FACET_HINTS: Record<(typeof FACET_DIMENSIONS)[number], string> = {
     texture: 'tactile surface qualities and grain',
     mood: 'the emotional tone and atmosphere',
     space: 'spatial depth, scale feeling, architectural envelope',
+    form: 'the sculptural language of the main subject — silhouette character, geometric vocabulary (curves vs planes), proportions, edge radii, visual weight — described ABSTRACTLY as transferable form language, never naming or reproducing the object itself',
     camera: 'lens language — focal-length feel (wide/normal/tele compression), depth of field, camera height and distance',
     styling: 'propping logic — staging density, prop families, arrangement rhythm and curation style',
     grading: 'color treatment — contrast curve, shadow/highlight tinting, saturation strategy, film-like character (distinct from WHICH colors)',
