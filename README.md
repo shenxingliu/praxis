@@ -44,3 +44,39 @@ npm run build      # TypeScript + Vite production build
 - **M1** 独立项目、域模型、存储抽象、生成引擎、学习闭环 ✅
 - **M2** Studio / Weave / Heroes / Library / Brain 工作流打磨
 - **M3** Board 节点画布模式、批量队列、生成前自检、成本看板
+
+## 部署与 API Key 安全
+
+发布/部署遵循一个原则：**Gemini key 永远不进仓库、不进前端包**。
+
+### 推荐：代理模式（部署到 Vercel）
+
+1. Fork / clone 本仓库，导入 Vercel。
+2. Vercel 项目 → Settings → Environment Variables 配置：
+   - `GEMINI_API_KEY` — 你的 Gemini key（只存在于服务端函数）
+   - `APP_ACCESS_TOKEN` — 自定义口令，防止陌生人烧你的额度
+3. 构建环境变量（同一处配置，带 `VITE_` 前缀的会打进前端包）：
+   - `VITE_USE_PROXY=1`
+   - `VITE_APP_ACCESS_TOKEN` — 与上面口令相同
+4. 浏览器只跟 `/api/gemini` 通信；key 不出服务端。
+
+### 自带 Key 模式（BYOK，本地/单机用）
+
+不配代理时，可在应用 System 页填入自己的 Gemini key，存于浏览器
+localStorage。key 是用户自己的、只在用户自己的浏览器里 —— 适合本地
+使用；不要在公网部署上依赖这种方式（XSS 即可读走）。
+
+### Key 本身的加固（Google AI Studio）
+
+- API restrictions：限定该 key 只能调用 Generative Language API
+- 设置每日配额上限 + 账单告警，泄露时损失有上界
+- 怀疑泄露立即 Rotate
+
+### 发布检查清单
+
+- `.env*` 已 gitignore（模板见 `.env.example`），`dist/` 不入库
+- 千万不要为公网部署设置 `VITE_GEMINI_API_KEY` —— `VITE_` 变量会被
+  打包进公开的 JS
+- GitHub 仓库 Settings → Code security 打开 Secret scanning 和
+  Push protection
+- Supabase 多人使用前必须配 RLS（当前为单用户开放策略）
