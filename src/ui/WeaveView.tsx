@@ -187,7 +187,7 @@ export default function WeaveView() {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [libOpen, setLibOpen] = useState(true);
     const [libTab, setLibTab] = useState<'assets' | 'inspiration'>('assets');
-    const [libWidth, setLibWidth] = useState(176);
+    const [libWidth, setLibWidth] = useState(208);
     const [facetPick, setFacetPick] = useState<{ image: string; near: { x: number; y: number }; facets: Array<{ dimension: string; description: string }> } | null>(null);
     const [ratio, setRatio] = useState<GenerationParams['ratio']>('4:3');
     const [size, setSize] = useState<NonNullable<GenerationParams['size']>>('1K');
@@ -236,7 +236,7 @@ export default function WeaveView() {
         const onPointerMove = (event: PointerEvent) => {
             const r = railResize.current;
             if (!r) return;
-            setLibWidth(Math.max(120, Math.min(340, Math.round(r.w0 + event.clientX - r.sx))));
+            setLibWidth(Math.max(150, Math.min(380, Math.round(r.w0 + event.clientX - r.sx))));
         };
         const onPointerUp = () => { railResize.current = null; };
         window.addEventListener('pointermove', onPointerMove);
@@ -993,23 +993,25 @@ export default function WeaveView() {
                                 backdropFilter: 'blur(24px) saturate(1.18)', WebkitBackdropFilter: 'blur(24px) saturate(1.18)',
                                 border: '1px solid #e4e4e7', borderRadius: 12,
                                 boxShadow: '0 20px 25px -5px rgba(0,0,0,0.08), 0 8px 10px -6px rgba(0,0,0,0.08)',
-                                display: 'flex', flexDirection: 'column', gap: 8, padding: 8, boxSizing: 'border-box',
+                                display: 'flex', flexDirection: 'row', gap: 6, padding: 6, boxSizing: 'border-box',
                             }}>
-                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                            <div style={{ width: 30, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
                                 {(['assets', 'inspiration'] as const).map(t => (
                                     <button key={t} onClick={() => setLibTab(t)}
                                         title={t === 'assets' ? `Assets (${assets.length})` : `Inspiration (${references.length})`}
                                         style={{
-                                            flex: 1, border: 'none', borderRadius: 8, padding: '5px 0', cursor: 'pointer',
-                                            fontSize: 9.5, fontWeight: 800, letterSpacing: 0.4,
+                                            border: 'none', borderRadius: 8, cursor: 'pointer', padding: '10px 0 7px',
+                                            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                                            fontSize: 9.5, fontWeight: 800, letterSpacing: 0.7,
                                             background: libTab === t ? '#18181b' : 'rgba(244,244,245,0.9)',
                                             color: libTab === t ? '#fff' : '#3f3f46',
                                         }}>
-                                        {t === 'assets' ? `Assets · ${assets.length}` : `Inspo · ${references.length}`}
+                                        <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>{t === 'assets' ? 'Assets' : 'Inspiration'}</span>
+                                        <span style={{ fontSize: 8.5, opacity: 0.72, letterSpacing: 0 }}>{t === 'assets' ? assets.length : references.length}</span>
                                     </button>
                                 ))}
                                 <button onClick={() => setLibOpen(false)} title="Collapse library"
-                                    style={{ border: 'none', background: 'none', color: '#a1a1aa', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 2px' }}>‹</button>
+                                    style={{ marginTop: 'auto', border: 'none', background: 'none', color: '#a1a1aa', cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: '4px 0' }}>‹</button>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(68px, 1fr))', gap: 6, overflowY: 'auto', minHeight: 0, flex: 1, alignContent: 'start' }}>
                                 {libTab === 'assets' && assets.map(asset => (
