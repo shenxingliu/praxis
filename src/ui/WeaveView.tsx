@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Asset, Element, GenerationParams, GenerationResult, SubjectType } from '../domain/types';
+import { Asset, Element, GenerationParams, GenerationResult, Reference, SubjectType } from '../domain/types';
 import { storage } from '../storage/local';
 import { brandKey, getCurrentBrandId } from '../domain/brand';
 import { INVENTORY_CHANGED_EVENT } from './events';
@@ -180,6 +180,7 @@ const fitImage = (fixed: boolean, extra: React.CSSProperties = {}): React.CSSPro
 export default function WeaveView() {
     const [assets, setAssets] = useState<Asset[]>([]);
     const [elements, setElements] = useState<Element[]>([]);
+    const [references, setReferences] = useState<Reference[]>([]);
     const [nodes, setNodes] = useState<WeaveNode[]>([]);
     const [edges, setEdges] = useState<WeaveEdge[]>([]);
     const [linking, setLinking] = useState<{ from: string; x: number; y: number } | null>(null);
@@ -223,6 +224,7 @@ export default function WeaveView() {
     useEffect(() => {
         storage.listAssets().then(setAssets);
         storage.listElements().then(es => setElements(es.filter(e => e.enabled)));
+        storage.listReferences().then(setReferences);
         storage.kvGet<WeaveConfig[]>(brandKey(CONFIGS_KEY)).then(c => setConfigs(c ?? []));
     }, []);
 
@@ -799,12 +801,12 @@ export default function WeaveView() {
 
             {/* Toolbar */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <button style={S.btn} onClick={() => setPicker(picker === 'hero' ? null : 'hero')}>+ Asset</button>
-                <button style={S.btn} onClick={() => setPicker(picker === 'element' ? null : 'element')} title="Add a concept card from your Inspiration library">+ Inspiration</button>
-                <button style={S.btnGhost} onClick={() => fileRef.current?.click()}>+ Images</button>
-                <button style={S.btnGhost} onClick={() => add({ kind: 'note', text: '' })}>+ Prompt</button>
-                <button style={S.btnGhost} onClick={() => add({ kind: 'output' })}>.+ Output</button>
-                <button style={S.btnGhost} onClick={() => add({ kind: 'rotate', angle: 90 })} title="Turntable: connect a subject, render it from any angle or a full 360°">+ Rotate</button>
+                <button style={S.btn} onClick={() => setPicker(picker === 'hero' ? null : 'hero')}>Asset</button>
+                <button style={S.btn} onClick={() => setPicker(picker === 'element' ? null : 'element')} title="Add an image from your Inspiration library">Inspiration</button>
+                <button style={S.btnGhost} onClick={() => fileRef.current?.click()}>Images</button>
+                <button style={S.btnGhost} onClick={() => add({ kind: 'note', text: '' })}>Prompt</button>
+                <button style={S.btnGhost} onClick={() => add({ kind: 'output' })}>Output</button>
+                <button style={S.btnGhost} onClick={() => add({ kind: 'rotate', angle: 90 })} title="Turntable: connect a subject, render it from any angle or a full 360°">Rotate</button>
                 <input ref={fileRef} type="file" multiple accept="image/*" style={{ display: 'none' }}
                     onChange={e => { addImages(e.target.files); e.currentTarget.value = ''; }} />
                 <input ref={appendRef} type="file" multiple accept="image/*" style={{ display: 'none' }}
@@ -838,13 +840,14 @@ export default function WeaveView() {
             )}
             {picker === 'element' && (
                 <div style={{ ...S.card, display: 'flex', gap: 6, flexWrap: 'wrap', maxHeight: 180, overflow: 'auto' }}>
-                    {elements.map(el => (
-                        <button key={el.id} style={chip(false)} title={el.description}
-                            onClick={() => { add({ kind: 'element', elementId: el.id }); setPicker(null); }}>
-                            [{el.type}] {el.concept}
+                    {references.map(ref => (
+                        <button key={ref.id} style={chip(false)} title={ref.name}
+                            onClick={() => { add({ kind: 'image', image: ref.image.value, role: 'fusion' }); setPicker(null); }}>
+                            <img src={ref.image.value} alt="" style={{ width: 20, height: 20, borderRadius: 4, objectFit: 'cover', marginRight: 5, verticalAlign: 'middle' }} />
+                            {ref.name}
                         </button>
                     ))}
-                    {elements.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No concepts — decompose references in Inspiration.</span>}
+                    {references.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No images — add them in Inspiration.</span>}
                 </div>
             )}
 
@@ -1270,7 +1273,7 @@ export default function WeaveView() {
                                                     </button>
                                                 ))}
                                                 <button style={miniBtn} disabled={!!busy} onClick={() => { appendTarget.current = nn; appendRef.current?.click(); }}
-                                                    title="Merge more angles of the same subject into this node">＋ angles</button>
+                                                    title="Merge more angles of the same subject into this node">Angles</button>
                                                 <button style={miniBtn} disabled={!!busy} onClick={() => decomposeNode(nn)}
                                                     title="Extract: split this image into light / palette / composition / material / texture / mood / space — then borrow ONLY the dimensions you pick">Extract</button>
                                                 <button style={miniBtn} disabled={!!busy} onClick={() => imageToPrompt(nn)}>Prompt</button>
