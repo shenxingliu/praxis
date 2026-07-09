@@ -35,6 +35,7 @@ export default function StudioView() {
     const [inspOpen, setInspOpen] = useState(false);
     const [assetsOpen, setAssetsOpen] = useState(true);
     const [noteText, setNoteText] = useState('');
+    const [jobs, setJobs] = useState<PraxisJob[]>([]);
     const [brief, setBrief] = useState('');
     const [count, setCount] = useState(2);
     const [results, setResults] = useState<GenerationResult[]>([]);
@@ -49,6 +50,7 @@ export default function StudioView() {
         storage.listAssets().then(setAssets);
         storage.listElements().then(setElements);
         storage.listReferences().then(rs => setRefs(rs.filter(r => r?.image?.kind === 'data' && r.kind !== 'plate'))).catch(err => console.warn('[studio] refs load failed:', err));
+        storage.listJobs(30).then(setJobs).catch(() => {});
     }, []);
 
     const guard = async (label: string, fn: () => Promise<void>) => {
@@ -155,6 +157,24 @@ export default function StudioView() {
 
     const reset = () => { setJob(null); setResults([]); setBrief(''); setFeedback(new Map()); setMoodDrafts([]); };
 
+    useEffect(() => {
+        storage.listJobs(30).then(setJobs).catch(() => {});
+    }, [job?.updatedAt]);
+
+    /** Resume a past job — thread, stage and (recent) results included. */
+    const resume = async (j: PraxisJob) => {
+        setJob(j);
+        setBrief(j.brief);
+        setMoodDrafts([]);
+        setFeedback(new Map());
+        const rs: GenerationResult[] = [];
+        for (const id of j.resultIds.slice(-8)) {
+            const r = await storage.getResult(id).catch(() => null);
+            if (r) rs.push(r);
+        }
+        setResults(rs);
+    };
+
     /** Step back one stage — every decision is reversible. */
     const back = async () => {
         if (!job) return;
@@ -225,7 +245,32 @@ export default function StudioView() {
     const elementById = (id: string) => elements.find(e => e.id === id);
 
     return (
-        <div style={{ maxWidth: 900, margin: '0 auto', padding: '22px 28px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ maxWidth: 1180, margin: '0 auto', padding: '18px 22px', display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+            {/* Job history — every job is a conversation */}
+            <aside style={{ width: 200, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, position: 'sticky', top: 12 }}>
+                <button style={{ ...S.btn, width: '100%' }} onClick={reset}>＋ New job</button>
+                <span style={S.label}>JOBS</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, overflowY: 'auto', maxHeight: 'calc(100vh - 140px)' }}>
+                    {jobs.map(j => (
+                        <button key={j.id} onClick={() => resume(j)}
+                            style={{
+                                textAlign: 'left', padding: '7px 10px', borderRadius: 10, cursor: 'pointer',
+                                border: job?.id === j.id ? '1.5px solid #18181b' : '1px solid rgba(212,212,216,0.5)',
+                                background: 'rgba(255,255,255,0.6)',
+                            }}>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: '#18181b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {j.brief.trim() ? j.brief.slice(0, 42) : 'Open exploration'}
+                            </div>
+                            <div style={{ fontSize: 9, color: '#a1a1aa', marginTop: 2 }}>
+                                {(STAGE_LABEL[j.stage] ?? j.stage)} · {new Date(j.updatedAt).toLocaleDateString()}
+                            </div>
+                        </button>
+                    ))}
+                    {jobs.length === 0 && <span style={{ fontSize: 10.5, color: '#a1a1aa' }}>No jobs yet — describe one below.</span>}
+                </div>
+            </aside>
+
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
             {/* Stage rail */}
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 {STAGES.map((s, i) => (
@@ -276,12 +321,19 @@ export default function StudioView() {
             {!job && (
                 <DropZone onFiles={reverseBrief} hint="Drop a competitor's image — reverse brief">
                 <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <span style={S.label}>CLIENT BRIEF</span>
-                    <textarea
-                        style={{ ...S.input, width: '100%', minHeight: 70, boxSizing: 'border-box', resize: 'vertical' }}
-                        placeholder='Optional — leave blank for open exploration (the studio proposes what the brand should make next). Or e.g. "Spring campaign hero image — fresh, optimistic, website banner"'
-                        value={brief} onChange={e => setBrief(e.target.value)}
-                    />
+                    <div style={{ textAlign: 'center', padding: '26px 0 10px', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
+                        <div style={{ width: 46, height: 46, borderRadius: 999, background: 'radial-gradient(circle at 32% 28%, #d7dce6, #18181b)', boxShadow: '0 12px 26px rgba(0,0,0,0.18)' }} />
+                        <div style={{ fontSize: 21, fontWeight: 800, color: '#18181b' }}>What should the studio make?</div>
+                        <div style={{ fontSize: 12, color: '#71717a', maxWidth: 420, lineHeight: 1.6 }}>
+                            Describe it in the box below — or leave it empty for open exploration. Attach assets & inspiration here, then Send: the studio proposes, plans, shoots and learns from your feedback.
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center', marginTop: 4 }}>
+                            {['Spring campaign hero — fresh, optimistic', 'Clean silo set for the newest collection', 'Lifestyle scene for social — quiet morning'].map(sug => (
+                                <button key={sug} style={chip(brief === sug)} onClick={() => setBrief(sug)}>{sug}</button>
+                            ))}
+                        </div>
+                    </div>
+                    {brief.trim() && <div style={{ fontSize: 11, color: '#3f3f46', background: 'rgba(244,244,245,0.8)', borderRadius: 8, padding: '6px 10px' }}>Brief: {brief}</div>}
                     <button
                         onClick={() => setAssetsOpen(o => !o)}
                         style={{
@@ -367,9 +419,6 @@ export default function StudioView() {
                         </div>
                     </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <button style={S.btn} disabled={!!busy} onClick={begin}>
-                            Start — propose concepts
-                        </button>
                         <button style={S.btnGhost} disabled={!!busy} onClick={() => competitorRef.current?.click()}>
                             ↩ Reverse brief — answer a competitor's image
                         </button>
@@ -590,6 +639,21 @@ export default function StudioView() {
                     </div>
                 </div>
             )}
+
+            {/* First-message composer — typing here IS the brief */}
+            {!job && (
+                <div style={{ position: 'sticky', bottom: 10, zIndex: 20, display: 'flex', gap: 6, padding: 6, borderRadius: 12, background: 'rgba(255,255,255,0.82)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(212,212,216,0.6)', boxShadow: '0 12px 28px rgba(0,0,0,0.10)' }}>
+                    <input
+                        value={brief}
+                        onChange={e => setBrief(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') begin(); }}
+                        placeholder="Describe what the studio should make — or leave empty and Send for open exploration…"
+                        style={{ ...S.input, flex: 1, border: 'none', background: 'transparent' }}
+                    />
+                    <button style={S.btn} disabled={!!busy} onClick={begin}>Send</button>
+                </div>
+            )}
+        </div>
         </div>
     );
 }
