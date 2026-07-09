@@ -1384,6 +1384,11 @@ export default function WeaveView() {
                                         <div style={{ fontSize: 10, fontWeight: 700, marginTop: 3, display: fixed ? 'none' : undefined, color: '#3f3f46' }}>
                                             {a.name}
                                             {(nn.quantity ?? 1) > 1 && <span style={{ color: '#71717a', marginLeft: 4 }}>×{nn.quantity}</span>}
+                                            <div
+                                                title="This asset is the pixel truth: every generation reconstructs it exactly from these photos — geometry, materials, color, details. On Pro, the consistency inspector verifies the result and surgically corrects deviations."
+                                                style={{ fontSize: 8.5, fontWeight: 600, color: '#a1a1aa', marginTop: 2, lineHeight: 1.35 }}>
+                                                <span style={{ color: '#047857', fontWeight: 800 }}>✓</span> photo-exact — generations reproduce this asset faithfully
+                                            </div>
                                         </div>
                                     </div>
                                 )}
