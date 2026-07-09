@@ -516,16 +516,17 @@ export default function WeaveView() {
     };
 
     // --- facets: extract, then let the user PICK which ones to add ---
-    const decomposeNode = async (node: WeaveNode) => {
-        if (!node.image) return;
+    const decomposeImage = async (image: string | undefined, near: { x: number; y: number }) => {
+        if (!image) return;
         setBusy('Decomposing into dimensions…');
         setNotice('');
         try {
-            const facets = await extractFacets(node.image);
-            setFacetPick({ image: node.image, near: { x: node.x + 150, y: node.y }, facets });
+            const facets = await extractFacets(image);
+            setFacetPick({ image, near, facets });
         } catch (err: any) { setNotice(`${err?.message || err}`); }
         setBusy('');
     };
+    const decomposeNode = (node: WeaveNode) => decomposeImage(node.image, { x: node.x + 150, y: node.y });
 
     const addFacet = (f: { dimension: string; description: string }, i: number) => {
         if (!facetPick) return;
@@ -584,15 +585,25 @@ export default function WeaveView() {
         }
     };
 
-    const imageToPrompt = async (node: WeaveNode) => {
-        if (!node.image) return;
+    const imageToPromptAt = async (image: string | undefined, pos: { x: number; y: number }) => {
+        if (!image) return;
         setBusy('Reading the image into a prompt…');
         try {
-            const text = await describeAsPrompt(node.image);
-            add({ kind: 'note', text }, { x: node.x + 145, y: node.y });
+            const text = await describeAsPrompt(image);
+            add({ kind: 'note', text }, pos);
             setNotice('Prompt derived — edit it freely.');
         } catch (err: any) { setNotice(`${err?.message || err}`); }
         setBusy('');
+    };
+    const imageToPrompt = (node: WeaveNode) => imageToPromptAt(node.image, { x: node.x + 145, y: node.y });
+
+    /** Spin an asset's photo off into reference nodes / derivations. */
+    const assetToImage = (nn: WeaveNode, asset: Asset, role: 'fusion' | 'concept') => {
+        const img = asset.photos[0]?.image.value;
+        if (!img) return;
+        const created = add({ kind: 'image', image: img, role }, { x: nn.x + W(nn) + 30, y: nn.y });
+        if (role === 'concept') setRole(created, 'concept');
+        setNotice(role === 'fusion' ? 'Vibe reference created from the asset.' : 'Idea reference created — deriving its idea…');
     };
 
     // --- directed analysis: note + connected image → prompt ---
@@ -1541,6 +1552,18 @@ export default function WeaveView() {
                                                     <span style={{ fontSize: 10, fontWeight: 800, minWidth: 14, textAlign: 'center' }}>{nn.quantity ?? 1}</span>
                                                     <button style={miniBtn} onClick={() => setNodes(prev => prev.map(x => x.id === nn.id ? { ...x, quantity: Math.min(10, (x.quantity ?? 1) + 1) } : x))}>+</button>
                                                 </span>
+                                                {a && <>
+                                                    <button style={miniBtn} disabled={!!busy} onClick={() => assetToImage(nn, a, 'fusion')}
+                                                        title="Spin off a Vibe reference: blend this asset photo's overall look into generations">Vibe</button>
+                                                    <button style={miniBtn} disabled={!!busy} onClick={() => assetToImage(nn, a, 'concept')}
+                                                        title="Spin off an Idea reference: distill this asset photo into one transferable idea">Idea</button>
+                                                    <button style={miniBtn} disabled={!!busy}
+                                                        onClick={() => decomposeImage(a.photos[0]?.image.value, { x: nn.x + W(nn) + 40, y: nn.y })}
+                                                        title="Extract: split this asset photo into light / palette / composition / material / texture / mood / space">Extract</button>
+                                                    <button style={miniBtn} disabled={!!busy}
+                                                        onClick={() => imageToPromptAt(a.photos[0]?.image.value, { x: nn.x + W(nn) + 30, y: nn.y + 40 })}
+                                                        title="Reverse-engineer a generation prompt from this asset photo">Prompt</button>
+                                                </>}
                                                 <button style={miniBtn} disabled={!!busy}
                                                     onClick={() => { if (a) { appendTarget.current = a; appendRef.current?.click(); } }}
                                                     title="Upload more photos of this asset from other angles — they persist on the asset and feed rotate + fidelity">Add angles</button>
