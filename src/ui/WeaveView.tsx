@@ -850,22 +850,33 @@ export default function WeaveView() {
 
             {/* Facet chooser — pick only the dimensions you want */}
             {facetPick && (
-                <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 8, border: '1.5px dashed #a1a1aa' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={S.label}>EXTRACT · pick only the dimensions you want</span>
+                <div style={{ ...S.card, display: 'flex', gap: 10, alignItems: 'center', border: '1.5px dashed #a1a1aa', padding: 10 }}>
+                    <img
+                        src={facetPick.image}
+                        alt=""
+                        draggable={false}
+                        style={{ width: 54, height: 54, borderRadius: 8, objectFit: 'cover', flex: '0 0 auto', border: '1px solid rgba(0,0,0,0.08)' }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                        <span style={S.label}>EXTRACT</span>
                         <span style={{ display: 'flex', gap: 6 }}>
                             <button style={S.btnGhost} onClick={() => { facetPick.facets.forEach((f, i) => addFacet(f, i)); setFacetPick(null); }}>Add all</button>
                             <button style={S.btnGhost} onClick={() => setFacetPick(null)}>Close</button>
                         </span>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
                         {facetPick.facets.map((f, i) => (
-                            <button key={f.dimension} onClick={() => { addFacet(f, i); }}
-                                style={{ ...S.card, textAlign: 'left', cursor: 'pointer', background: '#fafafa', padding: 8 }}>
-                                <div style={{ fontSize: 10.5, fontWeight: 800 }}>{f.dimension.toUpperCase()} <span style={{ fontWeight: 400, color: '#a1a1aa' }}>· click to add</span></div>
-                                <div style={{ fontSize: 10, color: '#71717a', marginTop: 3 }}>{f.description}</div>
+                            <button
+                                key={f.dimension}
+                                onClick={() => { addFacet(f, i); }}
+                                title={f.description}
+                                style={{ ...chip(false), minHeight: 30, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.2 }}
+                            >
+                                <div>{f.dimension.toUpperCase()}</div>
                             </button>
                         ))}
+                    </div>
                     </div>
                 </div>
             )}
