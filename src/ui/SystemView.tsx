@@ -4,6 +4,7 @@ import { SupabaseProvider } from '../storage/supabase';
 import { Asset, BudgetConfig, Reference } from '../domain/types';
 import { INVENTORY_CHANGED_EVENT } from './events';
 import { S } from './styles';
+import { isProxyMode } from '../engine/gemini';
 
 /** System — stores overview, budget, and optional legacy data import. */
 export default function SystemView() {
@@ -66,6 +67,16 @@ export default function SystemView() {
         await storage.setBudget(next);
     };
 
+    // BYOK: the user's own Gemini key, kept in this browser only.
+    const [apiKey, setApiKey] = useState(() =>
+        typeof window !== 'undefined' ? localStorage.getItem('GEMINI_API_KEY') ?? '' : '');
+    const saveApiKey = (value: string) => {
+        setApiKey(value);
+        const trimmed = value.trim();
+        if (trimmed) localStorage.setItem('GEMINI_API_KEY', trimmed);
+        else localStorage.removeItem('GEMINI_API_KEY');
+    };
+
     /** One-click legacy import: old cloud tables may already hold compatible
      *  assets/references — read them, stamp the active brandId, write into
      *  praxis_* tables. */
@@ -121,6 +132,30 @@ export default function SystemView() {
                     <tr><td>Feedback signals</td><td><strong>{counts.signals}</strong></td></tr>
                 </tbody>
             </table>
+
+            <h2 style={{ fontSize: 16, marginTop: 24 }}>Gemini API Key</h2>
+            {isProxyMode() ? (
+                <p style={{ fontSize: 13, color: '#71717a' }}>
+                    Proxy mode is on — generations run through this deployment's server-side key. Nothing to configure here.
+                </p>
+            ) : (
+                <>
+                    <p style={{ fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <input
+                            type="password"
+                            value={apiKey}
+                            onChange={e => saveApiKey(e.target.value)}
+                            placeholder="Paste your Gemini API key"
+                            style={{ ...S.input, width: 320 }}
+                        />
+                        {apiKey.trim() && <span style={{ color: '#047857', fontSize: 12, fontWeight: 700 }}>saved ✓</span>}
+                    </p>
+                    <p style={{ fontSize: 12, color: '#71717a' }}>
+                        Stored only in this browser (localStorage); sent only to Google when generating.
+                        Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">aistudio.google.com/apikey</a>.
+                    </p>
+                </>
+            )}
 
             <h2 style={{ fontSize: 16, marginTop: 24 }}>Budget</h2>
             <p style={{ fontSize: 14 }}>

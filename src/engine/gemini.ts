@@ -20,7 +20,7 @@ export const COST_ESTIMATE_USD: Record<string, number> = {
     [MODELS.text]: 0.002,
 };
 
-const isProxyMode = (): boolean =>
+export const isProxyMode = (): boolean =>
     String(import.meta.env.VITE_USE_PROXY || '').toLowerCase() === 'true';
 
 export const appApiHeaders = (): Record<string, string> => {
