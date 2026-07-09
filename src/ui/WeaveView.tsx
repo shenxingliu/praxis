@@ -769,7 +769,7 @@ export default function WeaveView() {
             {/* Toolbar */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <button style={S.btn} onClick={() => setPicker(picker === 'hero' ? null : 'hero')}>+ Asset</button>
-                <button style={S.btn} onClick={() => setPicker(picker === 'element' ? null : 'element')}>+ Concept</button>
+                <button style={S.btn} onClick={() => setPicker(picker === 'element' ? null : 'element')} title="Add a concept card from your Inspiration library">+ Inspiration</button>
                 <button style={S.btnGhost} onClick={() => fileRef.current?.click()}>+ Images</button>
                 <button style={S.btnGhost} onClick={() => add({ kind: 'note', text: '' })}>+ Prompt</button>
                 <button style={S.btnGhost} onClick={() => add({ kind: 'output' })}>.+ Output</button>
@@ -821,7 +821,7 @@ export default function WeaveView() {
             {facetPick && (
                 <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 8, border: '1.5px dashed #a1a1aa' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={S.label}>PICK DIMENSIONS · add only what you want</span>
+                        <span style={S.label}>EXTRACT · pick only the dimensions you want</span>
                         <span style={{ display: 'flex', gap: 6 }}>
                             <button style={S.btnGhost} onClick={() => { facetPick.facets.forEach((f, i) => addFacet(f, i)); setFacetPick(null); }}>Add all</button>
                             <button style={S.btnGhost} onClick={() => setFacetPick(null)}>Close</button>
@@ -1028,7 +1028,7 @@ export default function WeaveView() {
                                                 style={fitImage(fixed)} />
                                         )}
                                         <div style={{ fontSize: 9, color: '#a1a1aa', marginTop: 2, display: fixed ? 'none' : undefined }}>
-                                            {nn.role === 'hero' ? 'hero (exact)' : nn.role === 'concept' ? 'concept' : 'fusion'}
+                                            {nn.role === 'hero' ? 'asset (exact)' : nn.role === 'concept' ? 'idea' : 'vibe'}
                                             {nodeImages(nn).length > 1 ? ` · ${nodeImages(nn).length} angles` : ''}
                                         </div>
                                     </div>
@@ -1135,13 +1135,17 @@ export default function WeaveView() {
                                             <>
                                                 {(['fusion', 'concept'] as const).map(role => (
                                                     <button key={role} style={{ ...miniBtn, background: (nn.role ?? 'fusion') === role ? '#18181b' : '#f4f4f5', color: (nn.role ?? 'fusion') === role ? '#fff' : '#3f3f46' }}
-                                                        disabled={!!busy} onClick={() => setRole(nn, role)}>
-                                                        {role}
+                                                        disabled={!!busy} onClick={() => setRole(nn, role)}
+                                                        title={role === 'fusion'
+                                                            ? "Vibe: blend this image's overall look — light, palette, material, mood — into the result. Never copies its objects."
+                                                            : 'Idea: distill this image into one transferable idea and apply just that — the narrowest, most controlled influence.'}>
+                                                        {role === 'fusion' ? 'Vibe' : 'Idea'}
                                                     </button>
                                                 ))}
                                                 <button style={miniBtn} disabled={!!busy} onClick={() => { appendTarget.current = nn; appendRef.current?.click(); }}
                                                     title="Merge more angles of the same subject into this node">＋ angles</button>
-                                                <button style={miniBtn} disabled={!!busy} onClick={() => decomposeNode(nn)}>Facets</button>
+                                                <button style={miniBtn} disabled={!!busy} onClick={() => decomposeNode(nn)}
+                                                    title="Extract: split this image into light / palette / composition / material / texture / mood / space — then borrow ONLY the dimensions you pick">Extract</button>
                                                 <button style={miniBtn} disabled={!!busy} onClick={() => imageToPrompt(nn)}>Prompt</button>
                                                 <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>View</button>
                                                 <button style={miniBtn} onClick={() => download(nn)}>Save</button>
