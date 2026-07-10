@@ -515,6 +515,32 @@ Output JSON: { "warnings": [] }`;
     return (parsed?.warnings ?? []).map(String).slice(0, 3);
 }
 
+/** Rewrite a working prompt so the next render resolves the critic's
+ *  notes while keeping everything that already works. */
+export async function improvePrompt(currentPrompt: string, crit: ImageCrit, extraContext = ''): Promise<string> {
+    const brand = await getCurrentBrand();
+    const soul = await getBrandSoul();
+    const prompt = `You are the studio's ART DIRECTOR. The design critic just reviewed the latest render. Rewrite the working prompt so the next render fixes every flagged issue — and keep everything the critic did NOT complain about.
+BRAND: ${brand.name} — ${brand.description}
+${extraContext.trim() ? `CONTEXT: ${extraContext.trim()}` : ''}
+### BRAND SOUL ###
+${(soul?.fields ?? []).filter(f => f.value.trim()).map(f => `${f.key}: ${f.value}`).join('\n') || '(none)'}
+
+### WORKING PROMPT (what produced the flawed render) ###
+${currentPrompt.trim() || '(none — write a fresh one from the critique and the brand soul)'}
+
+### THE CRITIC'S VERDICT — ${crit.overall}/100 ###
+${crit.notes.map(n => `- ${n.axis} ${n.score}: ${n.note}`).join('\n')}
+${crit.suggestions.length > 0 ? `FIXES REQUIRED:\n${crit.suggestions.map((f, i) => `${i + 1}. ${f}`).join('\n')}` : ''}
+
+Rules: ONE paragraph, under 120 words, concrete visual language (light, material, framing, palette), no lists, no meta-commentary.
+Output JSON: { "prompt": string }`;
+    const parsed = await generateJson<{ prompt: string }>(prompt);
+    const out = String(parsed?.prompt ?? '').trim();
+    if (!out) throw new Error('Art director returned an empty prompt.');
+    return out;
+}
+
 /** The critic doesn't just warn — it can rewrite the plan to resolve its
  *  own pre-flight conflicts. Note + steps only; assets, refs and ratio stay. */
 export async function revisePlan(job: PraxisJob, fixes: string[]): Promise<PraxisJob> {

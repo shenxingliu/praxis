@@ -5,7 +5,7 @@ import { brandKey, getCurrentBrandId } from '../domain/brand';
 import { INVENTORY_CHANGED_EVENT } from './events';
 import { weaveGenerate, extractFacets, deriveIdea, describeAsPrompt, analyzeImage, rotateView, estimateAngles, distillWeaveApproach, WeaveFacet, FACET_DIMENSIONS, FACET_HINTS } from '../engine/weave';
 import { recordSignal } from '../learning/learning';
-import { critiqueImage } from '../studio/agents';
+import { critiqueImage, improvePrompt, recordCritCalibration } from '../studio/agents';
 import { BudgetExceededError } from '../engine/engine';
 import { openLightbox } from './lightbox';
 import { DropZone, imageFiles } from './dropzone';
@@ -45,6 +45,7 @@ interface WeaveNode {
     h?: number;            // custom height (drag the ◢ corner handle)
     quantity?: number;     // hero nodes: how many instances (default 1)
     crit?: { overall: number; notes: Array<{ axis: string; score: number; note: string }>; suggestions: string[] }; // output nodes: design crit
+    rated?: 'like' | 'dislike'; // output nodes: owner verdict, feeds learning + critic calibration
 }
 
 /** Saved canvas configuration — persisted via brandKey KV. */
@@ -748,6 +749,64 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
 
     const assignToOutput = (outputId: string, r: GenerationResult) =>
         setNodes(prev => prev.map(x => x.id === outputId ? { ...x, image: r.image.value, resultId: r.id } : x));
+
+    /** Minimal recipe for canvas images without a tracked generation. */
+    const resultForNode = (nn: WeaveNode): GenerationResult => {
+        const tracked = nn.resultId ? resultsRef.current.get(nn.resultId) : undefined;
+        return tracked ?? {
+            id: nn.resultId ?? crypto.randomUUID(),
+            brandId: getCurrentBrandId(),
+            params: { outputType: 'scene', ratio: '1:1', modelTier: 'flash', note: nn.text ?? 'Canvas image' } as GenerationParams,
+            assetIds: [],
+            referenceIds: [],
+            appliedRuleIds: [],
+            fullPrompt: nn.text ?? '(canvas image without tracked recipe)',
+            model: 'canvas',
+            image: { kind: 'data', value: nn.image ?? '' },
+            estimatedCostUsd: 0,
+            createdAt: Date.now(),
+            adopted: false,
+        };
+    };
+
+    /** 👍/👎 on an output: learning signal + critic calibration in one tap. */
+    const rateOutput = async (nn: WeaveNode, rating: 'like' | 'dislike') => {
+        if (!nn.image) return;
+        await recordSignal(resultForNode(nn), rating).catch(() => {});
+        if (nn.crit && nn.crit.notes.length > 0) {
+            const worst = nn.crit.notes.reduce((w, a) => (a.score < w.score ? a : w), nn.crit.notes[0]);
+            if (rating === 'like' && nn.crit.overall < 65) recordCritCalibration({ kind: 'liked-low', overall: nn.crit.overall, note: worst?.note ?? '' });
+            if (rating === 'dislike' && nn.crit.overall >= 75) recordCritCalibration({ kind: 'disliked-high', overall: nn.crit.overall, note: worst?.note ?? '' });
+        }
+        setNodes(prev => prev.map(x => x.id === nn.id ? { ...x, rated: rating } : x));
+        setNotice(rating === 'like'
+            ? 'Logged 👍 — positive taste evidence for the brand.'
+            : 'Logged 👎 — the studio learns from this.');
+    };
+
+    /** Art director folds the critique back into the prompt: the linked
+     *  note node is rewritten, or a fresh linked one is created. */
+    const improveFromCrit = async (nn: WeaveNode) => {
+        if (!nn.crit || outputBusy[nn.id]) return;
+        setOutputStatus(nn.id, 'Art director rewriting the prompt…');
+        try {
+            const comp = componentOf(nn.id);
+            const noteNode = nodes.find(x => x.kind === 'note' && x.id !== nn.id && comp.has(x.id));
+            const improved = await improvePrompt(noteNode?.text ?? '', nn.crit);
+            if (noteNode) {
+                setNodes(prev => prev.map(x => x.id === noteNode.id ? { ...x, text: improved } : x));
+                setNotice('Prompt rewritten with the critique folded in — hit Run to reshoot.');
+            } else {
+                const created = add({ kind: 'note', text: improved }, { x: nn.x - 300, y: nn.y });
+                setEdges(prev => [...prev, { id: crypto.randomUUID(), from: created.id, to: nn.id }]);
+                setNotice('Improved prompt added and linked — hit Run to reshoot.');
+            }
+        } catch (err: any) {
+            setNotice(`Prompt rewrite failed: ${err?.message?.slice(0, 80) ?? 'try again'}`);
+        } finally {
+            setOutputStatus(nn.id, '');
+        }
+    };
 
     /** One-click design crit of a generated output vs the brand soul. */
     const runCrit = async (nn: WeaveNode) => {
@@ -1550,6 +1609,14 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
                                                         ))}
                                                     </div>
                                                 )}
+                                                <button
+                                                    disabled={!!busy || !!outputBusy[nn.id]}
+                                                    onClick={() => improveFromCrit(nn)}
+                                                    title="The art director rewrites the linked prompt so the next Run fixes every flagged issue (creates a linked prompt node if none exists)"
+                                                    style={{ marginTop: 7, width: '100%', minHeight: 26, borderRadius: 8, border: '1px solid #18181b', background: 'rgba(24,24,27,0.92)', color: '#fff', fontSize: 10, fontWeight: 750, cursor: 'pointer' }}
+                                                >
+                                                    ⚒ Improve prompt → then Run
+                                                </button>
                                             </div>
                                         )}
                                     </div>
@@ -1578,6 +1645,10 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
                                                 <button style={{ ...miniBtn, background: '#18181b', color: '#fff', border: '1px solid #18181b' }} disabled={!!busy || !!outputBusy[nn.id]} onClick={() => runOutput(nn)}>Run</button>
                                                 {nn.image && <button style={miniBtn} disabled={!!busy || !!outputBusy[nn.id]} onClick={() => runCrit(nn)}
                                                     title="Design crit: the critic scores this image against the brand soul — narrative, sensation, viewing — and suggests fixes">Crit</button>}
+                                                {nn.image && <button style={{ ...miniBtn, ...(nn.rated === 'like' ? { background: 'rgba(22,163,74,0.14)', border: '1px solid rgba(22,163,74,0.4)' } : {}) }} disabled={!!busy}
+                                                    onClick={() => rateOutput(nn, 'like')} title="Keep: records positive taste evidence — and calibrates the critic if it disagreed">👍</button>}
+                                                {nn.image && <button style={{ ...miniBtn, ...(nn.rated === 'dislike' ? { background: 'rgba(180,83,9,0.14)', border: '1px solid rgba(180,83,9,0.4)' } : {}) }} disabled={!!busy}
+                                                    onClick={() => rateOutput(nn, 'dislike')} title="Not right: records a negative signal the studio learns from">👎</button>}
                                                 {nn.image && <>
                                                     <button style={miniBtn} onClick={() => add({ kind: 'image', image: nn.image!, role: 'fusion' }, { x: nn.x + W(nn) + 30, y: nn.y })}>Vibe</button>
                                                     <button style={miniBtn} onClick={() => add({ kind: 'image', image: nn.image!, role: 'concept' }, { x: nn.x + W(nn) + 30, y: nn.y + 40 })}>Idea</button>
