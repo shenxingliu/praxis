@@ -105,6 +105,17 @@ export async function resolveToDataUrl(value: string): Promise<string> {
     }
 }
 
+/** Download any image value (data URL or bucket URL) as a file. */
+export async function downloadImage(value: string, name = 'praxis'): Promise<void> {
+    const dataUrl = await resolveToDataUrl(value);
+    if (!dataUrl.startsWith('data:')) { window.open(value, '_blank'); return; }
+    const ext = dataUrl.match(/^data:image\/(\w+)/)?.[1] ?? 'png';
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = `${name}.${ext === 'jpeg' ? 'jpg' : ext}`;
+    a.click();
+}
+
 /** Rough content hash so re-saving the same image reuses the same object path. */
 export const imageStamp = (dataUrl: string): string => {
     let h = 5381;

@@ -14,6 +14,7 @@ import { getApiKey } from '../engine/gemini';
 import { openLightbox } from './lightbox';
 import { DropZone } from './dropzone';
 import { S, chip } from './styles';
+import { downloadImage } from '../storage/images';
 import { SegmentedControl } from './SegmentedControl';
 
 /**
@@ -1065,6 +1066,9 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
                                             <button title="Save to Gallery" disabled={!!busy}
                                                 onClick={async () => { await recordSignal(d, 'save'); window.alert('Saved to Gallery.'); }}
                                                 style={{ ...S.btnGhost, fontSize: 10 }}>Save</button>
+                                            <button title="Download the file" disabled={!!busy}
+                                                onClick={() => downloadImage(d.image.value, `praxis-mood-${d.id.slice(0, 6)}`)}
+                                                style={{ ...S.btnGhost, fontSize: 10 }}>↓</button>
                                         </div>
                                         {moodFeedbackFor === d.id && (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: 6, borderRadius: 8, background: 'rgba(244,244,245,0.75)', border: '1px solid rgba(228,228,231,0.72)' }}>
@@ -1153,6 +1157,13 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
                                                 title="Approve this image and keep it as a saved output"
                                             >
                                                 Save
+                                            </button>
+                                            <button
+                                                onClick={() => downloadImage(r.image.value, `praxis-${r.id.slice(0, 6)}`)}
+                                                style={actionChip(false)}
+                                                title="Download the file"
+                                            >
+                                                ↓
                                             </button>
                                             <button
                                                 onClick={() => discardResult(r)}
