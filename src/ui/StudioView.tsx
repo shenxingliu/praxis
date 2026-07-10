@@ -5,7 +5,7 @@ import { getCurrentBrandId } from '../domain/brand';
 import {
     startJob, proposeConcepts, proposeWildcard, analyzeCompetitor, makePlan,
     makeMoodboard, anchorMood, executeJob, executeCampaign, reviewJob, closeJob,
-    preflightPlan, recordCritCalibration,
+    preflightPlan, recordCritCalibration, revisePlan,
 } from '../studio/agents';
 import { recordSignal, maybeDistill } from '../learning/learning';
 import { attributeFeedback, getBrandSoul } from '../brain/soul';
@@ -300,6 +300,24 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
         next = await say(next, 'user', `Adopt pre-flight fix: ${w}`);
         setJob(next);
     };
+
+    /** The critic rewrites note + steps to clear its own warnings, then re-checks. */
+    const reviseWithWarnings = () => guard('Critic revising the plan…', async () => {
+        if (!job?.plan || (job.planWarnings ?? []).length === 0) return;
+        const fixes = job.planWarnings ?? [];
+        let next = await say(job, 'user', 'Revise the plan to resolve the pre-flight conflicts.');
+        next = await revisePlan(next, fixes);
+        setBusy('Re-checking the revised plan…');
+        let remaining: string[] = [];
+        try { remaining = await preflightPlan(next); } catch { /* best-effort */ }
+        if (remaining.length > 0) {
+            next = { ...next, planWarnings: remaining, updatedAt: Date.now() };
+            await storage.upsertJob(next);
+        }
+        setJob(await say(next, 'agent', remaining.length === 0
+            ? `Plan revised — note and steps rewritten, all ${fixes.length} conflict${fixes.length === 1 ? '' : 's'} cleared on re-check. Read it over, then shoot.`
+            : `Plan revised, but re-check still flags ${remaining.length} conflict${remaining.length === 1 ? '' : 's'} — see the amber notes.`));
+    });
 
     const dismissWarning = async (i: number) => {
         if (!job) return;
@@ -943,7 +961,13 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
                     </ol>
                     {(job.planWarnings ?? []).length > 0 && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '9px 12px', borderRadius: 8, background: 'rgba(255,251,235,0.95)', border: '1px solid rgba(180,83,9,0.22)', animation: 'praxis-pop 240ms cubic-bezier(0.22,1,0.36,1)' }}>
-                            <span style={{ ...S.label, color: '#92400e' }}>PRE-FLIGHT — CONFLICTS WITH THE BRAND SOUL</span>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                                <span style={{ ...S.label, color: '#92400e' }}>PRE-FLIGHT — CONFLICTS WITH THE BRAND SOUL</span>
+                                <button style={{ ...S.btn, minHeight: 26, fontSize: 10.5, padding: '0 10px' }} disabled={!!busy} onClick={reviseWithWarnings}
+                                    title="The critic rewrites the plan note and steps to resolve every conflict, then re-checks its own work">
+                                    Let the critic revise the plan
+                                </button>
+                            </div>
                             {(job.planWarnings ?? []).map((w, i) => (
                                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                     <span style={{ flex: 1, fontSize: 11.5, color: '#78350f', lineHeight: 1.5 }}>{w}</span>

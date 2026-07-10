@@ -501,6 +501,45 @@ Output JSON: { "warnings": [] }`;
     return (parsed?.warnings ?? []).map(String).slice(0, 3);
 }
 
+/** The critic doesn't just warn — it can rewrite the plan to resolve its
+ *  own pre-flight conflicts. Note + steps only; assets, refs and ratio stay. */
+export async function revisePlan(job: PraxisJob, fixes: string[]): Promise<PraxisJob> {
+    if (!job.plan) throw new Error('No production plan.');
+    const brand = await getCurrentBrand();
+    const soul = await getBrandSoul();
+    const concept = job.concepts.find(c => c.id === job.chosenConceptId);
+    const prompt = `You are the studio's DESIGN CRITIC. Your pre-flight review found conflicts in the production plan below. Rewrite the plan so every conflict is resolved while keeping the chosen direction, the brief and all owner directives intact.
+BRAND: ${brand.name} — ${brand.description}
+BRIEF: ${job.brief.trim() || '(open exploration)'}
+CHOSEN DIRECTION: ${concept ? `${concept.title} — ${concept.rationale}` : '(unknown)'}
+${directivesBlock(job)}
+### BRAND SOUL (locked fields are red-lines) ###
+${(soul?.fields ?? []).filter(f => f.value.trim()).map(f => `${f.key}${f.locked ? ' [LOCKED]' : ''}: ${f.value}`).join('\n') || '(none)'}
+
+### CURRENT PLAN ###
+NOTE (the one-sentence art direction the image model obeys): ${job.plan.params.note || '(none)'}
+STEPS:
+${job.plan.steps.map((st, i) => `${i + 1}. ${st}`).join('\n')}
+
+### CONFLICTS TO RESOLVE ###
+${fixes.map((f, i) => `${i + 1}. ${f}`).join('\n')}
+
+Rewrite ONLY the note and the steps. Keep the same number of steps (±1), same shot purpose and framing intent. The new note must stay ONE sentence.
+Output JSON: { "note": string, "steps": [] }`;
+    const parsed = await generateJson<{ note: string; steps: string[] }>(prompt);
+    const note = String(parsed?.note ?? '').trim();
+    const steps = (parsed?.steps ?? []).map(String).filter(Boolean).slice(0, 8);
+    if (!note || steps.length === 0) throw new Error('Critic returned an empty revision.');
+    const next: PraxisJob = {
+        ...job,
+        plan: { ...job.plan, params: { ...job.plan.params, note }, steps },
+        planWarnings: undefined,
+        updatedAt: Date.now(),
+    };
+    await storage.upsertJob(next);
+    return next;
+}
+
 export async function reviewJob(job: PraxisJob, results: GenerationResult[]): Promise<PraxisJob> {
     const brand = await getCurrentBrand();
     const soul = await getBrandSoul();
