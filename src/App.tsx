@@ -93,7 +93,7 @@ export default function App() {
     const refreshSources = useCallback(() => {
         storage.listAssets().then(setAssets);
         storage.listReferences()
-            .then(rs => setRefs(rs.filter(r => r?.image?.kind === 'data' && r.kind !== 'plate')))
+            .then(rs => setRefs(rs.filter(r => !!r?.image?.value && r.kind !== 'plate')))
             .catch(err => console.warn('[app] refs load failed:', err));
     }, []);
 

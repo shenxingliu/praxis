@@ -5,6 +5,7 @@ import {
     PraxisJob, BudgetConfig, SpendRecord,
 } from '../domain/types';
 import { getCurrentBrandId } from '../domain/brand';
+import { uploadImage, imageStamp } from './images';
 
 /**
  * SupabaseProvider — cloud persistence over PostgREST. No SDK dependency:
@@ -138,7 +139,22 @@ export class SupabaseProvider implements StorageProvider {
             .catch(() => this.pagedBrandRows<Asset>(TABLE.assets));
         return all.sort((a, b) => b.updatedAt - a.updatedAt);
     }
-    upsertAsset(asset: Asset) { return this.upsert(TABLE.assets, [{ id: asset.id, data: asset }]); }
+    /** Move any inline base64 image to the storage bucket before the row
+     *  is written — rows stay lean, statement timeouts stay gone. Upload
+     *  failures keep the data URL: nothing lost, retried on next save. */
+    private async offloadRef<T extends { kind: 'data' | 'url'; value: string }>(img: T, path: string): Promise<T> {
+        if (img.kind !== 'data' || !img.value.startsWith('data:')) return img;
+        const url = await uploadImage(img.value, path);
+        return url ? { ...img, kind: 'url' as const, value: url } : img;
+    }
+
+    async upsertAsset(asset: Asset) {
+        const photos = await Promise.all(asset.photos.map(async p => ({
+            ...p,
+            image: await this.offloadRef(p.image, `${asset.brandId}/assets/${asset.id}/${imageStamp(p.image.value)}.jpg`),
+        })));
+        return this.upsert(TABLE.assets, [{ id: asset.id, data: { ...asset, photos } }]);
+    }
     deleteAsset(id: string) { return this.remove(TABLE.assets, id); }
 
     // ---- References ----
@@ -148,7 +164,10 @@ export class SupabaseProvider implements StorageProvider {
         const filtered = kind ? all.filter(r => r.kind === kind) : all;
         return filtered.sort((a, b) => b.weight - a.weight);
     }
-    upsertReference(ref: Reference) { return this.upsert(TABLE.references, [{ id: ref.id, data: ref }]); }
+    async upsertReference(ref: Reference) {
+        const image = await this.offloadRef(ref.image, `${ref.brandId}/refs/${ref.id}/${imageStamp(ref.image.value)}.jpg`);
+        return this.upsert(TABLE.references, [{ id: ref.id, data: { ...ref, image } }]);
+    }
     deleteReference(id: string) { return this.remove(TABLE.references, id); }
 
     // ---- Elements ----
@@ -179,7 +198,10 @@ export class SupabaseProvider implements StorageProvider {
         const rows = await this.brandRows<GenerationResult>(TABLE.results, `&id=eq.${encodeURIComponent(id)}`);
         return rows[0] ?? null;
     }
-    upsertResult(result: GenerationResult) { return this.upsert(TABLE.results, [{ id: result.id, data: result }]); }
+    async upsertResult(result: GenerationResult) {
+        const image = await this.offloadRef(result.image, `${result.brandId}/results/${result.id}/${imageStamp(result.image.value)}.jpg`);
+        return this.upsert(TABLE.results, [{ id: result.id, data: { ...result, image } }]);
+    }
     deleteResult(id: string) { return this.remove(TABLE.results, id); }
 
     async listSignals(onlyUndistilled = false): Promise<FeedbackSignal[]> {

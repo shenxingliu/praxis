@@ -12,6 +12,8 @@ export default function SystemView() {
     const [budget, setBudgetState] = useState<BudgetConfig>({ monthlyUsd: 50, warnAtFraction: 0.8 });
     const [spent, setSpent] = useState(0);
     const [importLog, setImportLog] = useState('');
+    const [migrating, setMigrating] = useState('');
+    const [migrateLog, setMigrateLog] = useState('');
     const fileRef = useRef<HTMLInputElement>(null);
 
     const refresh = async () => {
@@ -117,6 +119,48 @@ export default function SystemView() {
         refresh();
     };
 
+    /** Backfill: re-save every row that still carries inline base64 —
+     *  the storage provider uploads images to the bucket on write, so
+     *  each pass shrinks the database until reads are instant. */
+    const migrateImages = async () => {
+        if (!window.confirm('Move all inline images to Supabase Storage? Runs row by row; safe to interrupt and re-run.')) return;
+        setMigrateLog('');
+        let moved = 0, skipped = 0, failed = 0;
+        const isData = (v?: string) => !!v && v.startsWith('data:');
+        try {
+            setMigrating('Reading assets…');
+            const assets = await storage.listAssets();
+            for (let i = 0; i < assets.length; i++) {
+                const a = assets[i];
+                if (!a.photos.some(ph => isData(ph.image.value))) { skipped++; continue; }
+                setMigrating(`Assets ${i + 1}/${assets.length}…`);
+                try { await storage.upsertAsset(a); moved++; } catch { failed++; }
+            }
+            setMigrating('Reading inspiration…');
+            const refs = await storage.listReferences();
+            for (let i = 0; i < refs.length; i++) {
+                const r = refs[i];
+                if (!isData(r.image.value)) { skipped++; continue; }
+                setMigrating(`Inspiration ${i + 1}/${refs.length}…`);
+                try { await storage.upsertReference(r); moved++; } catch { failed++; }
+            }
+            setMigrating('Reading results…');
+            const results = await storage.listResults(1000);
+            for (let i = 0; i < results.length; i++) {
+                const r = results[i];
+                if (!isData(r.image.value)) { skipped++; continue; }
+                setMigrating(`Results ${i + 1}/${results.length}…`);
+                try { await storage.upsertResult(r); moved++; } catch { failed++; }
+            }
+            setMigrateLog(`Done — ${moved} rows offloaded, ${skipped} already lean, ${failed} failed (safe to re-run).`);
+        } catch (err: any) {
+            setMigrateLog(`Stopped early: ${err?.message ?? err}. Progress is saved — re-run to continue.`);
+        } finally {
+            setMigrating('');
+            refresh();
+        }
+    };
+
     return (
         <div style={{ maxWidth: 720, margin: '0 auto', padding: '24px 28px' }}>
             <p style={{ fontSize: 12, color: isCloud ? '#059669' : '#a1a1aa' }}>
@@ -132,6 +176,25 @@ export default function SystemView() {
                     <tr><td>Feedback signals</td><td><strong>{counts.signals}</strong></td></tr>
                 </tbody>
             </table>
+
+            {isCloud && (
+                <>
+                    <h2 style={{ fontSize: 16, marginTop: 24 }}>Image storage</h2>
+                    <p style={{ fontSize: 12.5, color: '#71717a', lineHeight: 1.6, maxWidth: 560 }}>
+                        Older rows keep full images inside the database, which makes cloud reads slow
+                        (and at some point they start timing out). This moves every inline image into a
+                        Supabase Storage bucket — rows keep a link, reads become instant. New images
+                        already upload to the bucket automatically; this backfills the old ones.
+                        Safe to interrupt and re-run.
+                    </p>
+                    <p style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <button style={S.btn} disabled={!!migrating} onClick={migrateImages}>
+                            {migrating || 'Migrate images to Storage'}
+                        </button>
+                        {migrateLog && <span style={{ fontSize: 12, color: migrateLog.startsWith('Done') ? '#059669' : '#b45309' }}>{migrateLog}</span>}
+                    </p>
+                </>
+            )}
 
             <h2 style={{ fontSize: 16, marginTop: 24 }}>Gemini API Key</h2>
             {isProxyMode() ? (

@@ -27,8 +27,8 @@ export async function getCandidatePool(): Promise<TasteCandidate[]> {
         storage.listResults(100),
     ]);
     const pool: TasteCandidate[] = [
-        ...refs.filter(r => r.image.kind === 'data').map(r => ({ id: `ref:${r.id}`, image: r.image.value })),
-        ...results.filter(r => r.image.kind === 'data').map(r => ({ id: `res:${r.id}`, image: r.image.value })),
+        ...refs.filter(r => !!r.image.value).map(r => ({ id: `ref:${r.id}`, image: r.image.value })),
+        ...results.filter(r => !!r.image.value).map(r => ({ id: `res:${r.id}`, image: r.image.value })),
     ];
     // Shuffle
     for (let i = pool.length - 1; i > 0; i--) {

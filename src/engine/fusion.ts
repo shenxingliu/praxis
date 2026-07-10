@@ -108,7 +108,7 @@ export async function proposeCombos(intent?: string, candidateRefs?: Reference[]
     const all = (candidateRefs && candidateRefs.length > 0
         ? candidateRefs
         : await storage.listReferences()
-    ).filter(r => r.image.kind === 'data');
+    ).filter(r => !!r.image.value);
     if (all.length < 3) throw new Error('Need at least 3 references to propose fusions — upload more.');
     const pool = [...all].sort((a, b) => (b.weight - a.weight) || (b.createdAt - a.createdAt)).slice(0, 8);
     const brand = await getCurrentBrand();
@@ -198,14 +198,14 @@ export async function synthesizeReference(
     const attachSources = level === 'percept' || level === 'principle';
     const sourceImages = attachSources
         ? sourceRefIds
-            .map(id => refs.find(r => r.id === id && r.image.kind === 'data'))
+            .map(id => refs.find(r => r.id === id && !!r.image.value))
             .filter((r): r is Reference => !!r)
             .slice(0, 4)
             .map(r => r.image.value)
         : [];
 
     const refFuseImages = refsToFuse
-        .filter(r => r.image.kind === 'data')
+        .filter(r => !!r.image.value)
         .slice(0, 4)
         .map(r => r.image.value);
     const allRefIds = [...new Set([...sourceRefIds, ...refsToFuse.map(r => r.id)])];

@@ -122,7 +122,7 @@ export async function generate(
     // (liked) results rank naturally because likes bump weight.
     const elementRefIds = [...new Set(elements.map(e => e.sourceRefId))];
     const elementRefs = elementRefIds
-        .map(id => allRefs.find(r => r.id === id && r.image.kind === 'data'))
+        .map(id => allRefs.find(r => r.id === id && !!r.image.value))
         .filter((r): r is Reference => !!r);
     // When a mood anchor is attached, competing interior imagery dilutes the
     // hero signal — cap aesthetic refs harder.
@@ -132,7 +132,7 @@ export async function generate(
     // Inspiration explicitly chosen in the brief always leads and is never
     // dropped by the budget cap.
     const chosenRefs = (params.referenceIds ?? [])
-        .map(id => allRefs.find(r => r.id === id && r.image.kind === 'data'))
+        .map(id => allRefs.find(r => r.id === id && !!r.image.value))
         .filter((r): r is Reference => !!r)
         .slice(0, 4);
     const chosenIds = new Set(chosenRefs.map(r => r.id));
@@ -140,7 +140,7 @@ export async function generate(
         ...chosenRefs,
         ...elementRefs.filter(r => !chosenIds.has(r.id)),
         ...allRefs.filter(r =>
-            r.kind !== 'plate' && r.image.kind === 'data' && !elementRefIds.includes(r.id) && !chosenIds.has(r.id)),
+            r.kind !== 'plate' && !!r.image.value && !elementRefIds.includes(r.id) && !chosenIds.has(r.id)),
     ].slice(0, Math.max(aestheticCap, chosenRefs.length));
 
     // ---- Budget gate ----
@@ -159,7 +159,7 @@ export async function generate(
     // Plate anchoring (silo): the chosen backdrop plate goes FIRST in the
     // reference stack so its pixels dominate the backdrop reconstruction.
     const plate = params.plateId
-        ? allRefs.find(r => r.id === params.plateId && r.image.kind === 'data') ?? null
+        ? allRefs.find(r => r.id === params.plateId && !!r.image.value) ?? null
         : null;
 
     const ctx: RecipeContext = { params, assets, references: aesthetic, elements, rules, brand, contextMode, plate };

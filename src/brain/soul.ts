@@ -91,8 +91,8 @@ export async function deriveBrandSoul(): Promise<BrandSoul> {
     // Visual archaeology: pixels of approved imagery (adopted results first,
     // then promoted references) teach the sensation axis directly.
     const approvedImages = [
-        ...results.filter(r => r.adopted && r.image.kind === 'data').map(r => r.image.value),
-        ...refs.filter(r => r.source === 'promoted' && r.image.kind === 'data').map(r => r.image.value),
+        ...results.filter(r => r.adopted && !!r.image.value).map(r => r.image.value),
+        ...refs.filter(r => r.source === 'promoted' && !!r.image.value).map(r => r.image.value),
     ].slice(0, 5);
 
     const evidence = [

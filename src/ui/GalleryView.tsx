@@ -4,6 +4,7 @@ import { storage } from '../storage/local';
 import { getCurrentBrand } from '../domain/brand';
 import { recordSignal } from '../learning/learning';
 import { openLightbox } from './lightbox';
+import { resolveToDataUrl } from '../storage/images';
 import { S } from './styles';
 import { SegmentedControl } from './SegmentedControl';
 
@@ -41,7 +42,7 @@ export default function GalleryView() {
 
     const download = async (r: GenerationResult) => {
         const a = document.createElement('a');
-        a.href = r.image.value;
+        a.href = await resolveToDataUrl(r.image.value);
         a.download = `praxis-${new Date(r.createdAt).toISOString().slice(0, 10)}-${r.id.slice(0, 6)}.png`;
         a.click();
         if (!r.adopted) { await recordSignal(r, 'export'); refresh(); }
@@ -50,19 +51,19 @@ export default function GalleryView() {
     /** LoRA training set: saved images + their exact prompts and recipes. */
     const exportTrainingSet = async () => {
         const brand = await getCurrentBrand();
-        const adopted = results.filter(r => r.adopted && r.image.kind === 'data');
+        const adopted = results.filter(r => r.adopted && !!r.image.value);
         if (adopted.length === 0) { setNotice('Nothing saved yet — save some images first.'); return; }
         setBusy(`Packing ${adopted.length} pairs…`);
         try {
-            const entries = adopted.map(r => ({
+            const entries = await Promise.all(adopted.map(async r => ({
                 id: r.id,
                 prompt: r.fullPrompt,
-                image: r.image.value,
+                image: await resolveToDataUrl(r.image.value),
                 params: r.params,
                 elementIds: r.elementIds ?? [],
                 model: r.model,
                 createdAt: r.createdAt,
-            }));
+            })));
             const blob = new Blob(
                 [JSON.stringify({ brand: brand.id, exportedAt: Date.now(), count: entries.length, entries })],
                 { type: 'application/json' }

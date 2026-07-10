@@ -52,7 +52,7 @@ export async function proposeConcepts(job: PraxisJob, inspirationRefs?: Referenc
     const brand = await getCurrentBrand();
     const soul = await getBrandSoul();
     const allRefs = (await storage.listReferences())
-        .filter(r => r.kind !== 'plate' && r.image.kind === 'data')
+        .filter(r => r.kind !== 'plate' && !!r.image.value)
         .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
     const selectedRefIds = new Set((inspirationRefs ?? []).map(r => r.id));
     const selectedRefs = (inspirationRefs && inspirationRefs.length > 0
@@ -339,7 +339,7 @@ async function anchorImageOf(job: PraxisJob): Promise<string[]> {
     const id = job.plan?.moodAnchorResultId;
     if (!id) return [];
     const anchor = await storage.getResult(id).catch(() => null);
-    return anchor && anchor.image.kind === 'data' ? [anchor.image.value] : [];
+    return anchor && !!anchor.image.value ? [anchor.image.value] : [];
 }
 
 export async function executeJob(
@@ -356,7 +356,7 @@ export async function executeJob(
         let r = await generate({ ...job.plan.params, directives: job.directives }, job.plan.assetIds, onStatus, anchor);
         // Quality gate (batch only): weak shots get ONE reshoot with the
         // critic's fixes before the owner ever sees them.
-        if (opts?.qualityGate && count > 1 && r.image.kind === 'data') {
+        if (opts?.qualityGate && count > 1 && !!r.image.value) {
             try {
                 onStatus?.(`Quality gate — checking shot ${i + 1}…`);
                 const crit = await critiqueQuick(r.image.value, job);
@@ -404,7 +404,7 @@ export async function executeCampaign(
                 { ...job.plan.params, directives: job.directives, purpose: slot.purpose, ratio: slot.ratio },
                 job.plan.assetIds, onStatus, anchor
             );
-            if (opts?.qualityGate && r.image.kind === 'data') {
+            if (opts?.qualityGate && !!r.image.value) {
                 try {
                     onStatus?.(`Quality gate — checking ${slot.purpose}…`);
                     const crit = await critiqueQuick(r.image.value, job);
@@ -543,7 +543,7 @@ Output JSON: { "note": string, "steps": [] }`;
 export async function reviewJob(job: PraxisJob, results: GenerationResult[]): Promise<PraxisJob> {
     const brand = await getCurrentBrand();
     const soul = await getBrandSoul();
-    const images = results.filter(r => r.image.kind === 'data').slice(0, 4).map(r => r.image.value);
+    const images = results.filter(r => !!r.image.value).slice(0, 4).map(r => r.image.value);
     if (images.length === 0) throw new Error('No images to review.');
 
     const prompt = `You are the DESIGN CRITIC of the studio. Score the attached generated image(s) against the brand's soul.

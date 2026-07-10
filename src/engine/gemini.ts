@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { GoogleGenAI } from '@google/genai';
+import { resolveToDataUrl } from '../storage/images';
 
 /**
  * Gemini client — proxy-aware, budget-aware. Ported from V1's apiManager
@@ -126,11 +127,15 @@ async function prepareInlineParts(images: string[], mode: 'image' | 'json', shar
     const capped = images.slice(0, maxImages);
     const parts: ImagePart[] = [];
     for (let i = 0; i < capped.length; i++) {
+        // Bucket-hosted images come back as URLs — fetch them to pixels
+        // here so every caller can pass either form.
+        const raw = await resolveToDataUrl(capped[i]);
+        if (!raw.startsWith('data:')) continue; // unreachable image — skip, don't crash the call
         // The first `sharpCount` images are SOURCE-OF-TRUTH pixels (product
         // photos): they keep far more resolution than aesthetic refs, so
         // fine construction/texture detail survives into the model.
         const sharp = i < Math.min(sharpCount, 4);
-        const resized = await shrinkDataUrl(capped[i], sharp
+        const resized = await shrinkDataUrl(raw, sharp
             ? { maxEdge: 2048, quality: 0.86, maxDataChars: 1_100_000 }
             : { maxEdge, quality, maxDataChars: perImageBudget });
         parts.push(toInlinePart(resized));

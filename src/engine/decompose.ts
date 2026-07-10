@@ -122,7 +122,7 @@ export async function rebuildLibrary(
         await storage.deleteElement(el.id);
     }
     const refs = (await storage.listReferences())
-        .filter(r => r.image.kind === 'data' && r.source !== 'promoted');
+        .filter(r => !!r.image.value && r.source !== 'promoted');
     let total = 0;
     for (let i = 0; i < refs.length; i++) {
         onStatus?.(`Decomposing ${i + 1}/${refs.length}: ${refs[i].name}…`);
@@ -179,7 +179,7 @@ export async function decomposeAllPending(
     onStatus?: (text: string) => void
 ): Promise<{ refs: number; elements: number }> {
     const refs = (await storage.listReferences())
-        .filter(r => !r.decomposed && r.image.kind === 'data' && r.source === 'upload');
+        .filter(r => !r.decomposed && !!r.image.value && r.source === 'upload');
     let total = 0;
     for (let i = 0; i < refs.length; i++) {
         onStatus?.(`Decomposing ${i + 1}/${refs.length}: ${refs[i].name}…`);
