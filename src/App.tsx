@@ -457,7 +457,6 @@ export default function App() {
                             refs={refs}
                             selectedAssets={selectedAssets}
                             selectedRefs={selectedRefs}
-                            hideSidebar
                             onNavigate={setTab}
                         />
                     )}

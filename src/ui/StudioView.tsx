@@ -7,8 +7,9 @@ import {
     makeMoodboard, anchorMood, executeJob, executeCampaign, reviewJob, closeJob,
 } from '../studio/agents';
 import { recordSignal, maybeDistill } from '../learning/learning';
-import { attributeFeedback } from '../brain/soul';
+import { attributeFeedback, getBrandSoul } from '../brain/soul';
 import { BudgetExceededError } from '../engine/engine';
+import { getApiKey } from '../engine/gemini';
 import { openLightbox } from './lightbox';
 import { DropZone } from './dropzone';
 import { S, chip } from './styles';
@@ -63,11 +64,20 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
     const [moodFeedbackText, setMoodFeedbackText] = useState('');
     const [imageSparkNote, setImageSparkNote] = useState('');
     const imageSparkRef = useRef<HTMLInputElement>(null);
+    const composerRef = useRef<HTMLTextAreaElement>(null);
+    const [composerGlow, setComposerGlow] = useState(false);
+    const [noSourceWarn, setNoSourceWarn] = useState(false);
+    const [soulCount, setSoulCount] = useState(0);
+    const [showSetup, setShowSetup] = useState(false);
+    const keyReady = getApiKey() !== null;
 
     useEffect(() => {
         storage.listElements().then(setElements);
         storage.listJobs(30).then(setJobs).catch(() => {});
+        getBrandSoul().then(soul => setSoulCount((soul?.fields ?? []).filter(f => f.value.trim()).length)).catch(() => {});
     }, []);
+
+    useEffect(() => { setNoSourceWarn(false); }, [selectedAssets, selectedRefs]);
 
     useEffect(() => {
         onJobsChange?.(jobs, job?.id ?? null);
@@ -164,12 +174,23 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
             : 'I added three more different directions. The earlier ideas are still here, so you can compare or keep brainstorming.'));
     });
 
-    const begin = () => guard('Concept agent thinking…', async () => {
-        if (selectedAssets.size === 0) throw new Error('Pick at least one asset.');
-        let j = await startJob(brief.trim()); // empty brief = open exploration
-        j = await say(j, 'user', brief.trim() ? `Brief: ${brief.trim()}` : 'Start an open exploration.');
+    const begin = (opts: { force?: boolean; text?: string } = {}) => {
+        if (!keyReady) {
+            setError('No Gemini key yet — open System and paste your API key. It stays in this browser only.');
+            return;
+        }
+        const text = (opts.text ?? brief).trim();
+        if (!opts.force && selectedAssets.size === 0 && selectedRefs.size === 0 && (assets.length > 0 || refs.length > 0)) {
+            setNoSourceWarn(true);
+            return;
+        }
+        setNoSourceWarn(false);
+        return guard('Concept agent thinking…', async () => {
+        let j = await startJob(text); // empty brief = open exploration
+        j = await say(j, 'user', text ? `Brief: ${text}` : 'Start an open exploration.');
         setJob(await say(await proposeConcepts(j, selectedInspirationRefs()), 'agent', 'I have three directions. Pick one to turn into a production plan, or ask for a collision if you want a stranger option.'));
-    });
+        });
+    };
 
     const choose = (conceptId: string) => guard('Producer drafting the plan…', async () => {
         if (!job) return;
@@ -494,32 +515,41 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
             detail: 'Upload products, hero objects, people, packaging, or source-of-truth images. These keep generated work visually accurate.',
             action: () => onNavigate?.('heroes'),
             cta: 'Open Assets',
+            done: assets.length > 0,
+            stat: assets.length > 0 ? `${assets.length} ready` : 'None yet — start here',
         },
         {
             title: 'Build inspiration',
             detail: 'Collect references for lighting, atmosphere, layout, color, materials, and art direction without copying their subjects.',
             action: () => onNavigate?.('library'),
             cta: 'Open Inspiration',
+            done: refs.length > 0,
+            stat: refs.length > 0 ? `${refs.length} collected` : 'None yet',
         },
         {
             title: 'Define the brand',
             detail: 'Maintain brand memory, rules, essence, and red lines so every task starts with the same strategic baseline.',
             action: () => onNavigate?.('knowledge'),
             cta: 'Open Brand',
+            done: soulCount > 0,
+            stat: soulCount > 0 ? `${soulCount} soul fields` : 'Not defined yet',
         },
         {
             title: 'Work on Canvas',
             detail: 'Arrange assets, references, notes, and outputs on a persistent visual board when a task needs more structure.',
             action: () => onNavigate?.('weave'),
             cta: 'Open Canvas',
+            done: true,
+            stat: '',
         },
     ];
+    const setupDone = keyReady && assets.length > 0 && refs.length > 0 && soulCount > 0;
     const sourceSummary = `${selectedAssets.size} asset${selectedAssets.size === 1 ? '' : 's'} · ${selectedRefs.size} inspiration`;
 
     return (
         <div style={{ maxWidth: 1480, margin: '0 auto', padding: '18px 22px', display: 'flex', gap: 16, alignItems: 'flex-start' }}>
             {/* Job history — rendered here only when Studio is used standalone. */}
-            {!hideSidebar && <aside style={{ width: 286, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 12, maxHeight: 'calc(100vh - 36px)' }}>
+            {!hideSidebar && <aside style={{ width: 252, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 12, maxHeight: 'calc(100vh - 36px)' }}>
                 <button style={{ ...S.btn, width: '100%', minHeight: 38 }} onClick={reset}>New production thread</button>
                 <div style={{ border: '1px solid rgba(212,212,216,0.58)', background: 'rgba(255,255,255,0.52)', borderRadius: 13, padding: '9px 10px', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
                     <span style={S.label}>SOURCES</span>
@@ -659,12 +689,31 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
                     <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', maxWidth: 760 }}>
                         <div style={{ width: 52, height: 52, borderRadius: 999, background: 'radial-gradient(circle at 32% 28%, #d7dce6, #5b8def 58%, #18181b)', boxShadow: '0 16px 34px rgba(37,99,235,0.20)' }} />
                         <div style={{ fontSize: 28, fontWeight: 850, color: '#18181b', letterSpacing: -0.2 }}>What are we making today?</div>
-                        <div style={{ fontSize: 13, color: '#71717a', maxWidth: 650, lineHeight: 1.65 }}>
-                            Describe the work you want, drop any image for vibe or ideas, or select Assets and Inspiration from the left sidebar. Praxis can use those sources to propose directions, plan the shot, generate images, and turn your feedback into reusable brand memory.
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', maxWidth: 720 }}>
+                            {[
+                                ['1', 'Tick Assets & Inspiration in the left sidebar'],
+                                ['2', 'Describe the shot — or drop any image'],
+                                ['3', 'Approve & critique — the studio learns your brand'],
+                            ].map(([n, t]) => (
+                                <span key={n} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 999, border: '1px solid rgba(212,212,216,0.6)', background: 'rgba(255,255,255,0.6)', fontSize: 11.5, color: '#52525b', fontWeight: 600 }}>
+                                    <span style={{ width: 16, height: 16, borderRadius: 999, background: '#18181b', color: '#fff', fontSize: 9.5, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{n}</span>
+                                    {t}
+                                </span>
+                            ))}
                         </div>
                     </div>
-                    <div style={{ width: 'min(920px, 100%)', display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 24, background: 'rgba(255,255,255,0.82)', backdropFilter: 'blur(28px) saturate(1.16)', WebkitBackdropFilter: 'blur(28px) saturate(1.16)', border: '1px solid rgba(212,212,216,0.7)', boxShadow: '0 22px 54px rgba(15,23,42,0.12)' }}>
+                    {!keyReady && (
+                        <div style={{ width: 'min(920px, 100%)', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 16, border: '1px solid rgba(180,83,9,0.25)', background: 'rgba(255,251,235,0.92)', boxShadow: '0 12px 30px rgba(180,83,9,0.08)', animation: 'praxis-pop 240ms cubic-bezier(0.22,1,0.36,1)' }}>
+                            <span style={{ fontSize: 18 }} aria-hidden="true">🔑</span>
+                            <span style={{ flex: 1, minWidth: 240, fontSize: 12, color: '#78350f', lineHeight: 1.55 }}>
+                                <b>One step before your first image:</b> connect a Gemini API key. It stays in this browser only — nothing is uploaded anywhere. A finished image costs about $0.04.
+                            </span>
+                            <button style={{ ...S.btn, minWidth: 150 }} onClick={() => onNavigate?.('system')}>Connect in System →</button>
+                        </div>
+                    )}
+                    <div style={{ width: 'min(920px, 100%)', display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 24, background: 'rgba(255,255,255,0.82)', backdropFilter: 'blur(28px) saturate(1.16)', WebkitBackdropFilter: 'blur(28px) saturate(1.16)', border: '1px solid rgba(212,212,216,0.7)', transition: 'box-shadow 320ms cubic-bezier(0.22,1,0.36,1)', boxShadow: composerGlow ? '0 0 0 3px rgba(91,141,239,0.42), 0 22px 54px rgba(15,23,42,0.16)' : '0 22px 54px rgba(15,23,42,0.12)' }}>
                         <textarea
+                            ref={composerRef}
                             value={brief}
                             onChange={e => setBrief(e.target.value)}
                             onKeyDown={e => {
@@ -673,11 +722,20 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
                             placeholder="Example: Create a premium campaign hero using the selected product assets and the selected lighting references. Keep the product accurate, leave space for headline copy, and make it feel calm, expensive, and launch-ready."
                             style={{ ...S.input, width: '100%', minHeight: 146, border: 'none', background: 'transparent', resize: 'vertical', fontSize: 16, lineHeight: 1.45, padding: '12px 10px' }}
                         />
+                        {noSourceWarn && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '9px 12px', borderRadius: 12, background: 'rgba(255,251,235,0.95)', border: '1px solid rgba(180,83,9,0.22)', animation: 'praxis-pop 240ms cubic-bezier(0.22,1,0.36,1)' }}>
+                                <span style={{ flex: 1, minWidth: 220, fontSize: 11.5, color: '#78350f', lineHeight: 1.5 }}>
+                                    No Assets or Inspiration selected — the studio will invent everything from words alone. Tick sources in the left sidebar to keep products accurate.
+                                </span>
+                                <button style={S.btnGhost} onClick={() => setNoSourceWarn(false)}>I'll pick sources</button>
+                                <button style={{ ...S.btn, minWidth: 132 }} disabled={!!busy} onClick={() => begin({ force: true })}>Generate anyway</button>
+                            </div>
+                        )}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', borderTop: '1px solid rgba(228,228,231,0.72)', padding: '8px 4px 2px' }}>
                             <span style={{ fontSize: 11, fontWeight: 800, color: '#71717a' }}>Sources · {sourceSummary}</span>
                             <button style={S.btnGhost} disabled={!!busy} onClick={() => imageSparkRef.current?.click()} title="Attach any image to spark a creative brief">Attach image</button>
-                            <span style={{ marginLeft: 'auto', fontSize: 10.5, color: '#a1a1aa' }}>⌘ Enter</span>
-                            <button style={{ ...S.btn, minWidth: 82 }} disabled={!!busy} onClick={begin}>Send</button>
+                            <span style={{ marginLeft: 'auto', fontSize: 10.5, color: '#a1a1aa' }}>⌘ Enter · from ~$0.04/image</span>
+                            <button style={{ ...S.btn, minWidth: 82 }} disabled={!!busy} onClick={() => begin()}>Send</button>
                         </div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, width: '100%', maxWidth: 920 }}>
@@ -686,7 +744,11 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
                                 key={card.title}
                                 onClick={() => {
                                     if (card.action) { card.action(); return; }
+                                    if (card.title === 'Open exploration') { setBrief(''); begin({ force: true, text: '' }); return; }
                                     setBrief(card.prompt);
+                                    setComposerGlow(true);
+                                    window.setTimeout(() => composerRef.current?.focus(), 30);
+                                    window.setTimeout(() => setComposerGlow(false), 900);
                                 }}
                                 style={{
                                     minHeight: 128,
@@ -711,9 +773,17 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
                     </div>
                     <div style={{ width: '100%', maxWidth: 920, display: 'flex', flexDirection: 'column', gap: 10 }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                            <span style={{ ...S.label, color: '#71717a' }}>SET UP THE PLATFORM</span>
-                            <span style={{ fontSize: 11, color: '#a1a1aa' }}>These areas make each task smarter before you press Send.</span>
+                            <span style={{ ...S.label, color: setupDone ? '#15803d' : '#71717a' }}>{setupDone ? 'PLATFORM READY ✓' : 'SET UP THE PLATFORM'}</span>
+                            {setupDone ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                                    <span style={{ fontSize: 11, color: '#a1a1aa' }}>{assets.length} assets · {refs.length} inspiration · {soulCount} brand fields · Gemini connected</span>
+                                    <button style={S.btnGhost} onClick={() => setShowSetup(v => !v)}>{showSetup ? 'Hide' : 'Show'}</button>
+                                </span>
+                            ) : (
+                                <span style={{ fontSize: 11, color: '#a1a1aa' }}>These areas make each task smarter before you press Send.</span>
+                            )}
                         </div>
+                        {(!setupDone || showSetup) && (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
                             {setupCards.map(card => (
                                 <button
@@ -734,11 +804,17 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
                                     }}
                                 >
                                     <span style={{ fontSize: 12.5, fontWeight: 850, color: '#18181b' }}>{card.title}</span>
+                                    {card.stat && (
+                                        <span style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 999, fontSize: 9.5, fontWeight: 800, letterSpacing: 0.3, background: card.done ? 'rgba(22,163,74,0.10)' : 'rgba(180,83,9,0.10)', color: card.done ? '#15803d' : '#92400e', border: `1px solid ${card.done ? 'rgba(22,163,74,0.25)' : 'rgba(180,83,9,0.22)'}` }}>
+                                            {card.done ? '✓' : '•'} {card.stat}
+                                        </span>
+                                    )}
                                     <span style={{ flex: 1, fontSize: 11, color: '#71717a', lineHeight: 1.45, whiteSpace: 'normal' }}>{card.detail}</span>
                                     <span style={{ fontSize: 10.5, fontWeight: 850, color: '#18181b' }}>{card.cta} →</span>
                                 </button>
                             ))}
                         </div>
+                        )}
                     </div>
                     {imageSparkNote && (
                         <div style={{ fontSize: 11, color: '#92400e', lineHeight: 1.5 }}>
