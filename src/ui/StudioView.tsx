@@ -33,15 +33,17 @@ type StudioViewProps = {
     refs: Reference[];
     selectedAssets: Set<string>;
     selectedRefs: Set<string>;
+    onJobsChange?: (jobs: PraxisJob[], activeJobId: string | null) => void;
     onNavigate?: (target: 'heroes' | 'library' | 'knowledge' | 'weave' | 'gallery' | 'system') => void;
 };
 
 export type StudioViewHandle = {
     reset: () => void;
+    resume: (job: PraxisJob) => Promise<void>;
 };
 
 const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function StudioView(
-    { assets, refs, selectedAssets, selectedRefs, onNavigate },
+    { assets, refs, selectedAssets, selectedRefs, onJobsChange, onNavigate },
     ref,
 ) {
     const [job, setJob] = useState<PraxisJob | null>(null);
@@ -338,8 +340,29 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
 
     const reset = () => { setJob(null); setResults([]); setBrief(''); setFeedback(new Map()); setMoodDrafts([]); };
 
+    /** Resume a past task — thread, stage and (recent) results included. */
+    const resume = async (j: PraxisJob) => {
+        setJob(j);
+        setBrief(j.brief);
+        setMoodDrafts([]);
+        setFeedback(new Map());
+        const rs: GenerationResult[] = [];
+        for (const id of j.resultIds.slice(-8)) {
+            const r = await storage.getResult(id).catch(() => null);
+            if (r) rs.push(r);
+        }
+        setResults(rs);
+    };
+
+    // Keep the host's task list fresh — the sidebar Tasks section feeds on this.
+    useEffect(() => {
+        if (!onJobsChange) return;
+        storage.listJobs(20).then(js => onJobsChange(js, job?.id ?? null)).catch(() => {});
+    }, [job?.updatedAt, job?.id, onJobsChange]);
+
     useImperativeHandle(ref, () => ({
         reset,
+        resume,
     }));
 
     /** Step back one stage — every decision is reversible. */

@@ -9,7 +9,7 @@ import KnowledgeView from './ui/KnowledgeView';
 import SystemView from './ui/SystemView';
 import { S } from './ui/styles';
 import { LightboxHost } from './ui/lightbox';
-import { Asset, Brand, Reference } from './domain/types';
+import { Asset, Brand, PraxisJob, Reference } from './domain/types';
 import { storage } from './storage/local';
 import {
     listBrands, getCurrentBrandId, setCurrentBrandId, createBrand,
@@ -31,6 +31,38 @@ export default function App() {
     const studioRef = useRef<StudioViewHandle>(null);
     const weaveRef = useRef<WeaveViewHandle>(null);
     const [tab, setTab] = useState<Tab>('studio');
+
+    useEffect(() => {
+        storage.listJobs(20).then(setJobs).catch(() => {});
+    }, []);
+
+    useEffect(() => {
+        if (tab !== 'studio' || !pendingResume.current) return;
+        const j = pendingResume.current;
+        const t = window.setTimeout(() => {
+            pendingResume.current = null;
+            studioRef.current?.resume(j);
+        }, 40);
+        return () => window.clearTimeout(t);
+    }, [tab]);
+
+    const handleJobsChange = useCallback((js: PraxisJob[], active: string | null) => {
+        setJobs(js.slice(0, 20));
+        setActiveJobId(active);
+    }, []);
+
+    /** Open a past task — resumes in place, or after switching to the Studio tab. */
+    const openJob = (j: PraxisJob) => {
+        if (pendingResume.current) return;
+        setActiveJobId(j.id);
+        if (studioRef.current) {
+            setTab('studio');
+            studioRef.current.resume(j);
+        } else {
+            pendingResume.current = j;
+            setTab('studio');
+        }
+    };
     const [brands, setBrands] = useState<Brand[]>([]);
     const [brandId, setBrandId] = useState(getCurrentBrandId());
     const [isNarrow, setIsNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < 760);
@@ -38,6 +70,10 @@ export default function App() {
     const [refs, setRefs] = useState<Reference[]>([]);
     const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
     const [selectedRefs, setSelectedRefs] = useState<Set<string>>(new Set());
+    const [jobs, setJobs] = useState<PraxisJob[]>([]);
+    const [tasksOpen, setTasksOpen] = useState(true);
+    const [activeJobId, setActiveJobId] = useState<string | null>(null);
+    const pendingResume = useRef<PraxisJob | null>(null);
     const [assetsOpen, setAssetsOpen] = useState(true);
     const [inspOpen, setInspOpen] = useState(false);
     const [sidebarWidth, setSidebarWidth] = useState(264);
@@ -273,24 +309,85 @@ export default function App() {
                 }}>
                 {TABS.map(t => {
                     if (t.id === 'studio') {
+                        const JOB_STAGE: Record<string, string> = { brief: 'Brief', concepts: 'Concepts', plan: 'Plan', execute: 'Execute', review: 'Review', done: 'Done' };
                         return (
-                            <button key={t.id} className="praxis-sidebar-item" onClick={() => {
-                                setTab('studio');
-                                studioRef.current?.reset();
-                            }} style={{
-                                ...S.tab,
-                                ...(isNarrow ? { minWidth: 132, width: 'auto' } : {}),
-                                ...(tab === t.id ? {
-                                    background: '#f0f1f3',
-                                    color: '#111113',
-                                    border: '1px solid #e2e3e7',
-                                    boxShadow: 'none',
-                                } : {
-                                    color: '#3f3f46',
-                                }),
-                            }}>
-                                <span style={{ flex: 1 }}>{t.label}</span>
-                            </button>
+                            <div key={t.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, ...(isNarrow ? { minWidth: 132 } : {}) }}>
+                                <button className="praxis-sidebar-item" onClick={() => {
+                                    setTab('studio');
+                                    studioRef.current?.reset();
+                                }} style={{
+                                    ...S.tab,
+                                    width: '100%',
+                                    ...(isNarrow ? { minWidth: 132, width: 'auto' } : {}),
+                                    ...(tab === t.id ? {
+                                        background: '#f0f1f3',
+                                        color: '#111113',
+                                        border: '1px solid #e2e3e7',
+                                        boxShadow: 'none',
+                                    } : {
+                                        color: '#3f3f46',
+                                    }),
+                                }}>
+                                    <span style={{ flex: 1 }}>{t.label}</span>
+                                </button>
+                                {!isNarrow && jobs.length > 0 && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '0 2px 2px 6px' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setTasksOpen(v => !v)}
+                                            style={{ display: 'flex', alignItems: 'center', gap: 5, border: 'none', background: 'transparent', cursor: 'pointer', padding: '2px 4px', fontSize: 10, fontWeight: 800, letterSpacing: 0.7, textTransform: 'uppercase', color: '#9aa0aa' }}
+                                        >
+                                            <Caret open={tasksOpen} size={11} />
+                                            Tasks · {jobs.length}
+                                        </button>
+                                        {tasksOpen && (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 218, overflowY: 'auto' }}>
+                                                {jobs.slice(0, 12).map(j => (
+                                                    <div key={j.id} style={{ position: 'relative' }}>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openJob(j)}
+                                                            title={j.brief.trim() || 'Open exploration'}
+                                                            style={{
+                                                                width: '100%',
+                                                                textAlign: 'left',
+                                                                border: '1px solid transparent',
+                                                                borderRadius: 8,
+                                                                background: activeJobId === j.id && tab === 'studio' ? '#f0f1f3' : 'transparent',
+                                                                cursor: 'pointer',
+                                                                padding: '4px 22px 4px 8px',
+                                                                display: 'flex',
+                                                                flexDirection: 'column',
+                                                                gap: 1,
+                                                            }}
+                                                        >
+                                                            <span style={{ fontSize: 11, fontWeight: 650, color: '#3f3f46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+                                                                {j.brief.trim() ? j.brief.slice(0, 34) : 'Open exploration'}
+                                                            </span>
+                                                            <span style={{ fontSize: 9, color: '#9aa0aa' }}>
+                                                                {JOB_STAGE[j.stage] ?? j.stage} · {new Date(j.updatedAt).toLocaleDateString()}
+                                                            </span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            title="Delete this task (images stay in Gallery)"
+                                                            onClick={async () => {
+                                                                if (!window.confirm(`Delete "${j.brief.trim() ? j.brief.slice(0, 48) : 'Open exploration'}"? The generated images stay in Gallery.`)) return;
+                                                                await storage.deleteJob(j.id);
+                                                                setJobs(prev => prev.filter(x => x.id !== j.id));
+                                                                if (activeJobId === j.id) { setActiveJobId(null); studioRef.current?.reset(); }
+                                                            }}
+                                                            style={{ position: 'absolute', right: 3, top: 5, width: 16, height: 16, borderRadius: 999, border: 'none', background: 'transparent', color: '#c0c3ca', cursor: 'pointer', fontSize: 10, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         );
                     }
 
@@ -472,6 +569,7 @@ export default function App() {
                             refs={refs}
                             selectedAssets={selectedAssets}
                             selectedRefs={selectedRefs}
+                            onJobsChange={handleJobsChange}
                             onNavigate={setTab}
                         />
                     )}
