@@ -262,19 +262,6 @@ export default function App() {
                     <span style={{ ...S.brand, color: '#18181b' }}>Praxis</span>
                     <span style={{ ...S.brandSubtle, color: '#7b8190' }}>AI design studio</span>
                 </div>
-                <select
-                    value={brandId}
-                    onChange={e => switchBrand(e.target.value)}
-                    style={{
-                        ...S.sidebarSelect,
-                        border: '1px solid #e0e2e7',
-                        background: '#f7f7f8',
-                        color: '#18181b',
-                    }}
-                >
-                    {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                    <option value="__new__">＋ New brand…</option>
-                </select>
                 <nav style={{
                     ...S.nav,
                     ...(isNarrow ? {
@@ -419,6 +406,31 @@ export default function App() {
                     );
                 })}
                 </nav>
+                <div style={{
+                    marginTop: 'auto',
+                    paddingTop: 10,
+                    borderTop: '1px solid #eceef2',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 7,
+                }}>
+                    <span style={{ fontSize: 10, fontWeight: 850, letterSpacing: 0.7, textTransform: 'uppercase', color: '#9aa0aa', padding: '0 4px' }}>
+                        Profile
+                    </span>
+                    <select
+                        value={brandId}
+                        onChange={e => switchBrand(e.target.value)}
+                        style={{
+                            ...S.sidebarSelect,
+                            border: '1px solid #e0e2e7',
+                            background: '#f7f7f8',
+                            color: '#18181b',
+                        }}
+                    >
+                        {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                        <option value="__new__">＋ New brand…</option>
+                    </select>
+                </div>
             </aside>
             {!isNarrow && (
                 <div
