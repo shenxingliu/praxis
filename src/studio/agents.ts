@@ -359,7 +359,7 @@ export async function executeJob(
         if (opts?.qualityGate && count > 1 && !!r.image.value) {
             try {
                 onStatus?.(`Quality gate — checking shot ${i + 1}…`);
-                const crit = await critiqueQuick(r.image.value, job);
+                const crit = await critiqueImage(r.image.value, job.brief);
                 if (crit.overall < 60 && crit.suggestions.length > 0) {
                     onStatus?.(`Shot ${i + 1} scored ${crit.overall} — one reshoot with fixes…`);
                     r = await generate({ ...job.plan.params, directives: [...(job.directives ?? []), ...crit.suggestions] }, job.plan.assetIds, onStatus, anchor);
@@ -407,7 +407,7 @@ export async function executeCampaign(
             if (opts?.qualityGate && !!r.image.value) {
                 try {
                     onStatus?.(`Quality gate — checking ${slot.purpose}…`);
-                    const crit = await critiqueQuick(r.image.value, job);
+                    const crit = await critiqueImage(r.image.value, job.brief);
                     if (crit.overall < 60 && crit.suggestions.length > 0) {
                         onStatus?.(`${slot.purpose} scored ${crit.overall} — one reshoot with fixes…`);
                         r = await generate(
@@ -461,20 +461,34 @@ function calibrationBlock(): string {
     } catch { return ''; }
 }
 
-/** (2) One cheap single-image read — the batch quality gate. */
-async function critiqueQuick(image: string, job: PraxisJob): Promise<{ overall: number; suggestions: string[] }> {
+export interface ImageCrit {
+    overall: number;
+    notes: Array<{ axis: string; score: number; note: string }>;
+    suggestions: string[];
+}
+
+/** One cheap single-image design crit vs the brand soul. Used by the
+ *  Studio batch quality gate AND the Canvas per-node Crit button. */
+export async function critiqueImage(image: string, context = ''): Promise<ImageCrit> {
     const brand = await getCurrentBrand();
     const soul = await getBrandSoul();
-    const prompt = `You are the studio's DESIGN CRITIC doing a fast pre-delivery check of ONE generated image.
+    const prompt = `You are the studio's DESIGN CRITIC doing a fast check of ONE generated image.
 BRAND: ${brand.name} — ${brand.description}
-BRIEF: ${job.brief.trim() || '(open exploration)'}
+CONTEXT: ${context.trim() || '(none — judge against the brand soul alone)'}
 ### BRAND SOUL ###
 ${(soul?.fields ?? []).filter(f => f.value.trim()).map(f => `${f.key}: ${f.value}`).join('\n') || '(none)'}
 ${calibrationBlock()}
-Score 0-100 overall against the soul and brief. If below 60, give at most 2 concrete art-direction fixes; otherwise return an empty list.
-Output JSON: { "overall": number, "suggestions": [] }`;
-    const parsed = await generateJson<{ overall: number; suggestions: string[] }>(prompt, [image]);
-    return { overall: Number(parsed?.overall ?? 100), suggestions: (parsed?.suggestions ?? []).map(String).slice(0, 2) };
+### TASK ###
+- notes: for each axis (narrative, sensation, viewing) a 0-100 score + ONE short concrete note citing what you SEE
+- overall: 0-100 weighted judgment
+- suggestions: at most 2 specific art-direction fixes if overall < 70, else empty
+Output JSON: { "overall": number, "notes": [ { "axis", "score", "note" } ], "suggestions": [] }`;
+    const parsed = await generateJson<ImageCrit>(prompt, [image]);
+    return {
+        overall: Number(parsed?.overall ?? 100),
+        notes: (parsed?.notes ?? []).map(n => ({ axis: String(n.axis), score: Number(n.score), note: String(n.note ?? '') })).slice(0, 3),
+        suggestions: (parsed?.suggestions ?? []).map(String).slice(0, 2),
+    };
 }
 
 /** (4) Pre-flight: critique the PLAN before any image spend — a text call

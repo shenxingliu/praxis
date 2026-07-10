@@ -5,6 +5,7 @@ import { brandKey, getCurrentBrandId } from '../domain/brand';
 import { INVENTORY_CHANGED_EVENT } from './events';
 import { weaveGenerate, extractFacets, deriveIdea, describeAsPrompt, analyzeImage, rotateView, estimateAngles, distillWeaveApproach, WeaveFacet, FACET_DIMENSIONS, FACET_HINTS } from '../engine/weave';
 import { recordSignal } from '../learning/learning';
+import { critiqueImage } from '../studio/agents';
 import { BudgetExceededError } from '../engine/engine';
 import { openLightbox } from './lightbox';
 import { DropZone, imageFiles } from './dropzone';
@@ -43,6 +44,7 @@ interface WeaveNode {
     w?: number;            // custom width (drag the ◢ corner handle)
     h?: number;            // custom height (drag the ◢ corner handle)
     quantity?: number;     // hero nodes: how many instances (default 1)
+    crit?: { overall: number; notes: Array<{ axis: string; score: number; note: string }>; suggestions: string[] }; // output nodes: design crit
 }
 
 /** Saved canvas configuration — persisted via brandKey KV. */
@@ -746,6 +748,20 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
 
     const assignToOutput = (outputId: string, r: GenerationResult) =>
         setNodes(prev => prev.map(x => x.id === outputId ? { ...x, image: r.image.value, resultId: r.id } : x));
+
+    /** One-click design crit of a generated output vs the brand soul. */
+    const runCrit = async (nn: WeaveNode) => {
+        if (!nn.image || outputBusy[nn.id]) return;
+        setOutputStatus(nn.id, 'Design crit — the critic is reading this image…');
+        try {
+            const crit = await critiqueImage(nn.image, nodes.find(x => x.kind === 'note' && componentOf(nn.id).has(x.id))?.text ?? '');
+            setNodes(prev => prev.map(x => x.id === nn.id ? { ...x, crit } : x));
+        } catch (err: any) {
+            setNotice(`Crit failed: ${err?.message?.slice(0, 80) ?? 'try again'}`);
+        } finally {
+            setOutputStatus(nn.id, '');
+        }
+    };
 
     const runOutput = async (o: WeaveNode) => {
         const comp = componentOf(o.id);
@@ -1506,6 +1522,36 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
                                                 </div>
                                             </div>
                                         )}
+                                        {nn.crit && !outputBusyText && (
+                                            <div onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}
+                                                style={{ marginTop: 6, padding: '8px 10px', borderRadius: 8, textAlign: 'left', background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,212,216,0.55)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', animation: 'praxis-pop 240ms cubic-bezier(0.22,1,0.36,1)' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                                                    <span style={{ fontSize: 9, fontWeight: 850, letterSpacing: 0.6, textTransform: 'uppercase', color: '#71717a' }}>Design crit</span>
+                                                    <span style={{ padding: '1px 8px', borderRadius: 999, fontSize: 10, fontWeight: 850, background: nn.crit.overall >= 70 ? 'rgba(22,163,74,0.12)' : 'rgba(180,83,9,0.12)', color: nn.crit.overall >= 70 ? '#15803d' : '#92400e', border: `1px solid ${nn.crit.overall >= 70 ? 'rgba(22,163,74,0.28)' : 'rgba(180,83,9,0.25)'}` }}>
+                                                        {nn.crit.overall}/100
+                                                    </span>
+                                                    <button title="Dismiss crit"
+                                                        onClick={() => setNodes(prev => prev.map(x => x.id === nn.id ? { ...x, crit: undefined } : x))}
+                                                        style={{ marginLeft: 'auto', width: 16, height: 16, borderRadius: 999, border: 'none', background: 'transparent', color: '#a1a1aa', cursor: 'pointer', fontSize: 10, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                                {nn.crit.notes.map(a => (
+                                                    <div key={a.axis} style={{ fontSize: 9.5, color: '#3f3f46', lineHeight: 1.45, marginTop: 4 }}>
+                                                        <strong style={{ color: a.score >= 70 ? '#15803d' : '#92400e' }}>{a.axis} {a.score}</strong> — {a.note}
+                                                    </div>
+                                                ))}
+                                                {nn.crit.suggestions.length > 0 && (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 5 }}>
+                                                        {nn.crit.suggestions.map((sug, i) => (
+                                                            <div key={i} style={{ fontSize: 9.5, color: '#78350f', lineHeight: 1.45, padding: '4px 8px', borderRadius: 6, background: 'rgba(255,251,235,0.9)', border: '1px solid rgba(180,83,9,0.2)' }}>
+                                                                ⚒ {sug}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                                 </div>
@@ -1530,6 +1576,8 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
                                         {nn.kind === 'output' && (
                                             <>
                                                 <button style={{ ...miniBtn, background: '#18181b', color: '#fff', border: '1px solid #18181b' }} disabled={!!busy || !!outputBusy[nn.id]} onClick={() => runOutput(nn)}>Run</button>
+                                                {nn.image && <button style={miniBtn} disabled={!!busy || !!outputBusy[nn.id]} onClick={() => runCrit(nn)}
+                                                    title="Design crit: the critic scores this image against the brand soul — narrative, sensation, viewing — and suggests fixes">Crit</button>}
                                                 {nn.image && <>
                                                     <button style={miniBtn} onClick={() => add({ kind: 'image', image: nn.image!, role: 'fusion' }, { x: nn.x + W(nn) + 30, y: nn.y })}>Vibe</button>
                                                     <button style={miniBtn} onClick={() => add({ kind: 'image', image: nn.image!, role: 'concept' }, { x: nn.x + W(nn) + 30, y: nn.y + 40 })}>Idea</button>
