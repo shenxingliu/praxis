@@ -20,8 +20,12 @@ export default function GalleryView() {
     const [busy, setBusy] = useState('');
     const [notice, setNotice] = useState('');
 
-    const refresh = () => storage.listResults(120).then(setResults);
-    useEffect(() => { refresh(); }, []);
+    const [limit, setLimit] = useState(24);
+    const refresh = () => storage.listResults(limit).then(setResults).catch(err => {
+        setNotice(`Cloud read struggled — showing what loaded. (${err?.message?.slice(0, 80) ?? 'unknown'})`);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => { refresh(); }, [limit]);
 
     const shown = view === 'saved' ? results.filter(r => r.adopted) : results;
     const savedCount = results.filter(r => r.adopted).length;
@@ -125,10 +129,10 @@ export default function GalleryView() {
                             </span>
                             <span style={{ display: 'flex', gap: 6 }}>
                                 <button style={{ ...S.btnGhost, color: r.adopted ? '#d97706' : undefined }}
-                                    title={r.adopted ? 'Unsave' : 'Save to the curated set'} onClick={() => toggleSave(r)}>
-                                    {r.adopted ? '*' : '*'}
+                                    title={r.adopted ? 'Unsave — drop from the curated set' : 'Save to the curated set'} onClick={() => toggleSave(r)}>
+                                    {r.adopted ? '★' : '☆'}
                                 </button>
-                                <button style={S.btnGhost} onClick={() => download(r)}>Save</button>
+                                <button style={S.btnGhost} title="Download the file" onClick={() => download(r)}>↓</button>
                                 {r.adopted && <button style={{ ...S.btnGhost, color: '#18181b' }} onClick={() => remove(r)}>✕</button>}
                             </span>
                         </div>
@@ -140,6 +144,11 @@ export default function GalleryView() {
                     </p>
                 )}
             </div>
+            {results.length >= limit && (
+                <button style={{ ...S.btnGhost, margin: '12px auto 0', display: 'block' }} onClick={() => setLimit(l => l + 24)}>
+                    Load more
+                </button>
+            )}
         </div>
     );
 }

@@ -48,11 +48,11 @@ export class SupabaseProvider implements StorageProvider {
         };
     }
 
-    private async rows<T>(table: string, query = ''): Promise<T[]> {
+    private async rows<T>(table: string, query = '', attempts = 3): Promise<T[]> {
         // Image-heavy tables (full base64 in jsonb) intermittently 500 on
         // the Supabase side — retry transient server errors before failing.
         let lastErr = '';
-        for (let attempt = 0; attempt < 3; attempt++) {
+        for (let attempt = 0; attempt < attempts; attempt++) {
             const resp = await fetch(`${this.url}/rest/v1/${table}?select=data${query}`, {
                 headers: this.headers(),
             });
@@ -68,9 +68,48 @@ export class SupabaseProvider implements StorageProvider {
     }
 
     /** Rows of the ACTIVE brand only (server-side jsonb filter). */
-    private brandRows<T>(table: string, query = ''): Promise<T[]> {
+    private brandRows<T>(table: string, query = '', attempts = 3): Promise<T[]> {
         const bid = encodeURIComponent(getCurrentBrandId());
-        return this.rows<T>(table, `&data->>brandId=eq.${bid}${query}`);
+        return this.rows<T>(table, `&data->>brandId=eq.${bid}${query}`, attempts);
+    }
+
+    /** Two-phase read for image-heavy tables. The single-statement path
+     *  (jsonb brand filter) detoasts EVERY megabyte row and hits the 8s
+     *  statement timeout once a table grows. Here: cheap ordered id pages
+     *  (~0.4s), then payloads by primary key in small parallel batches —
+     *  every statement stays far under the timeout. */
+    private async pagedBrandRows<T extends { id: string; brandId: string }>(table: string, limit = 1000): Promise<T[]> {
+        const bid = getCurrentBrandId();
+        const out: T[] = [];
+        const IDPAGE = 60, BATCH = 2, CONC = 6;
+        for (let offset = 0; out.length < limit && offset < 1200; offset += IDPAGE) {
+            const resp = await fetch(
+                `${this.url}/rest/v1/${table}?select=id&order=updated_at.desc&limit=${IDPAGE}&offset=${offset}`,
+                { headers: this.headers() }
+            );
+            if (!resp.ok) {
+                if (out.length > 0) break; // partial beats empty
+                throw new Error(`Supabase ${table} id-page read ${resp.status}`);
+            }
+            const ids: string[] = ((await resp.json()) as Array<{ id: string }>).map(r => r.id);
+            const orderIdx = new Map(ids.map((id, ix) => [id, ix]));
+            for (let i = 0; i < ids.length && out.length < limit; i += BATCH * CONC) {
+                const wave: Promise<T[]>[] = [];
+                for (let c = 0; c < CONC; c++) {
+                    const slice = ids.slice(i + c * BATCH, i + (c + 1) * BATCH);
+                    if (slice.length === 0) break;
+                    wave.push(
+                        this.rows<T>(table, `&id=in.(${slice.map(encodeURIComponent).join(',')})`)
+                            .catch(() => [] as T[])
+                    );
+                }
+                const got = (await Promise.all(wave)).flat();
+                got.sort((a, b) => (orderIdx.get(a.id) ?? 0) - (orderIdx.get(b.id) ?? 0));
+                out.push(...got.filter(r => r.brandId === bid));
+            }
+            if (ids.length < IDPAGE) break;
+        }
+        return out.slice(0, limit);
     }
 
     private async upsert(table: string, entries: Array<{ id: string; data: unknown }>): Promise<void> {
@@ -95,7 +134,8 @@ export class SupabaseProvider implements StorageProvider {
 
     // ---- Assets ----
     async listAssets(): Promise<Asset[]> {
-        const all = await this.brandRows<Asset>(TABLE.assets);
+        const all = await this.brandRows<Asset>(TABLE.assets, '', 1)
+            .catch(() => this.pagedBrandRows<Asset>(TABLE.assets));
         return all.sort((a, b) => b.updatedAt - a.updatedAt);
     }
     upsertAsset(asset: Asset) { return this.upsert(TABLE.assets, [{ id: asset.id, data: asset }]); }
@@ -103,7 +143,8 @@ export class SupabaseProvider implements StorageProvider {
 
     // ---- References ----
     async listReferences(kind?: Reference['kind']): Promise<Reference[]> {
-        const all = await this.brandRows<Reference>(TABLE.references);
+        const all = await this.brandRows<Reference>(TABLE.references, '', 1)
+            .catch(() => this.pagedBrandRows<Reference>(TABLE.references));
         const filtered = kind ? all.filter(r => r.kind === kind) : all;
         return filtered.sort((a, b) => b.weight - a.weight);
     }
@@ -129,7 +170,9 @@ export class SupabaseProvider implements StorageProvider {
 
     // ---- Results + signals ----
     async listResults(limit = 200): Promise<GenerationResult[]> {
-        return this.brandRows<GenerationResult>(TABLE.results, `&order=updated_at.desc&limit=${limit}`);
+        // Always two-phase: this table is the largest and the single-
+        // statement path times out on it reliably (57014).
+        return this.pagedBrandRows<GenerationResult>(TABLE.results, limit);
     }
     async getResult(id: string): Promise<GenerationResult | null> {
         // Brand-scoped like every other read — an id must not cross brands.
