@@ -34,6 +34,21 @@ export default function App() {
     const weaveRef = useRef<WeaveViewHandle>(null);
     const [tab, setTab] = useState<Tab>('studio');
 
+    const [brands, setBrands] = useState<Brand[]>([]);
+    const [brandId, setBrandId] = useState(getCurrentBrandId());
+    const [isNarrow, setIsNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < 760);
+    const [assets, setAssets] = useState<Asset[]>([]);
+    const [refs, setRefs] = useState<Reference[]>([]);
+    const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
+    const [selectedRefs, setSelectedRefs] = useState<Set<string>>(new Set());
+    const [jobs, setJobs] = useState<PraxisJob[]>([]);
+    const [tasksOpen, setTasksOpen] = useState(true);
+    const [activeJobId, setActiveJobId] = useState<string | null>(null);
+    const pendingResume = useRef<PraxisJob | null>(null);
+    const [assetsOpen, setAssetsOpen] = useState(true);
+    const [inspOpen, setInspOpen] = useState(false);
+    const [sidebarWidth, setSidebarWidth] = useState(264);
+
     useEffect(() => {
         storage.listJobs(20).then(setJobs).catch(() => {});
     }, []);
@@ -76,24 +91,12 @@ export default function App() {
             setTab('studio');
         }
     };
-    const [brands, setBrands] = useState<Brand[]>([]);
-    const [brandId, setBrandId] = useState(getCurrentBrandId());
-    const [isNarrow, setIsNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < 760);
-    const [assets, setAssets] = useState<Asset[]>([]);
-    const [refs, setRefs] = useState<Reference[]>([]);
-    const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
-    const [selectedRefs, setSelectedRefs] = useState<Set<string>>(new Set());
-    const [jobs, setJobs] = useState<PraxisJob[]>([]);
-    const [tasksOpen, setTasksOpen] = useState(true);
-    const [activeJobId, setActiveJobId] = useState<string | null>(null);
-    const pendingResume = useRef<PraxisJob | null>(null);
-    const [assetsOpen, setAssetsOpen] = useState(true);
-    const [inspOpen, setInspOpen] = useState(false);
-    const [sidebarWidth, setSidebarWidth] = useState(264);
 
     useEffect(() => { listBrands().then(setBrands); }, []);
     const refreshSources = useCallback(() => {
-        storage.listAssets().then(setAssets);
+        storage.listAssets()
+            .then(setAssets)
+            .catch(err => console.warn('[app] assets load failed:', err));
         storage.listReferences()
             .then(rs => setRefs(rs.filter(r => !!r?.image?.value && r.kind !== 'plate')))
             .catch(err => console.warn('[app] refs load failed:', err));
@@ -130,7 +133,7 @@ export default function App() {
             });
             return;
         }
-        if (!window.confirm('Switch brand? The app reloads — anything unsaved (canvas layouts, running jobs, drafts) is lost.')) return;
+        if (!window.confirm('Switch profile? The app reloads — in-progress canvas layouts, running jobs, and drafts will be lost.')) return;
         setCurrentBrandId(id);
         setBrandId(id);
         window.location.reload(); // simplest correctness: every view reloads its brand's data

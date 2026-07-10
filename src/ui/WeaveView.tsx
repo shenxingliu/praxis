@@ -611,7 +611,7 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
             setNodes(prev => prev.map(x => x.id === nn.id
                 ? { id: x.id, kind: 'hero' as const, x: x.x, y: x.y, assetId: asset.id, w: x.w, h: x.h }
                 : x));
-            setNotice(`Asset "${name}" saved as ${subjectType} — the node is now a library asset.`);
+        setNotice(`Asset "${name}" added as ${subjectType} — the node is now a library asset.`);
         } catch (err: any) { setNotice(`${err?.message || err}`); }
         setBusy('');
     };
@@ -865,7 +865,7 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
             updatedAt: now,
         };
         await storage.upsertRule(rule);
-        setNotice(`Saved as a brand rule — future generations honor it (manage in Brain).`);
+        setNotice(`Added as a brand rule — future generations honor it (manage in Brain).`);
     };
 
     /** Solo-run one facet: spawn an output next to it. */
@@ -953,33 +953,14 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
         setBusy('');
     };
 
-    const saveResult = async (nn: WeaveNode) => {
-        const r = nn.resultId ? resultsRef.current.get(nn.resultId) : undefined;
-        if (!r) { setNotice('Result metadata not in this session — download instead.'); return; }
-        await recordSignal(r, 'save');
-        setNotice('Saved to Gallery.');
-    };
-
     /** Save a canvas image into the Gallery as an adopted output. Uses the
      *  tracked generation recipe when we have it; otherwise a minimal one. */
     const saveToGallery = async (nn: WeaveNode) => {
         if (!nn.image) return;
-        const tracked = nn.resultId ? resultsRef.current.get(nn.resultId) : undefined;
-        const result: GenerationResult = tracked ?? {
-            id: crypto.randomUUID(),
-            brandId: getCurrentBrandId(),
-            params: { outputType: 'scene', ratio: '1:1', modelTier: 'flash', note: nn.text ?? 'Canvas image' } as GenerationParams,
-            assetIds: [],
-            referenceIds: [],
-            appliedRuleIds: [],
-            fullPrompt: nn.text ?? '(canvas image without tracked recipe)',
-            model: 'canvas',
-            image: { kind: 'data', value: nn.image },
-            estimatedCostUsd: 0,
-            createdAt: Date.now(),
-            adopted: false,
-        };
-        await recordSignal(result, 'save'); // persists it adopted + feeds learning
+        const result = { ...resultForNode(nn), image: { kind: 'data' as const, value: nn.image }, adopted: true, createdAt: Date.now() };
+        await storage.upsertResult(result);
+        rememberResult(result);
+        await recordSignal(result, 'save').catch(() => {});
         setNotice('Saved to Gallery.');
     };
 
@@ -1047,7 +1028,7 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
         setConfigs(next);
         setShowSaveDialog(false);
         setSaveName('');
-        setNotice(`Saved "${name}".`);
+        setNotice(`Stored "${name}".`);
     };
 
     const loadConfig = (cfg: WeaveConfig) => {
@@ -1154,17 +1135,17 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
                     />
                     <button style={{ ...S.btn, fontWeight: 800 }} disabled={!!busy} onClick={() => weave(tierSel)}>Run</button>
                     <span style={{ width: 1, height: 18, background: '#e4e4e7', margin: '0 2px' }} />
-                    <button style={S.btnGhost} onClick={() => { setShowSaveDialog(true); setSaveName(''); }} title="Save current canvas as a workflow">Save</button>
-                    <button style={S.btnGhost} onClick={() => setShowLoadMenu(!showLoadMenu)} title="Load a saved workflow">
+                    <button style={S.btnGhost} onClick={() => { setShowSaveDialog(true); setSaveName(''); }} title="Store current canvas as a workflow">Store</button>
+                    <button style={S.btnGhost} onClick={() => setShowLoadMenu(!showLoadMenu)} title="Load a stored workflow">
                         Load {configs.length > 0 && <span style={{ fontSize: 9, color: '#a1a1aa' }}>{configs.length}</span>}
                     </button>
                 </span>
             </div>
 
-            {/* Save dialog */}
+            {/* Store dialog */}
             {showSaveDialog && (
                 <div style={{ ...S.card, display: 'flex', gap: 8, alignItems: 'center', border: '1px solid #c9c9cf', background: 'rgba(255,255,255,0.82)' }}>
-                    <span style={{ ...S.label, whiteSpace: 'nowrap' }}>SAVE WORKFLOW</span>
+                    <span style={{ ...S.label, whiteSpace: 'nowrap' }}>STORE WORKFLOW</span>
                     <input
                         value={saveName}
                         onChange={e => setSaveName(e.target.value)}
@@ -1173,7 +1154,7 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
                         autoFocus
                         style={{ flex: 1, border: '1px solid #e4e4e7', borderRadius: 6, padding: '4px 8px', fontSize: 11, outline: 'none' }}
                     />
-                    <button style={{ ...S.btn, fontSize: 11 }} onClick={saveConfig}>Save</button>
+                    <button style={{ ...S.btn, fontSize: 11 }} onClick={saveConfig}>Store</button>
                     <button style={{ ...S.btnGhost, fontSize: 11 }} onClick={() => setShowSaveDialog(false)}>Cancel</button>
                 </div>
             )}
@@ -1182,10 +1163,10 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
             {showLoadMenu && (
                 <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 6, border: '1.5px solid #d4d4d8', maxHeight: 220, overflow: 'auto' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={S.label}>SAVED WORKFLOWS</span>
+                        <span style={S.label}>STORED WORKFLOWS</span>
                         <button style={S.btnGhost} onClick={() => setShowLoadMenu(false)}>Close</button>
                     </div>
-                    {configs.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No saved workflows yet.</span>}
+                    {configs.length === 0 && <span style={{ fontSize: 11, color: '#a1a1aa' }}>No stored workflows yet.</span>}
                     {configs.map(cfg => (
                         <div key={cfg.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px', background: '#fafafa', borderRadius: 8 }}>
                             <button style={{ ...S.btnGhost, flex: 1, textAlign: 'left', fontSize: 11, fontWeight: 600 }} onClick={() => loadConfig(cfg)}>
@@ -1662,7 +1643,7 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
                                                         {SUBJECT_TYPES.map(t => (
                                                             <button key={t} style={miniBtn} disabled={!!busy}
                                                                 onClick={() => saveNodeAsAsset(nn, t)}
-                                                                title={`Save this generated image into the Assets library as ${t}`}>
+                                                                title={`Add this generated image into the Assets library as ${t}`}>
                                                                 {t}
                                                             </button>
                                                         ))}
@@ -1695,7 +1676,7 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
                                                     {SUBJECT_TYPES.map(t => (
                                                         <button key={t} style={miniBtn} disabled={!!busy}
                                                             onClick={() => saveNodeAsAsset(nn, t)}
-                                                            title={`Save this image (all merged angles) into the Assets library as ${t} — the node becomes a library asset`}>
+                                                            title={`Add this image (all merged angles) into the Assets library as ${t} — the node becomes a library asset`}>
                                                             {t}
                                                         </button>
                                                     ))}
@@ -1710,7 +1691,6 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
                                                 {nn.image && <>
                                                     <button style={miniBtn} disabled={!!busy} onClick={() => saveToGallery(nn)} title="Save to Gallery (adopted output)">Save</button>
                                                     <button style={miniBtn} onClick={() => download(nn)} title="Download the file">↓</button>
-                                                    <button style={miniBtn} disabled={!!busy} onClick={() => saveResult(nn)}>Gallery</button>
                                                     <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>View</button>
                                                 </>}
                                             </>
@@ -1720,7 +1700,7 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
                                                 <button style={miniBtn} disabled={!!busy} onClick={() => runFacet(nn)}>solo (flash)</button>
                                                 <button style={{ ...miniBtn, background: '#18181b', color: '#fff', border: '1px solid #18181b' }} disabled={!!busy}
                                                     onClick={() => facetToRule(nn)}
-                                                    title="Save this dimension as a permanent brand rule — every future generation will honor it (toggle/delete in Brain)">→ Rule</button>
+                                                    title="Add this dimension as a permanent brand rule — every future generation will honor it (toggle/delete in Brain)">→ Rule</button>
                                             </>
                                         )}
                                         {nn.kind === 'hero' && (

@@ -158,7 +158,7 @@ const SoulPanel: React.FC = () => {
             setSoul(d.soul);
             setWebSuggest(d);
             setDirty(true);
-            setBusy('Draft derived from the website — review below, then Save');
+            setBusy('Draft derived from the website — review below, then Apply');
         } catch (err: any) { setBusy(`${err?.message || err}`); }
     };
 
@@ -176,8 +176,8 @@ const SoulPanel: React.FC = () => {
 
     const save = async () => {
         if (!soul) return;
-        setBusy('Saving…');
-        try { await saveBrandSoul(soul); setDirty(false); setBusy('Saved (previous version archived)'); }
+        setBusy('Applying…');
+        try { await saveBrandSoul(soul); setDirty(false); setBusy('Applied (previous version archived)'); }
         catch (err: any) { setBusy(`${err?.message || err}`); }
     };
 
@@ -197,7 +197,7 @@ const SoulPanel: React.FC = () => {
                 <button style={S.btnGhost} onClick={deriveFromWeb} title="Point at any brand website — its words and imagery become a soul draft">
                     From website
                 </button>
-                {soul && <button style={{ ...S.btn, opacity: dirty ? 1 : 0.4 }} disabled={!dirty} onClick={save}>Save</button>}
+                {soul && <button style={{ ...S.btn, opacity: dirty ? 1 : 0.4 }} disabled={!dirty} onClick={save}>Apply</button>}
                 <span style={{ fontSize: 11, color: '#71717a' }}>{busy}</span>
             </div>
             {webSuggest && (

@@ -135,8 +135,7 @@ export class SupabaseProvider implements StorageProvider {
 
     // ---- Assets ----
     async listAssets(): Promise<Asset[]> {
-        const all = await this.brandRows<Asset>(TABLE.assets, '', 1)
-            .catch(() => this.pagedBrandRows<Asset>(TABLE.assets));
+        const all = await this.pagedBrandRows<Asset>(TABLE.assets);
         return all.sort((a, b) => b.updatedAt - a.updatedAt);
     }
     /** Move any inline base64 image to the storage bucket before the row
@@ -159,8 +158,7 @@ export class SupabaseProvider implements StorageProvider {
 
     // ---- References ----
     async listReferences(kind?: Reference['kind']): Promise<Reference[]> {
-        const all = await this.brandRows<Reference>(TABLE.references, '', 1)
-            .catch(() => this.pagedBrandRows<Reference>(TABLE.references));
+        const all = await this.pagedBrandRows<Reference>(TABLE.references);
         const filtered = kind ? all.filter(r => r.kind === kind) : all;
         return filtered.sort((a, b) => b.weight - a.weight);
     }

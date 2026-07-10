@@ -10,6 +10,7 @@ import { openLightbox } from './lightbox';
 import { DropZone, imageFiles } from './dropzone';
 import { Select } from './controls';
 import { S } from './styles';
+import { SmartImage } from './SmartImage';
 
 /**
  * INSPIRATION — a pool of raw reference images, fused directly.
@@ -48,7 +49,9 @@ export default function LibraryView() {
     const [combos, setCombos] = useState<FusionCombo[]>([]);
 
     const refresh = () => {
-        storage.listReferences().then(setRefs);
+        storage.listReferences().then(setRefs).catch(err => {
+            setNotice(`Inspiration could not load. ${err?.message ?? err}`);
+        });
     };
     useEffect(refresh, []);
 
@@ -254,7 +257,7 @@ export default function LibraryView() {
                                     a.href = draft.image;
                                     a.download = `praxis-fusion-gen${draft.generation}.png`;
                                     a.click();
-                                }}>Save</button>
+                                }}>Download</button>
                             </span>
                         </div>
                     </div>
@@ -265,8 +268,8 @@ export default function LibraryView() {
             <div style={{ columnWidth: 150, columnGap: 10 }}>
                 {refs.map(r => (
                     <div key={r.id} style={{ ...S.card, padding: 0, overflow: 'hidden', position: 'relative', breakInside: 'avoid', marginBottom: 10, border: selectedRefs.has(r.id) ? '1.5px solid #18181b' : undefined }}>
-                        <img src={r.image.value} alt={r.name} onClick={() => toggleSelectRef(r.id)}
-                            style={{ width: '100%', display: 'block', cursor: 'pointer' }} />
+                        <SmartImage src={r.image.value} alt={r.name} onClick={() => openLightbox(r.image.value)}
+                            style={{ width: '100%', display: 'block', cursor: 'zoom-in' }} />
                         <div style={{ padding: '5px 8px', fontSize: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 5 }}>
                             <input type="checkbox" checked={selectedRefs.has(r.id)} onChange={() => toggleSelectRef(r.id)}
                                 style={{ cursor: 'pointer', margin: 0 }} title="Select for the Fusion Lab" />

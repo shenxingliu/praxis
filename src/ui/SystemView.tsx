@@ -154,7 +154,7 @@ export default function SystemView() {
             }
             setMigrateLog(`Done — ${moved} rows offloaded, ${skipped} already lean, ${failed} failed (safe to re-run).`);
         } catch (err: any) {
-            setMigrateLog(`Stopped early: ${err?.message ?? err}. Progress is saved — re-run to continue.`);
+            setMigrateLog(`Stopped early: ${err?.message ?? err}. Progress is kept — re-run to continue.`);
         } finally {
             setMigrating('');
             refresh();
@@ -211,7 +211,7 @@ export default function SystemView() {
                             placeholder="Paste your Gemini API key"
                             style={{ ...S.input, width: 320 }}
                         />
-                        {apiKey.trim() && <span style={{ color: '#047857', fontSize: 12, fontWeight: 700 }}>saved ✓</span>}
+                        {apiKey.trim() && <span style={{ color: '#047857', fontSize: 12, fontWeight: 700 }}>set ✓</span>}
                     </p>
                     <p style={{ fontSize: 12, color: '#71717a' }}>
                         Stored only in this browser (localStorage); sent only to Google when generating.

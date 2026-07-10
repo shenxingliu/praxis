@@ -133,7 +133,7 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
             updatedAt: now,
         };
         await storage.upsertRule(rule);
-        setJob(await say(job, 'agent', `Saved as a brand rule: "${text.length > 72 ? `${text.slice(0, 72)}...` : text}"`));
+        setJob(await say(job, 'agent', `Added as a brand rule: "${text.length > 72 ? `${text.slice(0, 72)}...` : text}"`));
     };
 
     const sendConceptFeedback = async () => {
@@ -465,7 +465,11 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
     };
 
     const saveResult = async (r: GenerationResult) => {
-        await recordSignal(r, 'save');
+        const saved = { ...r, adopted: true, createdAt: Date.now() };
+        await storage.upsertResult(saved);
+        await recordSignal(saved, 'save').catch(() => {});
+        setResults(prev => prev.map(x => x.id === r.id ? saved : x));
+        setMoodDrafts(prev => prev.map(x => x.id === r.id ? saved : x));
         setFeedback(prev => new Map(prev).set(r.id, 'like'));
         setError(null);
         setBusy('');
@@ -1064,7 +1068,7 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
                                                 Feedback
                                             </button>
                                             <button title="Save to Gallery" disabled={!!busy}
-                                                onClick={async () => { await recordSignal(d, 'save'); window.alert('Saved to Gallery.'); }}
+                                                onClick={() => saveResult(d)}
                                                 style={{ ...S.btnGhost, fontSize: 10 }}>Save</button>
                                             <button title="Download the file" disabled={!!busy}
                                                 onClick={() => downloadImage(d.image.value, `praxis-mood-${d.id.slice(0, 6)}`)}
@@ -1255,7 +1259,7 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
                             {(job.directives ?? []).map((d, i) => (
                                 <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 999, background: 'rgba(24,24,27,0.06)', border: '1px solid rgba(212,212,216,0.6)', color: '#3f3f46' }}>
                                     {d.length > 48 ? `${d.slice(0, 48)}…` : d}
-                                    <button onClick={() => saveDirectiveAsRule(d)} title="Save this note as a permanent brand rule"
+                                    <button onClick={() => saveDirectiveAsRule(d)} title="Add this note as a permanent brand rule"
                                         style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#52525b', fontSize: 9, padding: 0, lineHeight: 1 }}>Rule</button>
                                     <button onClick={() => removeDirective(i)} title="Stop applying this directive"
                                         style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#a1a1aa', fontSize: 10, padding: 0, lineHeight: 1 }}>✕</button>

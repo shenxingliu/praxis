@@ -7,6 +7,7 @@ import { openLightbox } from './lightbox';
 import { resolveToDataUrl } from '../storage/images';
 import { S } from './styles';
 import { SegmentedControl } from './SegmentedControl';
+import { SmartImage } from './SmartImage';
 
 /**
  * GALLERY — every generation is stored in the cloud with its full recipe
@@ -122,7 +123,7 @@ export default function GalleryView() {
             <div style={{ columnWidth: 230, columnGap: 10 }}>
                 {shown.map(r => (
                     <div key={r.id} style={{ ...S.card, padding: 0, overflow: 'hidden', breakInside: 'avoid', marginBottom: 10 }}>
-                        <img src={r.image.value} alt="" onClick={() => openLightbox(r.image.value)}
+                        <SmartImage src={r.image.value} alt="" onClick={() => openLightbox(r.image.value)}
                             style={{ width: '100%', display: 'block', cursor: 'zoom-in' }} />
                         <div style={{ padding: '6px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ fontSize: 10, color: '#a1a1aa' }}>

@@ -88,6 +88,14 @@ export default function QuickView() {
         await recordSignal(r, 'export');
     };
 
+    const saveToGallery = async (r: GenerationResult & { tier: 'flash' | 'pro' }) => {
+        const saved = { ...r, adopted: true, createdAt: Date.now() };
+        await storage.upsertResult(saved);
+        await recordSignal(saved, 'save').catch(() => {});
+        setResults(prev => prev.map(x => x.id === r.id ? saved : x));
+        setNotice('Saved to Gallery.');
+    };
+
     return (
         <div style={{ maxWidth: 980, margin: '0 auto', padding: '22px 28px', display: 'flex', flexDirection: 'column', gap: 14 }}>
             {(busy || notice) && (
@@ -107,7 +115,7 @@ export default function QuickView() {
                 <div style={{ ...S.label, marginBottom: 6 }}>1 · PRESET · {presets.length}</div>
                 {presets.length === 0 && (
                     <div style={{ ...S.card, fontSize: 12, color: '#a1a1aa' }}>
-                        No presets yet. Run a job in Studio, then hit Save on a result you love — its full setup becomes a preset here.
+                        No presets yet. Build a reusable setup from an approved Studio direction, then run it here with new assets.
                     </div>
                 )}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
@@ -181,8 +189,8 @@ export default function QuickView() {
                                     <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                                         <button onClick={() => rate(r, 'like')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, opacity: fb === 'like' ? 1 : 0.35 }}>+</button>
                                         <button onClick={() => rate(r, 'dislike')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, opacity: fb === 'dislike' ? 1 : 0.35 }}>-</button>
-                                        <button style={S.btnGhost} title="Save to Gallery" onClick={async () => { await recordSignal(r, 'save'); setNotice('Saved — find it in Gallery.'); }}>Gallery</button>
-                                        <button style={S.btnGhost} onClick={() => download(r)}>Save</button>
+                                        <button style={S.btnGhost} title="Save to Gallery" onClick={() => saveToGallery(r)}>Save</button>
+                                        <button style={S.btnGhost} title="Download the file" onClick={() => download(r)}>↓</button>
                                     </span>
                                 </div>
                             </div>

@@ -88,7 +88,8 @@ export async function resolveToDataUrl(value: string): Promise<string> {
     const hit = resolveCache.get(value);
     if (hit) return hit;
     try {
-        const resp = await fetch(value);
+        const sameSupabaseStorage = enabled() && value.startsWith(`${supabaseUrl}/storage/v1/object/`);
+        const resp = await fetch(value, sameSupabaseStorage ? { headers: headers() } : undefined);
         if (!resp.ok) return value;
         const blob = await resp.blob();
         const dataUrl = await new Promise<string>((res, rej) => {
