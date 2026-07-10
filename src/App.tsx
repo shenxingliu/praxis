@@ -409,6 +409,7 @@ export default function App() {
                 <div style={{
                     marginTop: 'auto',
                     paddingTop: 10,
+                    paddingBottom: 8,
                     borderTop: '1px solid #eceef2',
                     display: 'flex',
                     flexDirection: 'column',

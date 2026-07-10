@@ -31,19 +31,15 @@ type StudioViewProps = {
     refs: Reference[];
     selectedAssets: Set<string>;
     selectedRefs: Set<string>;
-    hideSidebar?: boolean;
-    onJobsChange?: (jobs: PraxisJob[], activeJobId: string | null) => void;
     onNavigate?: (target: 'heroes' | 'library' | 'knowledge' | 'weave' | 'gallery' | 'system') => void;
 };
 
 export type StudioViewHandle = {
     reset: () => void;
-    resume: (job: PraxisJob) => Promise<void>;
-    deleteThread: (job: PraxisJob) => Promise<void>;
 };
 
 const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function StudioView(
-    { assets, refs, selectedAssets, selectedRefs, hideSidebar = false, onJobsChange, onNavigate },
+    { assets, refs, selectedAssets, selectedRefs, onNavigate },
     ref,
 ) {
     const [job, setJob] = useState<PraxisJob | null>(null);
@@ -51,7 +47,6 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
     const [noteText, setNoteText] = useState('');
     const [conceptFeedbackId, setConceptFeedbackId] = useState<string | null>(null);
     const [conceptFeedbackText, setConceptFeedbackText] = useState('');
-    const [jobs, setJobs] = useState<PraxisJob[]>([]);
     const [brief, setBrief] = useState('');
     const [count, setCount] = useState(2);
     const [results, setResults] = useState<GenerationResult[]>([]);
@@ -73,15 +68,10 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
 
     useEffect(() => {
         storage.listElements().then(setElements);
-        storage.listJobs(30).then(setJobs).catch(() => {});
         getBrandSoul().then(soul => setSoulCount((soul?.fields ?? []).filter(f => f.value.trim()).length)).catch(() => {});
     }, []);
 
     useEffect(() => { setNoSourceWarn(false); }, [selectedAssets, selectedRefs]);
-
-    useEffect(() => {
-        onJobsChange?.(jobs, job?.id ?? null);
-    }, [jobs, job?.id, onJobsChange]);
 
     const guard = async (label: string, fn: () => Promise<void>) => {
         setBusy(label); setError(null);
@@ -133,13 +123,6 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
         };
         await storage.upsertRule(rule);
         setJob(await say(job, 'agent', `Saved as a brand rule: "${text.length > 72 ? `${text.slice(0, 72)}...` : text}"`));
-    };
-
-    const deleteThread = async (thread: PraxisJob) => {
-        if (!window.confirm(`Delete "${thread.brief.trim() ? thread.brief.slice(0, 48) : 'Open exploration'}"? The generated images stay in Gallery.`)) return;
-        await storage.deleteJob(thread.id);
-        setJobs(prev => prev.filter(j => j.id !== thread.id));
-        if (job?.id === thread.id) reset();
     };
 
     const sendConceptFeedback = async () => {
@@ -286,28 +269,8 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
 
     const reset = () => { setJob(null); setResults([]); setBrief(''); setFeedback(new Map()); setMoodDrafts([]); };
 
-    useEffect(() => {
-        storage.listJobs(30).then(setJobs).catch(() => {});
-    }, [job?.updatedAt]);
-
-    /** Resume a past job — thread, stage and (recent) results included. */
-    const resume = async (j: PraxisJob) => {
-        setJob(j);
-        setBrief(j.brief);
-        setMoodDrafts([]);
-        setFeedback(new Map());
-        const rs: GenerationResult[] = [];
-        for (const id of j.resultIds.slice(-8)) {
-            const r = await storage.getResult(id).catch(() => null);
-            if (r) rs.push(r);
-        }
-        setResults(rs);
-    };
-
     useImperativeHandle(ref, () => ({
         reset,
-        resume,
-        deleteThread,
     }));
 
     /** Step back one stage — every decision is reversible. */
@@ -548,53 +511,6 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
 
     return (
         <div style={{ maxWidth: 1480, margin: '0 auto', padding: '18px 22px', display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-            {/* Job history — rendered here only when Studio is used standalone. */}
-            {!hideSidebar && <aside style={{ width: 252, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 12, maxHeight: 'calc(100vh - 36px)' }}>
-                <button style={{ ...S.btn, width: '100%', minHeight: 38 }} onClick={reset}>New production thread</button>
-                <div style={{ border: '1px solid rgba(212,212,216,0.58)', background: 'rgba(255,255,255,0.52)', borderRadius: 13, padding: '9px 10px', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
-                    <span style={S.label}>SOURCES</span>
-                    <span style={{ fontSize: 10.5, color: '#71717a', fontWeight: 750 }}>{sourceSummary}</span>
-                </div>
-                <span style={S.label}>PROJECT THREADS</span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto', minHeight: 0 }}>
-                    {jobs.map(j => (
-                        <div key={j.id}
-                            style={{
-                                position: 'relative',
-                                padding: '9px 34px 9px 10px',
-                                borderRadius: 12,
-                                border: job?.id === j.id ? '1.5px solid #18181b' : '1px solid rgba(212,212,216,0.5)',
-                                background: job?.id === j.id ? 'rgba(255,255,255,0.86)' : 'rgba(255,255,255,0.54)',
-                                boxShadow: job?.id === j.id ? '0 8px 18px rgba(0,0,0,0.08)' : 'none',
-                            }}>
-                            <button
-                                onClick={() => resume(j)}
-                                style={{ border: 'none', background: 'transparent', padding: 0, margin: 0, width: '100%', textAlign: 'left', cursor: 'pointer', display: 'block' }}
-                            >
-                                <div style={{ fontSize: 11, fontWeight: 700, color: '#18181b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {j.brief.trim() ? j.brief.slice(0, 42) : 'Open exploration'}
-                                </div>
-                                <div style={{ fontSize: 9, color: '#71717a', marginTop: 4, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                                    <span>{(STAGE_LABEL[j.stage] ?? j.stage).replace(/^[0-9] · /, '')}</span>
-                                    <span>{j.resultIds.length} img</span>
-                                </div>
-                                <div style={{ fontSize: 9, color: '#a1a1aa', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {(j.transcript ?? []).at(-1)?.text ?? new Date(j.updatedAt).toLocaleDateString()}
-                                </div>
-                            </button>
-                            <button
-                                onClick={() => deleteThread(j)}
-                                title="Delete this project thread"
-                                style={{ position: 'absolute', right: 7, top: 7, width: 20, height: 20, borderRadius: 999, border: '1px solid rgba(212,212,216,0.7)', background: 'rgba(255,255,255,0.74)', color: '#a1a1aa', cursor: 'pointer', fontSize: 11, lineHeight: 1, padding: 0 }}
-                            >
-                                ×
-                            </button>
-                        </div>
-                    ))}
-                    {jobs.length === 0 && <span style={{ fontSize: 10.5, color: '#a1a1aa' }}>No jobs yet — describe one below.</span>}
-                </div>
-            </aside>}
-
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
             {/* Stage rail */}
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
