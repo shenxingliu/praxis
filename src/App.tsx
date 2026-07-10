@@ -7,6 +7,7 @@ import HeroView from './ui/HeroView';
 import LibraryView from './ui/LibraryView';
 import KnowledgeView from './ui/KnowledgeView';
 import SystemView from './ui/SystemView';
+import GrowthView from './ui/GrowthView';
 import { S } from './ui/styles';
 import { LightboxHost } from './ui/lightbox';
 import { Asset, Brand, PraxisJob, Reference } from './domain/types';
@@ -15,7 +16,7 @@ import {
     listBrands, getCurrentBrandId, setCurrentBrandId, createBrand,
 } from './domain/brand';
 
-type Tab = 'studio' | 'weave' | 'gallery' | 'heroes' | 'library' | 'knowledge' | 'system';
+type Tab = 'studio' | 'weave' | 'gallery' | 'heroes' | 'library' | 'knowledge' | 'growth' | 'system';
 
 const TABS: Array<{ id: Tab; label: string; meta: string }> = [
     { id: 'studio', label: 'New Task', meta: 'workflow' },
@@ -24,6 +25,7 @@ const TABS: Array<{ id: Tab; label: string; meta: string }> = [
     { id: 'heroes', label: 'Assets', meta: 'truth' },
     { id: 'library', label: 'Inspiration', meta: 'references' },
     { id: 'knowledge', label: 'Brand', meta: 'memory' },
+    { id: 'growth', label: 'Growth', meta: 'progress' },
     { id: 'system', label: 'System', meta: 'settings' },
 ];
 
@@ -598,6 +600,7 @@ export default function App() {
                     {tab === 'heroes' && <HeroView />}
                     {tab === 'library' && <LibraryView />}
                     {tab === 'knowledge' && <KnowledgeView />}
+                    {tab === 'growth' && <GrowthView />}
                     {tab === 'system' && <SystemView />}
                 </div>
             </section>
