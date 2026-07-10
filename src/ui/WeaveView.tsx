@@ -36,6 +36,7 @@ interface WeaveNode {
     text?: string;         // prompt nodes
     dimension?: string;    // facet nodes
     description?: string;  // facet nodes / concept-role idea
+    loading?: string;      // node-local generation status
     role?: 'fusion' | 'hero' | 'concept';
     resultId?: string;     // output/rotate nodes: GenerationResult behind image
     angle?: number;        // rotate nodes: azimuth in degrees (free, 0-359)
@@ -177,6 +178,36 @@ const fitImage = (fixed: boolean, extra: React.CSSProperties = {}): React.CSSPro
     display: 'block',
     ...extra,
 });
+
+const NodeLoading = ({ title, detail }: { title: string; detail?: string }) => (
+    <div
+        className="praxis-running praxis-running-card"
+        style={{
+            background: 'rgba(244,244,245,0.42)',
+            border: '1px solid rgba(212,212,216,0.46)',
+            borderRadius: 8,
+            minHeight: 118,
+            aspectRatio: '1',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
+            padding: 14,
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.42)',
+            boxSizing: 'border-box',
+            textAlign: 'center',
+        }}
+    >
+        <span className="praxis-busy-dot" />
+        <span style={{ fontSize: 13, fontWeight: 850, color: '#18181b' }}>{title}</span>
+        {detail && (
+            <span style={{ maxWidth: 190, fontSize: 9.5, lineHeight: 1.35, color: '#71717a' }}>
+                {detail}
+            </span>
+        )}
+    </div>
+);
 
 export type WeaveViewHandle = {
     addAssetToCanvas: (assetId: string) => void;
@@ -563,16 +594,27 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
         const pick = facetPick;
         if (!pick || chosen.length === 0) return;
         setFacetPick(null);
-        setBusy(`Extracting ${chosen.length} dimension${chosen.length === 1 ? '' : 's'}…`);
-        setNotice('');
+        const placeholders = chosen.map((dimension, i) =>
+            add(
+                { kind: 'facet', image: pick.image, dimension, description: '', loading: `Extracting ${dimension}...` },
+                { x: pick.near.x + (i % 2) * 210, y: pick.near.y + Math.floor(i / 2) * 170 },
+            )
+        );
         try {
             const facets = await extractFacets(pick.image, chosen);
-            facets.forEach((f, i) =>
-                add({ kind: 'facet', image: pick.image, dimension: f.dimension, description: f.description },
-                    { x: pick.near.x + (i % 2) * 210, y: pick.near.y + Math.floor(i / 2) * 170 }));
-            setNotice(`${facets.length} facet card${facets.length === 1 ? '' : 's'} on the board.`);
-        } catch (err: any) { setNotice(`${err?.message || err}`); }
-        setBusy('');
+            setNodes(prev => prev.map(node => {
+                const index = placeholders.findIndex(p => p.id === node.id);
+                if (index < 0) return node;
+                const facet = facets[index];
+                return facet
+                    ? { ...node, dimension: facet.dimension, description: facet.description, loading: undefined }
+                    : { ...node, loading: undefined };
+            }));
+        } catch (err: any) {
+            setNodes(prev => prev.map(node => placeholders.some(p => p.id === node.id)
+                ? { ...node, description: `${err?.message || err}`, loading: undefined }
+                : node));
+        }
     };
 
     // --- promote an uploaded image node into a library Asset ---
@@ -628,13 +670,17 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
 
     const imageToPromptAt = async (image: string | undefined, pos: { x: number; y: number }) => {
         if (!image) return;
-        setBusy('Reading the image into a prompt…');
+        const promptNode = add({ kind: 'note', text: '', loading: 'Reading image into prompt...' }, pos);
         try {
             const text = await describeAsPrompt(image);
-            add({ kind: 'note', text }, pos);
-            setNotice('Prompt derived — edit it freely.');
-        } catch (err: any) { setNotice(`${err?.message || err}`); }
-        setBusy('');
+            setNodes(prev => prev.map(node => node.id === promptNode.id
+                ? { ...node, text, loading: undefined }
+                : node));
+        } catch (err: any) {
+            setNodes(prev => prev.map(node => node.id === promptNode.id
+                ? { ...node, text: `${err?.message || err}`, loading: undefined }
+                : node));
+        }
     };
     const imageToPrompt = (node: WeaveNode) => imageToPromptAt(node.image, { x: node.x + 145, y: node.y });
 
@@ -1006,19 +1052,6 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
 
     return (
         <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 14px', boxSizing: 'border-box' }}>
-            {(busy || notice) && (
-                <div className={busy ? 'praxis-running' : undefined}
-                    style={{
-                        position: 'sticky', top: 8, zIndex: 30, fontSize: 12.5, fontWeight: 600,
-                        padding: '8px 14px', borderRadius: 10,
-                        background: busy ? '#f4f4f5' : notice.startsWith('Error') ? '#f4f4f5' : '#f7f7f8',
-                        color: '#18181b',
-                        border: '1px solid rgba(0,0,0,0.06)',
-                    }}>
-                    {busy ? `${busy}` : notice}
-                </div>
-            )}
-
             {/* Toolbar */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <button style={S.btnGhost} onClick={() => fileRef.current?.click()}>Images</button>
@@ -1430,14 +1463,20 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
                                 )}
                                 {nn.kind === 'facet' && (
                                     <div onClick={() => toggleExpand(nn.id)}>
+                                        {nn.loading ? (
+                                            <NodeLoading title="Extracting" detail={nn.loading} />
+                                        ) : <>
                                         {nn.image && <img src={nn.image} alt="" draggable={false}
                                             onClick={e => { e.stopPropagation(); openLightbox(nn.image!); }}
                                             style={{ width: '100%', borderRadius: 8, display: 'block', cursor: 'zoom-in' }} />}
                                         <div style={{ fontSize: 10, fontWeight: 800, color: '#18181b', marginTop: 4 }}>{nn.dimension?.toUpperCase()}</div>
                                         <div style={{ fontSize: 9, color: '#71717a', marginTop: 2, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{nn.description}</div>
+                                        </>}
                                     </div>
                                 )}
-                                {nn.kind === 'note' && (
+                                {nn.kind === 'note' && (nn.loading ? (
+                                    <NodeLoading title="Reading" detail={nn.loading} />
+                                ) : (
                                     <textarea
                                         value={nn.text ?? ''}
                                         placeholder="type your prompt…"
@@ -1446,32 +1485,11 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
                                         onClick={() => setExpandedId(nn.id)}
                                         style={{ width: '100%', minHeight: 64, height: H(nn) ? 'calc(100% - 4px)' : undefined, border: '1px solid rgba(212,212,216,0.40)', outline: 'none', resize: 'none', fontSize: 11, lineHeight: 1.5, fontFamily: 'inherit', background: 'rgba(244,244,245,0.28)', color: '#18181b', borderRadius: 8, padding: 10, boxSizing: 'border-box', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.36)' }}
                                     />
-                                )}
+                                ))}
                                 {nn.kind === 'output' && (
                                     <div onClick={() => toggleExpand(nn.id)} style={{ height: fixed ? '100%' : undefined, textAlign: 'center', paddingTop: nn.image ? 0 : 10 }}>
                                         {outputBusyText ? (
-                                            <div
-                                                className="praxis-running praxis-running-card"
-                                                style={{
-                                                    background: 'rgba(244,244,245,0.42)',
-                                                    border: '1px solid rgba(212,212,216,0.46)',
-                                                    borderRadius: 8,
-                                                    aspectRatio: '1',
-                                                    display: 'flex',
-                                                    flexDirection: 'column',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    gap: 10,
-                                                    padding: 14,
-                                                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.42)',
-                                                }}
-                                            >
-                                                <span className="praxis-busy-dot" />
-                                                <span style={{ fontSize: 13, fontWeight: 850, color: '#18181b' }}>Generating</span>
-                                                <span style={{ maxWidth: 190, fontSize: 9.5, lineHeight: 1.35, color: '#71717a' }}>
-                                                    {outputBusyText}
-                                                </span>
-                                            </div>
+                                            <NodeLoading title="Generating" detail={outputBusyText} />
                                         ) : nn.image ? (
                                             <img src={nn.image} alt="" draggable={false}
                                                 style={fitImage(fixed, { borderRadius: 9 })} />
