@@ -5,6 +5,7 @@ import { getCurrentBrandId } from '../domain/brand';
 import {
     startJob, proposeConcepts, proposeWildcard, analyzeCompetitor, makePlan,
     makeMoodboard, anchorMood, executeJob, executeCampaign, reviewJob, closeJob,
+    preflightPlan, recordCritCalibration,
 } from '../studio/agents';
 import { recordSignal, maybeDistill } from '../learning/learning';
 import { attributeFeedback, getBrandSoul } from '../brain/soul';
@@ -59,6 +60,8 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
     const [moodFeedbackFor, setMoodFeedbackFor] = useState<string | null>(null);
     const [moodFeedbackText, setMoodFeedbackText] = useState('');
     const [imageSparkNote, setImageSparkNote] = useState('');
+    const [critFixes, setCritFixes] = useState<Set<number>>(new Set());
+    const [qualityGate, setQualityGate] = useState(true);
     const imageSparkRef = useRef<HTMLInputElement>(null);
     const composerRef = useRef<HTMLTextAreaElement>(null);
     const [composerGlow, setComposerGlow] = useState(false);
@@ -73,6 +76,10 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
     }, []);
 
     useEffect(() => { setNoSourceWarn(false); }, [selectedAssets, selectedRefs]);
+
+    useEffect(() => {
+        setCritFixes(new Set((job?.review?.suggestions ?? []).map((_, i) => i)));
+    }, [job?.review]);
 
     const guard = async (label: string, fn: () => Promise<void>) => {
         setBusy(label); setError(null);
@@ -185,10 +192,23 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
         const withRefs = planned.plan && planRefIds.length > 0
             ? { ...planned, plan: { ...planned.plan, params: { ...planned.plan.params, referenceIds: planRefIds } } }
             : planned;
-        const summary = withRefs.plan
-            ? `Plan drafted: ${withRefs.plan.params.note || 'a concrete shot plan is ready'}`
+        // Pre-flight: text-only critique of the plan BEFORE any image spend.
+        setBusy('Pre-flight — checking the plan against the brand soul…');
+        let checked = withRefs;
+        try {
+            const warnings = await preflightPlan(withRefs);
+            if (warnings.length > 0) {
+                checked = { ...withRefs, planWarnings: warnings, updatedAt: Date.now() };
+                await storage.upsertJob(checked);
+            }
+        } catch { /* pre-flight is best-effort */ }
+        const summary = checked.plan
+            ? `Plan drafted: ${checked.plan.params.note || 'a concrete shot plan is ready'}`
             : 'Plan drafted.';
-        setJob(await say(withRefs, 'agent', `${summary} Confirm it, run low-cost mood studies, or adjust the details.`));
+        const warnNote = (checked.planWarnings ?? []).length > 0
+            ? ` Pre-flight flagged ${(checked.planWarnings ?? []).length} conflict${(checked.planWarnings ?? []).length === 1 ? '' : 's'} with the brand soul — see the amber notes before spending.`
+            : '';
+        setJob(await say(checked, 'agent', `${summary}${warnNote} Confirm it, run low-cost mood studies, or adjust the details.`));
     });
 
     const wildcard = () => guard('Colliding concepts…', async () => {
@@ -245,7 +265,7 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
     const campaign = () => guard('Campaign kit…', async () => {
         if (!job) return;
         const withChoice = await say(job, 'user', 'Execute the full campaign kit.');
-        const { job: j, results: rs } = await executeCampaign(withChoice, setBusy);
+        const { job: j, results: rs } = await executeCampaign(withChoice, setBusy, { qualityGate });
         setResults(rs);
         setJob(await say(j, 'agent', 'Campaign kit done — one concept across all four purposes.'));
     });
@@ -253,10 +273,40 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
     const execute = () => guard('Executing…', async () => {
         if (!job) return;
         const withChoice = await say(job, 'user', `Execute ${count} final shot${count === 1 ? '' : 's'}.`);
-        const { job: j, results: rs } = await executeJob(withChoice, count, setBusy);
+        const { job: j, results: rs } = await executeJob(withChoice, count, setBusy, { qualityGate });
         setResults(rs);
         setJob(await say(j, 'agent', `${rs.length} shot${rs.length === 1 ? '' : 's'} done. Mark what works, or tell me exactly what broke so the next pass learns from it.`));
     });
+
+    /** (1) Ticked critique suggestions become directives and drive one reshoot. */
+    const reshootWithFixes = () => guard('Reshooting with critique fixes…', async () => {
+        if (!job?.review) return;
+        const fixes = job.review.suggestions.filter((_, i) => critFixes.has(i));
+        if (fixes.length === 0) return;
+        let next = await say(job, 'user', `Apply critique fixes: ${fixes.join(' · ')}`);
+        next = { ...next, directives: [...(next.directives ?? []), ...fixes], stage: 'execute' as const, updatedAt: Date.now() };
+        await storage.upsertJob(next);
+        const { job: j, results: rs } = await executeJob(next, count, setBusy, { qualityGate });
+        setResults(rs);
+        setJob(await say(j, 'agent', `Reshot with ${fixes.length} critique fix${fixes.length === 1 ? '' : 'es'} as standing directives. Compare against the last pass.`));
+    });
+
+    const adoptWarning = async (i: number) => {
+        if (!job) return;
+        const w = (job.planWarnings ?? [])[i];
+        if (!w) return;
+        let next: PraxisJob = { ...job, directives: [...(job.directives ?? []), `Avoid: ${w}`], planWarnings: (job.planWarnings ?? []).filter((_, x) => x !== i), updatedAt: Date.now() };
+        await storage.upsertJob(next);
+        next = await say(next, 'user', `Adopt pre-flight fix: ${w}`);
+        setJob(next);
+    };
+
+    const dismissWarning = async (i: number) => {
+        if (!job) return;
+        const next: PraxisJob = { ...job, planWarnings: (job.planWarnings ?? []).filter((_, x) => x !== i), updatedAt: Date.now() };
+        await storage.upsertJob(next);
+        setJob(next);
+    };
 
     const review = () => guard('Critic reviewing…', async () => {
         if (!job) return;
@@ -346,6 +396,12 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
 
     const rate = async (r: GenerationResult, rating: 'like' | 'dislike', reason?: string) => {
         await recordSignal(r, rating, reason);
+        // Critic calibration: the owner's verdict vs the critic's score.
+        if (job?.review && job.review.axisScores.length > 0) {
+            const worst = job.review.axisScores.reduce((w, a) => (a.score < w.score ? a : w), job.review.axisScores[0]);
+            if (rating === 'like' && job.review.overall < 65) recordCritCalibration({ kind: 'liked-low', overall: job.review.overall, note: worst?.note ?? '' });
+            if (rating === 'dislike' && job.review.overall >= 75) recordCritCalibration({ kind: 'disliked-high', overall: job.review.overall, note: reason ?? '' });
+        }
         if (rating === 'dislike' && reason) attributeFeedback(reason); // fire-and-forget
         setFeedback(prev => new Map(prev).set(r.id, rating));
         setCritiqueFor(null);
@@ -885,6 +941,18 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
                     <ol style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.7 }}>
                         {job.plan.steps.map((s, i) => <li key={i}>{s}</li>)}
                     </ol>
+                    {(job.planWarnings ?? []).length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '9px 12px', borderRadius: 8, background: 'rgba(255,251,235,0.95)', border: '1px solid rgba(180,83,9,0.22)', animation: 'praxis-pop 240ms cubic-bezier(0.22,1,0.36,1)' }}>
+                            <span style={{ ...S.label, color: '#92400e' }}>PRE-FLIGHT — CONFLICTS WITH THE BRAND SOUL</span>
+                            {(job.planWarnings ?? []).map((w, i) => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <span style={{ flex: 1, fontSize: 11.5, color: '#78350f', lineHeight: 1.5 }}>{w}</span>
+                                    <button style={{ ...S.btnGhost, minHeight: 26, fontSize: 10.5 }} disabled={!!busy} onClick={() => adoptWarning(i)} title="Turn this warning into a standing directive for every later step">Fix — add as directive</button>
+                                    <button style={{ ...S.btnGhost, minHeight: 26, fontSize: 10.5, minWidth: 26, padding: 0 }} disabled={!!busy} onClick={() => dismissWarning(i)} title="Ignore this warning">✕</button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                     <div style={{ fontSize: 11, color: '#71717a', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <span>Shot setup · {job.plan.params.purpose} · {job.plan.elementIds.length} mixed elements</span>
                     </div>
@@ -984,6 +1052,10 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
                             minWidth={112}
                         />
                         <button style={S.btn} disabled={!!busy} onClick={execute}>Yes, shoot it</button>
+                        <button style={chip(qualityGate)} disabled={!!busy} onClick={() => setQualityGate(v => !v)}
+                            title="Batch shots scoring under 60 vs the brand soul get ONE automatic reshoot with the critic's fixes before you see them (~1 cheap text call per shot)">
+                            Quality gate {qualityGate ? 'on' : 'off'}
+                        </button>
                         <button style={actionChip(false)} disabled={!!busy} onClick={campaign} title="Generate a matched set from this same plan: hero 16:9 + PDP 4:3 + social 1:1 + seasonal 3:4">
                             Campaign set
                         </button>
@@ -1077,13 +1149,31 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
                                 </div>
                             ))}
                             {job.review.suggestions.length > 0 && (
-                                <div style={{ fontSize: 11.5, color: '#92400e' }}>
-                                    Suggestions: {job.review.suggestions.join(' · ')}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                                    <span style={{ ...S.label, color: '#92400e' }}>FIXES — tick the ones you agree with</span>
+                                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                        {job.review.suggestions.map((sug, i) => {
+                                            const on = critFixes.has(i);
+                                            return (
+                                                <button key={i} type="button"
+                                                    onClick={() => setCritFixes(prev => { const n = new Set(prev); if (on) n.delete(i); else n.add(i); return n; })}
+                                                    style={{ ...chip(on), fontSize: 11, lineHeight: 1.45, maxWidth: '100%', whiteSpace: 'normal', textAlign: 'left', minHeight: 0, padding: '6px 10px' }}>
+                                                    {sug}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                             )}
                             {stage === 'review' && (
-                                <div style={{ display: 'flex', gap: 8 }}>
-                                    <button style={S.btn} disabled={!!busy} onClick={finish}>Accept — close job</button>
+                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                    {job.review.suggestions.length > 0 && (
+                                        <button style={S.btn} disabled={!!busy || critFixes.size === 0} onClick={reshootWithFixes}
+                                            title="Ticked fixes become standing directives and drive one reshoot">
+                                            Reshoot with {critFixes.size} fix{critFixes.size === 1 ? '' : 'es'}
+                                        </button>
+                                    )}
+                                    <button style={job.review.suggestions.length > 0 ? S.btnGhost : S.btn} disabled={!!busy} onClick={finish}>Accept — close job</button>
                                     <button style={S.btnGhost} disabled={!!busy} onClick={execute}>Re-execute with same plan</button>
                                 </div>
                             )}

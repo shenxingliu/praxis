@@ -345,14 +345,27 @@ async function anchorImageOf(job: PraxisJob): Promise<string[]> {
 export async function executeJob(
     job: PraxisJob,
     count: number,
-    onStatus?: (text: string) => void
+    onStatus?: (text: string) => void,
+    opts?: { qualityGate?: boolean }
 ): Promise<{ job: PraxisJob; results: GenerationResult[] }> {
     if (!job.plan) throw new Error('No production plan.');
     const anchor = await anchorImageOf(job);
     const results: GenerationResult[] = [];
     for (let i = 0; i < count; i++) {
         onStatus?.(count > 1 ? `Executing ${i + 1}/${count}…` : 'Executing…');
-        const r = await generate({ ...job.plan.params, directives: job.directives }, job.plan.assetIds, onStatus, anchor);
+        let r = await generate({ ...job.plan.params, directives: job.directives }, job.plan.assetIds, onStatus, anchor);
+        // Quality gate (batch only): weak shots get ONE reshoot with the
+        // critic's fixes before the owner ever sees them.
+        if (opts?.qualityGate && count > 1 && r.image.kind === 'data') {
+            try {
+                onStatus?.(`Quality gate — checking shot ${i + 1}…`);
+                const crit = await critiqueQuick(r.image.value, job);
+                if (crit.overall < 60 && crit.suggestions.length > 0) {
+                    onStatus?.(`Shot ${i + 1} scored ${crit.overall} — one reshoot with fixes…`);
+                    r = await generate({ ...job.plan.params, directives: [...(job.directives ?? []), ...crit.suggestions] }, job.plan.assetIds, onStatus, anchor);
+                }
+            } catch { /* gate is best-effort — keep the original shot */ }
+        }
         await storage.upsertResult({ ...r, jobId: job.id });
         results.push({ ...r, jobId: job.id });
     }
@@ -377,7 +390,8 @@ const CAMPAIGN_SET: Array<{ purpose: NonNullable<GenerationParams['purpose']>; r
 
 export async function executeCampaign(
     job: PraxisJob,
-    onStatus?: (text: string) => void
+    onStatus?: (text: string) => void,
+    opts?: { qualityGate?: boolean }
 ): Promise<{ job: PraxisJob; results: GenerationResult[] }> {
     if (!job.plan) throw new Error('No production plan.');
     const anchor = await anchorImageOf(job);
@@ -386,10 +400,23 @@ export async function executeCampaign(
         const slot = CAMPAIGN_SET[i];
         onStatus?.(`Campaign ${i + 1}/4 — ${slot.purpose}…`);
         try {
-            const r = await generate(
+            let r = await generate(
                 { ...job.plan.params, directives: job.directives, purpose: slot.purpose, ratio: slot.ratio },
                 job.plan.assetIds, onStatus, anchor
             );
+            if (opts?.qualityGate && r.image.kind === 'data') {
+                try {
+                    onStatus?.(`Quality gate — checking ${slot.purpose}…`);
+                    const crit = await critiqueQuick(r.image.value, job);
+                    if (crit.overall < 60 && crit.suggestions.length > 0) {
+                        onStatus?.(`${slot.purpose} scored ${crit.overall} — one reshoot with fixes…`);
+                        r = await generate(
+                            { ...job.plan.params, directives: [...(job.directives ?? []), ...crit.suggestions], purpose: slot.purpose, ratio: slot.ratio },
+                            job.plan.assetIds, onStatus, anchor
+                        );
+                    }
+                } catch { /* best-effort */ }
+            }
             await storage.upsertResult({ ...r, jobId: job.id });
             results.push({ ...r, jobId: job.id });
         } catch (err) {
@@ -410,6 +437,70 @@ export async function executeCampaign(
 // Stage 4 — Review agent (design crit vs the brand soul)
 // ---------------------------------------------------------------------------
 
+/** Critic calibration: every time the owner's verdict contradicts the critic,
+ *  we remember it — and the critic reads its own miss history before scoring. */
+type CritCalibration = { kind: 'liked-low' | 'disliked-high'; overall: number; note: string; at: number };
+const calKey = () => `praxis_critic_calibration_${getCurrentBrandId()}`;
+
+export function recordCritCalibration(entry: Omit<CritCalibration, 'at'>): void {
+    try {
+        const list: CritCalibration[] = JSON.parse(localStorage.getItem(calKey()) ?? '[]');
+        list.push({ ...entry, at: Date.now() });
+        localStorage.setItem(calKey(), JSON.stringify(list.slice(-20)));
+    } catch { /* calibration is best-effort */ }
+}
+
+function calibrationBlock(): string {
+    try {
+        const list: CritCalibration[] = JSON.parse(localStorage.getItem(calKey()) ?? '[]');
+        if (list.length === 0) return '';
+        const lines = list.slice(-6).map(c => c.kind === 'liked-low'
+            ? `- You scored a set ${c.overall}/100, yet the owner KEPT it${c.note ? ` (your harshest note then: ${c.note})` : ''} — you were too strict there.`
+            : `- You scored a set ${c.overall}/100, yet the owner REJECTED it${c.note ? ` (their reason: "${c.note}")` : ''} — you missed what mattered to them.`);
+        return `\n### CALIBRATION — your past misses vs the owner's verdicts. Score with THEIR taste, not yours ###\n${lines.join('\n')}\n`;
+    } catch { return ''; }
+}
+
+/** (2) One cheap single-image read — the batch quality gate. */
+async function critiqueQuick(image: string, job: PraxisJob): Promise<{ overall: number; suggestions: string[] }> {
+    const brand = await getCurrentBrand();
+    const soul = await getBrandSoul();
+    const prompt = `You are the studio's DESIGN CRITIC doing a fast pre-delivery check of ONE generated image.
+BRAND: ${brand.name} — ${brand.description}
+BRIEF: ${job.brief.trim() || '(open exploration)'}
+### BRAND SOUL ###
+${(soul?.fields ?? []).filter(f => f.value.trim()).map(f => `${f.key}: ${f.value}`).join('\n') || '(none)'}
+${calibrationBlock()}
+Score 0-100 overall against the soul and brief. If below 60, give at most 2 concrete art-direction fixes; otherwise return an empty list.
+Output JSON: { "overall": number, "suggestions": [] }`;
+    const parsed = await generateJson<{ overall: number; suggestions: string[] }>(prompt, [image]);
+    return { overall: Number(parsed?.overall ?? 100), suggestions: (parsed?.suggestions ?? []).map(String).slice(0, 2) };
+}
+
+/** (4) Pre-flight: critique the PLAN before any image spend — a text call
+ *  that catches soul conflicts 10× cheaper than a wasted generation. */
+export async function preflightPlan(job: PraxisJob): Promise<string[]> {
+    if (!job.plan) return [];
+    const brand = await getCurrentBrand();
+    const soul = await getBrandSoul();
+    const concept = job.concepts.find(c => c.id === job.chosenConceptId);
+    const prompt = `You are the studio's DESIGN CRITIC reviewing a production plan BEFORE the shoot.
+BRAND: ${brand.name} — ${brand.description}
+BRIEF: ${job.brief.trim() || '(open exploration)'}
+CHOSEN DIRECTION: ${concept ? `${concept.title} — ${concept.rationale}` : '(unknown)'}
+PLAN NOTE: ${job.plan.params.note || '(none)'}
+STEPS:
+${job.plan.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+${directivesBlock(job)}
+### BRAND SOUL (locked fields are red-lines) ###
+${(soul?.fields ?? []).filter(f => f.value.trim()).map(f => `${f.key}${f.locked ? ' [LOCKED]' : ''}: ${f.value}`).join('\n') || '(none)'}
+
+List UP TO 3 concrete conflicts between this plan and the soul or brief — things that would make the shot off-brand. Each warning ≤ 140 chars, actionable, naming the conflicting element. Empty array if the plan is clean.
+Output JSON: { "warnings": [] }`;
+    const parsed = await generateJson<{ warnings: string[] }>(prompt);
+    return (parsed?.warnings ?? []).map(String).slice(0, 3);
+}
+
 export async function reviewJob(job: PraxisJob, results: GenerationResult[]): Promise<PraxisJob> {
     const brand = await getCurrentBrand();
     const soul = await getBrandSoul();
@@ -423,7 +514,7 @@ BRIEF: ${job.brief.trim() || '(open exploration — judge against the brand soul
 
 ### BRAND SOUL ###
 ${(soul?.fields ?? []).filter(f => f.value.trim()).map(f => `${f.key}: ${f.value}`).join('\n') || '(no soul — score against the brand description)'}
-
+${calibrationBlock()}
 ### TASK ###
 - axisScores: for each axis (narrative, sensation, viewing) a 0-100 score + one concrete note citing what you SEE
 - overall: 0-100 weighted judgment

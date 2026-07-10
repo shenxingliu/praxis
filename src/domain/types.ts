@@ -310,6 +310,8 @@ export interface PraxisJob {
     plan?: ProductionPlan;
     resultIds: string[];
     review?: ReviewReport;
+    /** Pre-flight critique of the plan — conflicts with the soul, caught before spend. */
+    planWarnings?: string[];
     /** Owner interjections — injected into EVERY subsequent model call. */
     directives?: string[];
     /** The job's conversation log. */
