@@ -4,7 +4,8 @@ import { storage } from '../storage/local';
 import { getCurrentBrand } from '../domain/brand';
 import { recordSignal } from '../learning/learning';
 import { openLightbox } from './lightbox';
-import { S, chip } from './styles';
+import { S } from './styles';
+import { SegmentedControl } from './SegmentedControl';
 
 /**
  * GALLERY — every generation is stored in the cloud with its full recipe
@@ -96,8 +97,16 @@ export default function GalleryView() {
             )}
 
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button style={chip(view === 'saved')} onClick={() => setView('saved')}>Saved · {savedCount}</button>
-                <button style={chip(view === 'all')} onClick={() => setView('all')}>All · {results.length}</button>
+                <SegmentedControl
+                    ariaLabel="Gallery view"
+                    value={view}
+                    onChange={setView}
+                    options={[
+                        { value: 'saved', label: `Saved · ${savedCount}` },
+                        { value: 'all', label: `All · ${results.length}` },
+                    ]}
+                    minWidth={220}
+                />
                 <button style={{ ...S.btn, marginLeft: 'auto' }} disabled={!!busy || savedCount === 0} onClick={exportTrainingSet}
                     title="Saved images + their exact prompts, params and concepts — ready for LoRA fine-tuning">
                     Export training set ({savedCount})

@@ -10,7 +10,8 @@ import { getCurrentBrand, saveBrand } from '../domain/brand';
 import { TasteCandidate, getCandidatePool, recordPick, analyzeTaste } from '../brain/calibrate';
 import { exportBrandBook } from '../brain/brandBook';
 import { openLightbox } from './lightbox';
-import { S, chip } from './styles';
+import { S } from './styles';
+import { SegmentedControl } from './SegmentedControl';
 
 /**
  * Knowledge — the visible, editable experience base. Rules the system has
@@ -64,9 +65,17 @@ export default function KnowledgeView() {
     return (
         <div style={{ maxWidth: 860, margin: '0 auto', padding: '22px 28px', display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <button style={chip(panel === 'rules')} onClick={() => setPanel('rules')}>Learned Rules</button>
-                <button style={chip(panel === 'soul')} onClick={() => setPanel('soul')}>Brand Soul</button>
-                <button style={chip(panel === 'calibrate')} onClick={() => setPanel('calibrate')}>Calibrate Taste</button>
+                <SegmentedControl
+                    ariaLabel="Brand panel"
+                    value={panel}
+                    onChange={setPanel}
+                    options={[
+                        { value: 'rules', label: 'Learned Rules' },
+                        { value: 'soul', label: 'Brand Soul' },
+                        { value: 'calibrate', label: 'Calibrate Taste' },
+                    ]}
+                    minWidth={390}
+                />
                 <button style={{ ...S.btnGhost, marginLeft: 'auto' }} onClick={() => exportBrandBook()}>
                     Export brand book
                 </button>

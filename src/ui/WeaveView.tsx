@@ -9,7 +9,8 @@ import { BudgetExceededError } from '../engine/engine';
 import { openLightbox } from './lightbox';
 import { DropZone, imageFiles } from './dropzone';
 import { encodeSpinGif } from './gif';
-import { S, chip } from './styles';
+import { S } from './styles';
+import { SegmentedControl } from './SegmentedControl';
 
 /**
  * CANVAS — infinite freeform canvas (Figma-Weave inspired).
@@ -1014,12 +1015,31 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
                     onChange={e => { addImages(e.target.files); e.currentTarget.value = ''; }} />
                 <input ref={appendRef} type="file" multiple accept="image/*" style={{ display: 'none' }}
                     onChange={e => { appendAngles(e.target.files); e.currentTarget.value = ''; }} />
-                <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                    {RATIOS.map(r => <button key={r} style={chip(ratio === r)} onClick={() => setRatio(r)}>{r}</button>)}
-                    {SIZES.map(s => <button key={s} style={chip(size === s)} onClick={() => setSize(s)}>{s}</button>)}
-                    <span style={{ ...S.label, marginLeft: 6 }}>MODEL</span>
-                    <button style={chip(tierSel === 'flash')} onClick={() => setTierSel('flash')} title="flash · $0.04">Flash</button>
-                    <button style={chip(tierSel === 'pro')} onClick={() => setTierSel('pro')} title="pro · $0.24 · consistency inspector">Pro</button>
+                <span style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <SegmentedControl
+                        ariaLabel="Canvas ratio"
+                        value={ratio}
+                        onChange={setRatio}
+                        options={RATIOS.map(r => ({ value: r, label: r }))}
+                        minWidth={232}
+                    />
+                    <SegmentedControl
+                        ariaLabel="Canvas pixel size"
+                        value={size}
+                        onChange={setSize}
+                        options={SIZES.map(s => ({ value: s, label: s }))}
+                        minWidth={132}
+                    />
+                    <SegmentedControl
+                        ariaLabel="Canvas model"
+                        value={tierSel}
+                        onChange={setTierSel}
+                        options={[
+                            { value: 'flash', label: 'Flash', title: 'flash · $0.04' },
+                            { value: 'pro', label: 'Pro', title: 'pro · $0.24 · consistency inspector' },
+                        ]}
+                        minWidth={132}
+                    />
                     <button style={{ ...S.btn, fontWeight: 800 }} disabled={!!busy} onClick={() => weave(tierSel)}>Run</button>
                     <span style={{ width: 1, height: 18, background: '#e4e4e7', margin: '0 2px' }} />
                     <button style={S.btnGhost} onClick={() => { setShowSaveDialog(true); setSaveName(''); }} title="Save current canvas as a workflow">Save</button>

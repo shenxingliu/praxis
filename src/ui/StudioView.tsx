@@ -13,6 +13,7 @@ import { getApiKey } from '../engine/gemini';
 import { openLightbox } from './lightbox';
 import { DropZone } from './dropzone';
 import { S, chip } from './styles';
+import { SegmentedControl } from './SegmentedControl';
 
 /**
  * STUDIO — the visible agent workflow:
@@ -896,11 +897,23 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
                     />
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                         <span style={S.label}>RATIO</span>
-                        {(['1:1', '16:9', '4:3', '3:4', '9:16'] as const).map(r =>
-                            <button key={r} style={chip(job.plan!.params.ratio === r)} disabled={!!busy} onClick={() => updatePlan({ ratio: r })}>{r}</button>)}
+                        <SegmentedControl
+                            ariaLabel="Production ratio"
+                            disabled={!!busy}
+                            value={job.plan!.params.ratio}
+                            onChange={ratio => updatePlan({ ratio })}
+                            options={(['1:1', '16:9', '4:3', '3:4', '9:16'] as const).map(r => ({ value: r, label: r }))}
+                            minWidth={232}
+                        />
                         <span style={{ ...S.label, marginLeft: 8 }}>SIZE</span>
-                        {(['1K', '2K', '4K'] as const).map(s =>
-                            <button key={s} style={chip((job.plan!.params.size ?? '1K') === s)} disabled={!!busy} onClick={() => updatePlan({ size: s })}>{s}</button>)}
+                        <SegmentedControl
+                            ariaLabel="Production pixel size"
+                            disabled={!!busy}
+                            value={job.plan!.params.size ?? '1K'}
+                            onChange={size => updatePlan({ size })}
+                            options={(['1K', '2K', '4K'] as const).map(s => ({ value: s, label: s }))}
+                            minWidth={132}
+                        />
                         <span style={{ fontSize: 10, color: '#a1a1aa' }}>4K needs the pro model; unsupported sizes fall back automatically</span>
                     </div>
                     {/* Moodboard — pick direction on visuals, cheap flash drafts */}
@@ -963,7 +976,13 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
                     </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         <span style={S.label}>VARIANTS</span>
-                        {[1, 2, 3].map(n => <button key={n} style={chip(count === n)} onClick={() => setCount(n)}>{n}</button>)}
+                        <SegmentedControl
+                            ariaLabel="Variant count"
+                            value={count}
+                            onChange={setCount}
+                            options={[1, 2, 3].map(n => ({ value: n, label: String(n) }))}
+                            minWidth={112}
+                        />
                         <button style={S.btn} disabled={!!busy} onClick={execute}>Yes, shoot it</button>
                         <button style={actionChip(false)} disabled={!!busy} onClick={campaign} title="Generate a matched set from this same plan: hero 16:9 + PDP 4:3 + social 1:1 + seasonal 3:4">
                             Campaign set
