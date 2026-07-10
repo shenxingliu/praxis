@@ -304,6 +304,8 @@ export interface PraxisJob {
     id: string;
     brandId: string;
     brief: string;
+    /** Owner-set display name for lists; the brief itself stays untouched. */
+    title?: string;
     stage: JobStage;
     concepts: ConceptProposal[];
     chosenConceptId?: string;

@@ -51,6 +51,17 @@ export default function App() {
         setActiveJobId(active);
     }, []);
 
+    const jobName = (j: PraxisJob) =>
+        (j.title ?? '').trim() || (j.brief.trim() ? j.brief.slice(0, 34) : 'Open exploration');
+
+    const renameJob = async (j: PraxisJob) => {
+        const name = window.prompt('Task name:', jobName(j));
+        if (name === null) return;
+        const next: PraxisJob = { ...j, title: name.trim() || undefined, updatedAt: Date.now() };
+        await storage.upsertJob(next);
+        setJobs(prev => prev.map(x => (x.id === j.id ? next : x)));
+    };
+
     /** Open a past task — resumes in place, or after switching to the Studio tab. */
     const openJob = (j: PraxisJob) => {
         if (pendingResume.current) return;
@@ -461,7 +472,7 @@ export default function App() {
                                             <button
                                                 type="button"
                                                 onClick={() => openJob(j)}
-                                                title={j.brief.trim() || 'Open exploration'}
+                                                title={(j.title ?? '').trim() || j.brief.trim() || 'Open exploration'}
                                                 style={{
                                                     width: '100%',
                                                     textAlign: 'left',
@@ -469,14 +480,14 @@ export default function App() {
                                                     borderRadius: 8,
                                                     background: activeJobId === j.id && tab === 'studio' ? '#f0f1f3' : 'transparent',
                                                     cursor: 'pointer',
-                                                    padding: '4px 22px 4px 8px',
+                                                    padding: '4px 38px 4px 8px',
                                                     display: 'flex',
                                                     flexDirection: 'column',
                                                     gap: 1,
                                                 }}
                                             >
                                                 <span style={{ fontSize: 11, fontWeight: 650, color: '#3f3f46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
-                                                    {j.brief.trim() ? j.brief.slice(0, 34) : 'Open exploration'}
+                                                    {jobName(j)}
                                                 </span>
                                                 <span style={{ fontSize: 9, color: '#9aa0aa' }}>
                                                     {JOB_STAGE[j.stage] ?? j.stage} · {new Date(j.updatedAt).toLocaleDateString()}
@@ -484,9 +495,17 @@ export default function App() {
                                             </button>
                                             <button
                                                 type="button"
+                                                title="Rename this task"
+                                                onClick={() => renameJob(j)}
+                                                style={{ position: 'absolute', right: 20, top: 5, width: 16, height: 16, borderRadius: 999, border: 'none', background: 'transparent', color: '#c0c3ca', cursor: 'pointer', fontSize: 9, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                            >
+                                                ✎
+                                            </button>
+                                            <button
+                                                type="button"
                                                 title="Delete this task (images stay in Gallery)"
                                                 onClick={async () => {
-                                                    if (!window.confirm(`Delete "${j.brief.trim() ? j.brief.slice(0, 48) : 'Open exploration'}"? The generated images stay in Gallery.`)) return;
+                                                    if (!window.confirm(`Delete "${jobName(j)}"? The generated images stay in Gallery.`)) return;
                                                     await storage.deleteJob(j.id);
                                                     setJobs(prev => prev.filter(x => x.id !== j.id));
                                                     if (activeJobId === j.id) { setActiveJobId(null); studioRef.current?.reset(); }
