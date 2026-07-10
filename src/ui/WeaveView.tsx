@@ -201,6 +201,7 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
     const [size, setSize] = useState<NonNullable<GenerationParams['size']>>('1K');
     const [tierSel, setTierSel] = useState<'flash' | 'pro'>('flash');
     const [busy, setBusy] = useState('');
+    const [outputBusy, setOutputBusy] = useState<Record<string, string>>({});
     const [notice, setNotice] = useState('');
     // Workflow save/load
     const [configs, setConfigs] = useState<WeaveConfig[]>([]);
@@ -275,6 +276,15 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
         const node: WeaveNode = { id: crypto.randomUUID(), ...(pos ?? nextPos()), ...partial };
         setNodes(prev => [...prev, node]);
         return node;
+    };
+
+    const setOutputStatus = (id: string, text: string) => {
+        setOutputBusy(prev => {
+            const next = { ...prev };
+            if (text) next[id] = text;
+            else delete next[id];
+            return next;
+        });
     };
 
     useImperativeHandle(ref, () => ({
@@ -665,7 +675,11 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
     };
 
     // --- generation: results ALWAYS land inside an output node ---
-    const weaveNodes = async (pool: WeaveNode[], tier: 'flash' | 'pro'): Promise<GenerationResult | undefined> => {
+    const weaveNodes = async (
+        pool: WeaveNode[],
+        tier: 'flash' | 'pro',
+        reportBusy: (text: string) => void = setBusy,
+    ): Promise<GenerationResult | undefined> => {
         const boardAssets = assets.filter(a => pool.some(nn => nn.kind === 'hero' && nn.assetId === a.id));
         const boardElements = elements.filter(el => pool.some(nn => nn.kind === 'element' && nn.elementId === el.id));
         const facets: WeaveFacet[] = pool
@@ -689,9 +703,9 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
             const target = rn.angle ?? 90;
             const sources = await gatherRotateSources(rn, target);
             if (sources.images.length === 0) continue;
-            setBusy(`Rendering viewpoint ${target}° first…`);
+            reportBusy(`Rendering viewpoint ${target}° first…`);
             try {
-                const rv = await rotateView(sources.images, target, { ratio, size, tier: 'flash', pitch: rn.pitch ?? 0, sourceAngles: sources.angles }, setBusy);
+                const rv = await rotateView(sources.images, target, { ratio, size, tier: 'flash', pitch: rn.pitch ?? 0, sourceAngles: sources.angles }, reportBusy);
                 rememberResult(rv);
                 setNodes(prev => prev.map(x => x.id === rn.id ? { ...x, image: rv.image.value, resultId: rv.id } : x));
                 viewpointImages.push(rv.image.value);
@@ -714,19 +728,19 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
             setNotice('Nothing usable in this group.');
             return undefined;
         }
-        setBusy(tier === 'pro' ? 'Weaving (pro, inspected)…' : 'Weaving (flash)…');
+        reportBusy(tier === 'pro' ? 'Generating (pro, inspected)…' : 'Generating (flash)…');
         setNotice('');
         try {
             const r = await weaveGenerate(
                 { assets: boardAssets, elements: boardElements, fusionImages, adhocHeroImages, viewpointImages, viewpoint, conceptIdeas, facets, note, ratio, size, tier },
-                setBusy
+                reportBusy
             );
             rememberResult(r);
             setNotice('Woven.');
             return r;
         } catch (err: any) {
             setNotice(`${err instanceof BudgetExceededError ? err.message : err?.message || err}`);
-        } finally { setBusy(''); }
+        } finally { reportBusy(''); }
         return undefined;
     };
 
@@ -736,7 +750,7 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
     const runOutput = async (o: WeaveNode) => {
         const comp = componentOf(o.id);
         if (comp.size <= 1) { setNotice('Drag a port line from your materials to this .first.'); return; }
-        const r = await weaveNodes(nodes.filter(nn => comp.has(nn.id) && nn.id !== o.id), tierSel);
+        const r = await weaveNodes(nodes.filter(nn => comp.has(nn.id) && nn.id !== o.id), tierSel, text => setOutputStatus(o.id, text));
         if (r) assignToOutput(o.id, r);
     };
 
@@ -745,7 +759,7 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
         if (outputs.length === 0) {
             // No outputs yet → auto-create one to hold the result.
             const o = add({ kind: 'output' });
-            const r = await weaveNodes(nodes, tier);
+            const r = await weaveNodes(nodes, tier, text => setOutputStatus(o.id, text));
             if (r) assignToOutput(o.id, r);
             else remove(o.id);
             return;
@@ -753,7 +767,7 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
         for (const o of outputs) {
             const comp = componentOf(o.id);
             if (comp.size <= 1) continue;
-            const r = await weaveNodes(nodes.filter(nn => comp.has(nn.id) && nn.id !== o.id), tier);
+            const r = await weaveNodes(nodes.filter(nn => comp.has(nn.id) && nn.id !== o.id), tier, text => setOutputStatus(o.id, text));
             if (r) assignToOutput(o.id, r);
         }
     };
@@ -1185,6 +1199,7 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
                         const el = elementOf(nn.elementId);
                         const open = expandedId === nn.id || hoverId === nn.id;
                         const fixed = !!H(nn);
+                        const outputBusyText = nn.kind === 'output' ? outputBusy[nn.id] : '';
                         return (
                             <div key={nn.id}
                                 onPointerDown={e => {
@@ -1434,7 +1449,30 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
                                 )}
                                 {nn.kind === 'output' && (
                                     <div onClick={() => toggleExpand(nn.id)} style={{ height: fixed ? '100%' : undefined, textAlign: 'center', paddingTop: nn.image ? 0 : 10 }}>
-                                        {nn.image ? (
+                                        {outputBusyText ? (
+                                            <div
+                                                className="praxis-running praxis-running-card"
+                                                style={{
+                                                    background: 'rgba(244,244,245,0.42)',
+                                                    border: '1px solid rgba(212,212,216,0.46)',
+                                                    borderRadius: 8,
+                                                    aspectRatio: '1',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: 10,
+                                                    padding: 14,
+                                                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.42)',
+                                                }}
+                                            >
+                                                <span className="praxis-busy-dot" />
+                                                <span style={{ fontSize: 13, fontWeight: 850, color: '#18181b' }}>Generating</span>
+                                                <span style={{ maxWidth: 190, fontSize: 9.5, lineHeight: 1.35, color: '#71717a' }}>
+                                                    {outputBusyText}
+                                                </span>
+                                            </div>
+                                        ) : nn.image ? (
                                             <img src={nn.image} alt="" draggable={false}
                                                 style={fitImage(fixed, { borderRadius: 9 })} />
                                         ) : (
@@ -1468,12 +1506,24 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
                                         }}>
                                         {nn.kind === 'output' && (
                                             <>
-                                                <button style={{ ...miniBtn, background: '#18181b', color: '#fff', border: '1px solid #18181b' }} disabled={!!busy} onClick={() => runOutput(nn)}>Run</button>
+                                                <button style={{ ...miniBtn, background: '#18181b', color: '#fff', border: '1px solid #18181b' }} disabled={!!busy || !!outputBusy[nn.id]} onClick={() => runOutput(nn)}>Run</button>
                                                 {nn.image && <>
-                                                    <button style={miniBtn} onClick={() => download(nn)}>Save</button>
-                                                    <button style={miniBtn} disabled={!!busy} onClick={() => saveResult(nn)}>Gallery</button>
+                                                    <button style={miniBtn} onClick={() => add({ kind: 'image', image: nn.image!, role: 'fusion' }, { x: nn.x + W(nn) + 30, y: nn.y })}>Vibe</button>
+                                                    <button style={miniBtn} onClick={() => add({ kind: 'image', image: nn.image!, role: 'concept' }, { x: nn.x + W(nn) + 30, y: nn.y + 40 })}>Idea</button>
+                                                    <button style={miniBtn} disabled={!!busy} onClick={() => decomposeNode(nn)}>Extract</button>
+                                                    <button style={miniBtn} disabled={!!busy} onClick={() => imageToPrompt(nn)}>Prompt</button>
                                                     <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>View</button>
-                                                    <button style={miniBtn} onClick={() => add({ kind: 'image', image: nn.image!, role: 'fusion' }, { x: nn.x + W(nn) + 30, y: nn.y })}>Material</button>
+                                                    <button style={miniBtn} onClick={() => download(nn)}>Save</button>
+                                                    <span style={{ flexBasis: '100%', display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap', marginTop: 2 }}>
+                                                        <span style={{ fontSize: 9, fontWeight: 800, color: '#71717a' }}>→ ASSET:</span>
+                                                        {SUBJECT_TYPES.map(t => (
+                                                            <button key={t} style={miniBtn} disabled={!!busy}
+                                                                onClick={() => saveNodeAsAsset(nn, t)}
+                                                                title={`Save this generated image into the Assets library as ${t}`}>
+                                                                {t}
+                                                            </button>
+                                                        ))}
+                                                    </span>
                                                     <button style={{ ...miniBtn, background: '#18181b', color: '#fff', border: '1px solid #18181b' }} disabled={!!busy}
                                                         onClick={() => distillApproach(nn)}
                                                         title="Extract the creative approach into reusable knowledge rules">Distill</button>
