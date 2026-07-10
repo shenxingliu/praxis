@@ -848,7 +848,7 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
                                 </button>
                             </div>
                             {conceptFeedbackId === c.id && (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 7, borderRadius: 9, background: 'rgba(244,244,245,0.72)', border: '1px solid rgba(228,228,231,0.72)' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 7, borderRadius: 8, background: 'rgba(244,244,245,0.72)', border: '1px solid rgba(228,228,231,0.72)' }}>
                                     <div style={{ fontSize: 10, color: '#71717a', lineHeight: 1.45 }}>
                                         Optional: tell Studio how to adjust only this direction before you choose it.
                                     </div>
@@ -952,7 +952,7 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
                                                 style={{ ...S.btnGhost, fontSize: 10 }}>Save</button>
                                         </div>
                                         {moodFeedbackFor === d.id && (
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: 6, borderRadius: 9, background: 'rgba(244,244,245,0.75)', border: '1px solid rgba(228,228,231,0.72)' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: 6, borderRadius: 8, background: 'rgba(244,244,245,0.75)', border: '1px solid rgba(228,228,231,0.72)' }}>
                                                 <input
                                                     value={moodFeedbackText}
                                                     onChange={e => setMoodFeedbackText(e.target.value)}
@@ -1044,7 +1044,7 @@ const StudioView = React.forwardRef<StudioViewHandle, StudioViewProps>(function 
                                             </button>
                                         </div>
                                         {critiqueFor === r.id && (
-                                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', padding: 6, borderRadius: 9, background: 'rgba(244,244,245,0.7)' }}>
+                                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', padding: 6, borderRadius: 8, background: 'rgba(244,244,245,0.7)' }}>
                                                 <span style={{ flexBasis: '100%', fontSize: 9.5, fontWeight: 800, color: '#71717a', textTransform: 'uppercase', letterSpacing: 0.6 }}>What needs fixing?</span>
                                                 {critiqueChips.map(reason => (
                                                     <button key={reason} style={actionChip(false)} disabled={!!busy} onClick={() => rate(r, 'dislike', reason)}>

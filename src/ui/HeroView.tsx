@@ -5,6 +5,7 @@ import { getCurrentBrandId } from '../domain/brand';
 import { INVENTORY_CHANGED_EVENT } from './events';
 import { openLightbox } from './lightbox';
 import { DropZone, imageFiles } from './dropzone';
+import { Select } from './controls';
 import { S } from './styles';
 
 /**
@@ -164,12 +165,13 @@ export default function HeroView() {
                                     <img src={p.image.value} alt="" onClick={() => openLightbox(p.image.value)}
                                         style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 6, display: 'block', cursor: 'zoom-in' }} />
                                     <button onClick={() => removePhoto(a, p.id)} title="Remove photo"
-                                        style={{ position: 'absolute', top: 2, right: 2, border: 'none', borderRadius: 5, background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 8, cursor: 'pointer', padding: '1px 4px' }}>✕</button>
+                                        style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, border: 'none', borderRadius: 999, background: 'rgba(24,24,27,0.85)', color: '#fff', fontSize: 10, lineHeight: 1, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                                 </div>
                             ))}
                         </div>
                         <div style={{ display: 'flex', gap: 6, marginTop: 'auto', alignItems: 'center' }}>
-                            <select
+                            <Select
+                                caretSize={10}
                                 value={a.subjectType ?? 'product'}
                                 disabled={!!busy}
                                 onChange={e => setType(a, e.target.value as SubjectType)}
@@ -177,7 +179,7 @@ export default function HeroView() {
                                 style={{ fontSize: 10, fontWeight: 700, padding: '3px 4px', borderRadius: 6, border: '1px solid #d4d4d8', background: '#fff', color: '#3f3f46' }}
                             >
                                 {SUBJECT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
+                            </Select>
                             <button style={S.btnGhost} disabled={!!busy} onClick={() => { setAddTarget(a); addRef.current?.click(); }}>＋ Photos</button>
                             <button style={S.btnGhost} disabled={!!busy} onClick={() => rename(a)}>Rename</button>
                             <button style={{ ...S.btnGhost, color: '#18181b', marginLeft: 'auto' }} disabled={!!busy} onClick={() => remove(a)}>Delete</button>

@@ -101,7 +101,7 @@ export const S: Record<string, CSSProperties> = {
         border: '1px solid #0a0a0a',
         background: 'rgba(5,5,5,0.94)',
         color: '#fff',
-        fontSize: 12.5,
+        fontSize: 12,
         fontWeight: 720,
         cursor: 'pointer',
         boxSizing: 'border-box',

@@ -8,6 +8,7 @@ import {
 } from '../engine/fusion';
 import { openLightbox } from './lightbox';
 import { DropZone, imageFiles } from './dropzone';
+import { Select } from './controls';
 import { S } from './styles';
 
 /**
@@ -196,9 +197,9 @@ export default function LibraryView() {
             <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: 8, border: '1.5px dashed #a1a1aa' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <span style={S.label}>FUSION LAB · {selectedRefs.size} selected</span>
-                    <select value={level} onChange={e => setLevel(e.target.value as TransferLevel)} style={{ ...S.input, width: 250 }}>
+                    <Select value={level} onChange={e => setLevel(e.target.value as TransferLevel)} style={{ ...S.input, width: 250 }}>
                         {(Object.keys(LEVEL_LABEL) as TransferLevel[]).map(l => <option key={l} value={l}>{LEVEL_LABEL[l]}</option>)}
-                    </select>
+                    </Select>
                     <input style={{ ...S.input, flex: 1, minWidth: 160 }} placeholder="Optional art direction…" value={fusionNote} onChange={e => setFusionNote(e.target.value)} />
                     <button style={S.btn} disabled={!!busy || refs.length < 2} onClick={fuse}
                         title="Ticked 2-4 references fuse immediately; with nothing ticked the curator studies the pool and proposes 3 combos">

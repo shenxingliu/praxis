@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import StudioView, { StudioViewHandle } from './ui/StudioView';
+import { Caret, Select } from './ui/controls';
 import WeaveView, { WeaveViewHandle } from './ui/WeaveView';
 import GalleryView from './ui/GalleryView';
 import HeroView from './ui/HeroView';
@@ -347,9 +348,9 @@ export default function App() {
                                         onClick={() => setOpen(v => !v)}
                                         aria-label={`${open ? 'Collapse' : 'Expand'} ${t.label}`}
                                         title={`${open ? 'Collapse' : 'Expand'} ${t.label}`}
-                                        style={{ width: 22, height: 22, display: 'grid', placeItems: 'center', border: 'none', background: 'transparent', color: '#71717a', cursor: 'pointer', padding: 0, borderRadius: 6, fontSize: 14, lineHeight: 1 }}
+                                        style={{ width: 22, height: 22, display: 'grid', placeItems: 'center', border: 'none', background: 'transparent', color: '#71717a', cursor: 'pointer', padding: 0, borderRadius: 6 }}
                                     >
-                                        {open ? '⌄' : '›'}
+                                        <Caret open={open} size={13} />
                                     </button>
                                     <button
                                         type="button"
@@ -391,9 +392,9 @@ export default function App() {
                                                 style={{ position: 'relative', width: 48, height: 48, border: on ? '1.5px solid #18181b' : '1px solid #e0e2e7', background: '#fff', borderRadius: 8, padding: 3, cursor: 'pointer', minWidth: 0, overflow: 'hidden' }}
                                             >
                                                 {image ? (
-                                                    <img src={image} alt="" draggable={false} style={{ width: '100%', height: '100%', borderRadius: 5, objectFit: 'cover', display: 'block' }} />
+                                                    <img src={image} alt="" draggable={false} style={{ width: '100%', height: '100%', borderRadius: 6, objectFit: 'cover', display: 'block' }} />
                                                 ) : (
-                                                    <div style={{ width: '100%', height: '100%', borderRadius: 5, background: '#f0f1f3' }} />
+                                                    <div style={{ width: '100%', height: '100%', borderRadius: 6, background: '#f0f1f3' }} />
                                                 )}
                                                 {on && <span style={{ position: 'absolute', right: 5, top: 5, width: 15, height: 15, borderRadius: 999, background: '#18181b', color: '#fff', fontSize: 10, display: 'grid', placeItems: 'center', fontWeight: 900 }}>✓</span>}
                                             </button>
@@ -418,9 +419,10 @@ export default function App() {
                     <span style={{ fontSize: 10, fontWeight: 850, letterSpacing: 0.7, textTransform: 'uppercase', color: '#9aa0aa', padding: '0 4px' }}>
                         Profile
                     </span>
-                    <select
+                    <Select
                         value={brandId}
                         onChange={e => switchBrand(e.target.value)}
+                        caretColor="#52525b"
                         style={{
                             ...S.sidebarSelect,
                             border: '1px solid #e0e2e7',
@@ -430,7 +432,7 @@ export default function App() {
                     >
                         {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                         <option value="__new__">＋ New brand…</option>
-                    </select>
+                    </Select>
                 </div>
             </aside>
             {!isNarrow && (
