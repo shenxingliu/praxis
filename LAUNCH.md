@@ -1,146 +1,125 @@
-# Praxis 发布启动计划（执行手册）
+# Praxis Launch Playbook
 
-> 本文档自包含：交给任何 AI 助手或协作者，按顺序执行即可，不需要额外背景。
-> 每个任务写明"做什么 / 怎么验收"。执行时可以逐项打勾。
-> 创建于 2026-07-08。启动时间由 Jim 决定，未启动前只执行"阶段 0"。
+> Self-contained: hand this to any AI assistant or collaborator and execute top-to-bottom — no extra context needed.
+> Every task states WHAT to do and HOW to verify. Check items off as you go.
+> Created 2026-07-08, updated 2026-07-10. Launch timing is Jim's call; until he says "launch", only Stage 0 may be executed.
 
-## 一、背景（执行者必读）
+## 1 · Background (required reading for the executor)
 
-**产品**：Praxis — AI 品牌视觉生产系统。用户上传产品/场景/人物照片（Assets）作为像素真值，
-在自由画布（Canvas）上组合灵感参考（Inspiration）、维度拆解卡（Facet）、转台视角（Rotate）
-织出品牌成片；内置一致性检查员（生成后自动核对产品保真度并手术纠错）和学习闭环
-（好评图蒸馏成规则，越用越懂品牌）。
+**Product**: Praxis — an open-source AI design studio that learns your brand. Users upload product / scene / people photos (Assets) as pixel ground-truth, combine inspiration references, style facet cards and rotate views on a free-form node canvas (Canvas), or run the conversational agent pipeline (Studio: brief → concepts → plan → shoot → review). Built-in critic system (pre-flight plan check, batch quality gate, design crit with owner calibration) and a learning loop (verdicts distill into rules; the studio gets better with use — visible on the Growth dashboard).
 
-**技术事实**（写文案前必须知道的）：
-- 仓库：github.com/shenxingliu/praxis（当前 Private，启动时改 Public）
-- 线上实例：https://praxis-dun-one.vercel.app/（代理模式，key 在 Vercel 服务端）
-- 技术栈：React + Vite 单页应用 + Vercel serverless（api/generate 代理 Gemini）
-- 许可证：MIT（已加）
-- Key 方案：开源用户 BYOK（System 页粘贴自己的 Gemini key，存 localStorage）；
-  自有实例走服务端代理 + APP_ACCESS_TOKEN 口令。**不承诺免费托管生成**
-- 成本卖点：flash 档 $0.04/张，pro 档（带一致性检查员）$0.24/张
-- 三个差异化叙事点（所有推广文案围绕这三点，不要写成"又一个 AI 生图工具"）：
-  1. 产品像素级保真：真值照首尾夹击 + 生成后自动检查员 + 手术纠错 + ✓/⚠ 徽章
-  2. 越用越懂品牌：反馈信号 → 蒸馏规则 → 好评图晋升参考，学习闭环
-  3. 自由画布工作流：节点连线、7 维度 Facet 拆解（"取这张的光 + 那张的材质"）、
-     3D 轨迹球转台任意视角 / 360° / 一键导出旋转 GIF（免费，纯前端编码）
-  4. 跨品种：资产可标记 product / person / food / apparel / space 类型，
-     保真规则、staging 规则和检查员标准按类型自适应 —— 不只是家具工具
+**Technical facts** (know these before writing any copy):
+- Repo: github.com/shenxingliu/praxis — **already Public**
+- Live instance: https://praxis-dun-one.vercel.app/ (proxy mode; key lives server-side on Vercel)
+- Stack: React + Vite SPA + Vercel serverless (api/generate proxies Gemini)
+- License: MIT (done)
+- Key scheme: open-source users BYOK (paste your own Gemini key on the System page, stored in localStorage); the hosted instance uses a server-side proxy + APP_ACCESS_TOKEN passphrase. **No free hosted generation is promised.**
+- Cost story: Flash tier $0.04/image, Pro tier (with the consistency inspector) $0.24/image
+- Differentiation — ALL promo copy orbits these; never write "yet another AI image tool":
+  1. **Pixel-faithful products**: ground-truth photos bracket the prompt + post-generation inspector + surgical correction + ✓/⚠ badges
+  2. **Learns your brand**: feedback signals → distilled rules → liked images promoted to references; critic calibrates to the owner's taste; Growth dashboard makes it visible
+  3. **Two workflows, one brain**: conversational agent pipeline (Studio) and node canvas (Canvas) share the same critic, calibration memory and learning loop
+  4. **Cross-category**: assets typed product / person / food / apparel / space — fidelity, staging and inspector standards adapt per type; not just a furniture tool
 
-**已完成**（不要重复做）：MIT LICENSE、BYOK 输入框（System 页）、
-.env.example、README 部署与 Key 安全章节、两轮代码审查修复（品牌隔离/预算竞态/
-一致性检查诚实化/参考图序号对齐/内存上限等 13 项）。
+**Already done** (do not redo): MIT LICENSE, BYOK input (System page), .env.example, English README with deploy + key-security sections, two code-review rounds (13 fixes: brand isolation, budget race, consistency honesty, reference index alignment, memory caps…), image storage offloading (Supabase bucket), critic loop, Growth dashboard.
 
-## 二、阶段 0 —— 启动前准备（未启动也可做）
+## 2 · Stage 0 — pre-launch prep (safe to do before launch)
 
-- [ ] **0.1 英文 README**
-  做什么：现 README 是中文。改为英文为主（顶部一句话 + hero 截图 + Features +
-  Quick start + Deploy 章节），中文版移至 README.zh.md，两者互链。
-  验收：GitHub 渲染正常，英文无机器翻译腔，Deploy 章节与现有中文内容一致。
+- [x] **0.1 English README** — done 2026-07-10 (positioning, features, quickstart, deploy, architecture, roadmap).
 
-- [ ] **0.2 截图 / GIF 物料**（需要 Jim 提供真实产品照生成的结果，不用占位图）
-  清单：① Canvas 全景（多节点连线 + 一张成品）② 一致性检查 ✓ 徽章特写
-  ③ Facet 维度选择面板 ④ 转台 360° 八视图 ⑤ Studio 批量出图。
-  验收：README 顶部至少 1 张 hero 图 + Features 每条配图，文件放 docs/media/。
+- [ ] **0.2 Screenshots / GIF assets** (needs real generations from Jim's product photos — no placeholders)
+  Shot list: ① Studio conversation flow with a plan + amber pre-flight warnings ② Canvas with nodes wired + a finished output ③ Canvas Crit panel on an output ④ Growth dashboard with a real taste-alignment curve ⑤ turntable 360° eight-view spread.
+  Verify: README gets at least 1 hero image; files live in docs/media/.
 
-- [ ] **0.3 演示视频（60-90 秒）分镜脚本已备**（见附录 A），需要 Jim 录制。
-  验收：真实速度录屏（生成等待可加速并标注），无声版也能看懂，上传 YouTube + 仓库链接。
+- [ ] **0.3 Demo video (60–90s)** — storyboard ready in Appendix A; Jim records.
+  Verify: real-speed screen capture (generation waits may be time-lapsed and labeled), understandable with sound off, uploaded to YouTube + linked from the repo.
 
-- [ ] **0.4 Vercel 环境确认**（Jim 或有 Vercel 权限者执行）
-  确认 praxis 项目已设：GEMINI_API_KEY、APP_ACCESS_TOKEN、VITE_USE_PROXY=1、
-  VITE_APP_ACCESS_TOKEN。验收：无口令的请求被 /api/generate 拒绝（401）。
+- [ ] **0.4 Vercel env confirmation** (Jim or anyone with Vercel access)
+  Confirm the praxis project has: GEMINI_API_KEY, APP_ACCESS_TOKEN, VITE_USE_PROXY=1, VITE_APP_ACCESS_TOKEN.
+  Verify: a request without the passphrase gets 401 from /api/generate.
 
-- [ ] **0.5 Supabase RLS**（若继续用云存储；仅本地 IndexedDB 则跳过）
-  给所有 praxis_* 表配行级安全策略。验收：匿名 key 无法读写其他用户数据。
+- [ ] **0.5 Supabase RLS** (only if cloud storage stays enabled; skip for local-IndexedDB-only)
+  Add row-level security to all praxis_* tables and the praxis-images bucket.
+  Verify: an anonymous key cannot read or write another user's data.
 
-- [ ] **0.6 新手体验自查**：全新浏览器（无缓存）打开线上站 →
-  是否 3 分钟内能明白"填 key → 上传产品照 → 生成第一张图"？
-  修掉过程中发现的引导断点（空状态提示、首次引导）。
-  验收：一个没用过的人不看文档能出第一张图。
+- [ ] **0.6 First-run self-audit**: open the live site in a fresh browser (no cache) —
+  can a stranger understand "paste key → upload product photos → first image" within 3 minutes?
+  Fix any onboarding gaps found (empty states, first-run hints).
+  Verify: someone who has never seen it produces a first image without reading docs.
 
-- [ ] **0.7 GitHub 仓库整备**（启动日之前最后做）
-  Settings → Code security 开 Secret scanning + Push protection；
-  加 About 描述与 topics：`ai` `image-generation` `gemini` `design-tools`
-  `node-canvas` `brand`；确认 Issues 开启。
+- [ ] **0.7 GitHub repo grooming** (last thing before launch day)
+  Settings → Code security: enable Secret scanning + Push protection.
+  About: description + topics `ai` `image-generation` `gemini` `design-tools` `node-canvas` `brand` `agents`. Confirm Issues are enabled.
+  Suggested description: `The open-source AI design studio that learns your brand — agent workflow, resident critic, brand memory. BYOK Gemini.`
 
-## 三、阶段 1 —— 启动周执行（等 Jim 说"启动"再做）
+## 3 · Stage 1 — launch week (ONLY after Jim says "launch")
 
-**D0（启动日）**
-- [ ] 仓库改 Public（Settings → General → Danger Zone → Change visibility）
-- [ ] 发 Show HN。标题用（可微调）：
-  `Show HN: Praxis – node canvas that weaves product photos into brand imagery`
-  正文要点：为什么做（电商产品图成本）、三个差异点、BYOK 免费自用、MIT、
-  求反馈的具体问题（"一致性检查员的判定你们信得过吗"比"求反馈"好）。
-- [ ] 同日发 X/Twitter 首条线程（3-5 条：痛点 → demo 视频 → 差异点 → 链接）。
-- [ ] 中文渠道：即刻 + V2EX 分享创造节点，用附录 B 中文模板。
+**D0 (launch day)**
+- [ ] Show HN post. Title (may tune):
+  `Show HN: Praxis – an AI design studio that learns your brand`
+  Body beats: why (product photography cost), the three differentiators, BYOK free self-use, MIT, and a SPECIFIC feedback ask ("would you trust the consistency inspector's verdicts?" beats "feedback welcome").
+- [ ] Same day: first X/Twitter thread (3–5 posts: pain point → demo video → differentiators → link).
+- [ ] Chinese channels: Jike + V2EX share posts — translate/adapt the Appendix B template into Chinese when posting (channel copy is written at post time; this playbook stays English).
 
-**D1-D7**
-- [ ] 每天固定两次查看并回复所有评论/Issue（HN 尤其头 6 小时）。
-- [ ] Reddit r/SideProject、r/artificial 各一帖（间隔 1-2 天，改写勿复制）。
-- [ ] 小红书 1-2 条面向家居电商运营的图文（用附录 B）。
-- [ ] 记录指标基线（见第五节）。
+**D1–D7**
+- [ ] Check and answer every comment/issue twice daily (HN especially in the first 6 hours).
+- [ ] Reddit r/SideProject and r/artificial, one post each, 1–2 days apart, rewritten not copy-pasted.
+- [ ] 1–2 Xiaohongshu posts aimed at home-goods e-commerce operators (adapt Appendix B).
+- [ ] Record the metrics baseline (Section 5).
 
-## 四、阶段 2 —— 垂直深耕（启动后 2-8 周，视反馈）
+## 4 · Stage 2 — vertical depth (weeks 2–8 post-launch, feedback-driven)
 
-- [ ] 写 1 篇 case study：Greenington 家具真实工作流，含具体数字
-  （每张成本、出图时间 vs 摄影棚），中英各一版。
-- [ ] 定向触达家具/家居 DTC 和跨境电商社群（微信群、Facebook groups、
-  r/FulfillmentByAmazon 等），以 case study 而非产品页开场。
-- [ ] 收集 BYOK 用户反馈，验证"托管付费版"意愿（问愿不愿意 $X/月免配 key）。
-- [ ] 若付费意愿明确 → 立项阶段 3：Supabase Auth + RLS + 服务端统一 key +
-  按用户配额 + Stripe。此前不投入。
+- [ ] Write one case study: the real Greenington furniture workflow with hard numbers
+  (cost per image, turnaround vs a photo studio). English + Chinese versions.
+- [ ] Direct outreach to furniture / home-goods DTC and cross-border e-commerce communities
+  (WeChat groups, Facebook groups, r/FulfillmentByAmazon…) — open with the case study, not the product page.
+- [ ] Collect BYOK-user feedback; probe willingness to pay for a hosted tier ("would you pay $X/mo to skip key setup?").
+- [ ] If payment intent is clear → green-light Stage 3: Supabase Auth + RLS + server-side pooled key + per-user quotas + Stripe. No investment before that signal.
 
-## 五、指标（每周记录一次）
+## 5 · Metrics (record weekly)
 
-| 指标 | 工具 |
+| Metric | Tool |
 |---|---|
-| GitHub stars / forks / issues | 仓库页 |
-| 线上站 UV、填 key 转化、首图完成率 | Vercel Analytics（需开启） |
-| 各渠道帖子的曝光/点击 | 各平台后台 |
-| 北极星：采纳率（保存+导出 ÷ 生成数） | 应用内已埋（learning signals） |
+| GitHub stars / forks / issues | repo page |
+| Live-site UV, key-paste conversion, first-image completion | Vercel Analytics (enable it) |
+| Per-channel post impressions/clicks | each platform's dashboard |
+| North star: adoption rate (saves + exports ÷ generations) | already instrumented (learning signals) |
 
-## 六、风险与预案
+## 6 · Risks & responses
 
-- **HN 冷场**（多数情况）：正常，两周后换叙事角度重发一次（规则允许）。
-- **API 代理被滥用**：APP_ACCESS_TOKEN 已挡陌生调用；若口令泄露就轮换。
-- **有人部署收费竞品**：MIT 允许。护城河在迭代速度和学习闭环数据，不在代码。
-- **Gemini 政策/价格变动**：BYOK 模式下风险在用户侧；关注官方公告即可。
+- **HN flops** (the common case): normal — repost once ~2 weeks later with a different narrative angle (allowed by HN rules).
+- **Proxy abuse**: APP_ACCESS_TOKEN already blocks strangers; rotate the passphrase if it leaks.
+- **Someone ships a paid fork**: MIT allows it. The moat is iteration speed and accumulated learning data, not the code.
+- **Gemini policy/price changes**: under BYOK the exposure is on the user side; just track official announcements.
 
 ---
 
-## 附录 A：演示视频分镜（60-90s）
+## Appendix A — demo video storyboard (60–90s)
 
-1. 0-8s：痛点字幕 "One product photo shoot: $2,000. This image: $0.24." 配成品图
-2. 8-20s：拖 3 张产品照进 Canvas → 出现 Asset 节点
-3. 20-35s：加一张灵感图 → 点 Facets → 7 维度卡弹出 → 只选 LIGHT 和 MATERIAL
-4. 35-50s：连线到 Output → Run → 成品出现 → 镜头推近 ✓ consistency 徽章
-5. 50-65s：转台节点拖 3D 立方体 → Render 135° → 360° 八视图铺开
-6. 65-80s：Gallery 里点赞 → Brain 页出现新蒸馏规则（"越用越懂你的品牌"字幕）
-7. 80-90s：GitHub 地址 + "MIT licensed. Bring your own free Gemini key."
+1. 0–8s: pain-point caption "One product photo shoot: $2,000. This image: $0.24." over a finished shot
+2. 8–20s: drag 3 product photos onto Canvas → Asset nodes appear
+3. 20–35s: add an inspiration image → Extract → facet cards pop out → pick only LIGHT and MATERIAL
+4. 35–50s: wire to Output → Run → result appears → push in on the ✓ consistency badge
+5. 50–65s: rotate node, drag the 3D trackball → render 135° → 360° eight-view spread
+6. 65–80s: 👍 an image → a freshly distilled rule appears in Brand memory + the Growth curve ticks up (caption: "it learns your brand")
+7. 80–90s: GitHub URL + "MIT licensed. Bring your own free Gemini key."
 
-## 附录 B：文案模板
+## Appendix B — copy templates (adapt per channel; translate to Chinese for Chinese channels at post time)
 
-**X/Twitter 首条**：
-"Product photography costs $100-500 per image. I built an open-source canvas
-that weaves real product photos into brand imagery for $0.24 — with an AI
-inspector that verifies the product stayed pixel-faithful. MIT licensed,
-bring your own free Gemini key. [视频] [repo链接]"
+**X/Twitter opener**:
+"Product photography costs $100–500 per image. I built an open-source studio that turns real product photos into brand imagery for $0.24 — with an AI inspector that verifies the product stayed pixel-faithful, and a memory that learns your taste with every verdict. MIT licensed, bring your own free Gemini key. [video] [repo]"
 
-**即刻/V2EX（中文）**：
-"开源了一个 AI 品牌视觉工具 Praxis：把真实产品照当'像素真值'，在节点画布上
-和灵感图、维度拆解卡（只取这张的光、那张的材质）自由组合织成品牌成片。
-生成后有个'检查员'自动核对产品有没有走样，不过关就手术式修一遍。
-好评的图会被蒸馏成规则，越用越懂你的品牌。MIT 协议，填自己的免费 Gemini key
-就能用。求砸反馈：github.com/shenxingliu/praxis"
+**Jike / V2EX (translate to Chinese when posting)**:
+"Open-sourced Praxis: an AI brand-imagery studio that treats real product photos as pixel ground-truth. Wire them with inspiration images and facet cards (take THIS photo's light + THAT one's material) on a node canvas, or run the conversational agent pipeline. A built-in inspector verifies the product didn't drift — and surgically corrects it if it did. Liked images distill into rules: it gets better the more you use it. MIT, works with your own free Gemini key. Feedback welcome: github.com/shenxingliu/praxis"
 
-**小红书（家居电商向）**：
-标题：产品图拍一次几千块？我用 AI 把成本打到 2 毛一张
-正文要点：晒对比图（实拍 vs 生成）、强调"产品不走样"（检查员机制）、
-教程三步走（传产品照→选场景灵感→出图）、评论区放 GitHub 链接。
+**Xiaohongshu (home e-commerce angle, translate to Chinese when posting)**:
+Title: "A product shoot costs thousands. I got it down to $0.04 a shot."
+Beats: before/after comparison (real shoot vs generated), stress "the product doesn't drift" (inspector mechanism), 3-step tutorial (upload product photos → pick scene inspiration → generate), GitHub link in comments.
 
-## 附录 C：执行边界（给代执行的 AI 模型）
+## Appendix C — execution boundaries (for any AI model running this)
 
-- 所有对外发布动作（发帖、改仓库可见性）必须经 Jim 确认后执行。
-- 文案可代拟，账号操作由 Jim 完成或授权。
-- 不要修改 Key 方案（BYOK + 代理）和 MIT 许可这两个已定决策。
-- 代码改动照常走 commit + push（praxis 仓库 main 分支）。
+- Every outward-facing action (posting, changing repo settings) requires Jim's explicit confirmation first.
+- Copy may be drafted on his behalf; account actions are performed or authorized by Jim.
+- Do not alter two locked decisions: the key scheme (BYOK + proxy) and the MIT license.
+- Code changes flow as usual: commit + push to praxis main.
+- Everything published — code, comments, docs, filenames, UI copy — is written in English. (Channel copy for Chinese platforms is translated at post time.)
