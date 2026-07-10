@@ -10,7 +10,7 @@ import { GoogleGenAI } from '@google/genai';
 export const MODELS = {
     imagePro: 'gemini-3-pro-image',
     imageFlash: 'gemini-3.1-flash-image',
-    text: 'gemini-2.5-flash',
+    text: 'gemini-3.5-flash',
 } as const;
 
 /** Rough $/generation used for budget accounting — tune against real bills. */
@@ -269,14 +269,66 @@ export async function generateImage(opts: {
     throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
+const extractJsonPayload = (raw: string): string => {
+    const text = raw.trim()
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
+    try {
+        JSON.parse(text);
+        return text;
+    } catch {
+        // Some model versions append prose after valid JSON despite
+        // responseMimeType. Walk the first JSON object/array and stop when
+        // its brackets balance, respecting quoted strings.
+        const start = text.search(/[\[{]/);
+        if (start < 0) return text;
+        const opener = text[start];
+        const closer = opener === '{' ? '}' : ']';
+        let depth = 0;
+        let inString = false;
+        let escaped = false;
+        for (let i = start; i < text.length; i++) {
+            const ch = text[i];
+            if (inString) {
+                if (escaped) escaped = false;
+                else if (ch === '\\') escaped = true;
+                else if (ch === '"') inString = false;
+                continue;
+            }
+            if (ch === '"') inString = true;
+            else if (ch === opener) depth += 1;
+            else if (ch === closer) {
+                depth -= 1;
+                if (depth === 0) return text.slice(start, i + 1);
+            }
+        }
+        return text.slice(start);
+    }
+};
+
 /** Text generation (JSON mode). Optional image data-URLs enable vision
  *  tasks — decomposition, review scoring, visual archaeology. */
 export async function generateJson<T>(prompt: string, images: string[] = []): Promise<T> {
     const imageParts = await prepareInlineParts(images, 'json');
     const data = await restGenerate(MODELS.text, {
-        contents: [{ parts: [...imageParts, { text: prompt }] }],
+        contents: [{ parts: [...imageParts, { text: `${prompt}\n\nReturn ONLY valid JSON. No markdown, no comments, no trailing prose.` }] }],
         generationConfig: { responseMimeType: 'application/json' },
     });
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? 'null';
-    return JSON.parse(text) as T;
+    const payload = extractJsonPayload(text);
+    try {
+        return JSON.parse(payload) as T;
+    } catch (err: any) {
+        const repaired = await restGenerate(MODELS.text, {
+            contents: [{
+                parts: [{
+                    text: `Repair this malformed JSON and return ONLY valid JSON. Preserve the same data and keys. Do not explain anything.\n\nParse error: ${String(err?.message || err)}\n\nMalformed JSON:\n${payload}`,
+                }],
+            }],
+            generationConfig: { responseMimeType: 'application/json' },
+        });
+        const repairedText = repaired.candidates?.[0]?.content?.parts?.[0]?.text ?? 'null';
+        return JSON.parse(extractJsonPayload(repairedText)) as T;
+    }
 }

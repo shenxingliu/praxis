@@ -267,6 +267,8 @@ export interface ConceptProposal {
     nsiSummary: string;
     /** Elements the concept wants to recombine. */
     elementIds: string[];
+    /** Inspiration references the direction visually draws from. */
+    sourceRefIds?: string[];
     contextModeId?: string;
     realism: Realism;
 }

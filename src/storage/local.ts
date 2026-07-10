@@ -122,6 +122,7 @@ export class LocalProvider implements StorageProvider {
         return all.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, limit);
     }
     upsertJob(job: PraxisJob) { return put('jobs', job); }
+    deleteJob(id: string) { return del('jobs', id); }
 
     async getBudget(): Promise<BudgetConfig> {
         return (await this.kvGet<BudgetConfig>('budget')) ?? { monthlyUsd: 50, warnAtFraction: 0.8 };

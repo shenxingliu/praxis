@@ -1,6 +1,6 @@
 import {
     Asset, ConceptProposal, Element, GenerationParams, GenerationResult,
-    PraxisJob, ProductionPlan, Realism, ReviewReport,
+    PraxisJob, ProductionPlan, Realism, Reference, ReviewReport,
 } from '../domain/types';
 import { storage } from '../storage/local';
 import { getCurrentBrand, getCurrentBrandId } from '../domain/brand';
@@ -48,10 +48,29 @@ export async function startJob(brief: string): Promise<PraxisJob> {
     return job;
 }
 
-export async function proposeConcepts(job: PraxisJob): Promise<PraxisJob> {
+export async function proposeConcepts(job: PraxisJob, inspirationRefs?: Reference[]): Promise<PraxisJob> {
     const brand = await getCurrentBrand();
     const soul = await getBrandSoul();
-    const elements = (await storage.listElements()).filter(e => e.enabled);
+    const allRefs = (await storage.listReferences())
+        .filter(r => r.kind !== 'plate' && r.image.kind === 'data')
+        .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
+    const selectedRefIds = new Set((inspirationRefs ?? []).map(r => r.id));
+    const selectedRefs = (inspirationRefs && inspirationRefs.length > 0
+        ? allRefs.filter(r => selectedRefIds.has(r.id))
+        : allRefs
+    ).slice(0, 8);
+    const refName = new Map(allRefs.map(r => [r.id, r.name]));
+    const selectedOrTopRefIds = new Set(selectedRefs.map(r => r.id));
+    const elements = (await storage.listElements())
+        .filter(e => e.enabled)
+        .sort((a, b) => {
+            const aBoost = selectedOrTopRefIds.has(a.sourceRefId) ? 10 : 0;
+            const bBoost = selectedOrTopRefIds.has(b.sourceRefId) ? 10 : 0;
+            return (bBoost + (b.weight ?? 0)) - (aBoost + (a.weight ?? 0));
+        })
+        .slice(0, 48);
+    const selectedElements = elements.filter(e => selectedOrTopRefIds.has(e.sourceRefId)).slice(0, 18);
+    const crossPollinationElements = elements.filter(e => !selectedOrTopRefIds.has(e.sourceRefId)).slice(0, 30);
 
     // Weight closed-loop: demoted soul fields carry their recent complaints.
     const demoted = (soul?.fields ?? []).filter(f => f.weight < 1 && !f.locked).map(f => f.key);
@@ -78,13 +97,33 @@ Let KEPT pairings inform which concepts you recombine; avoid DISCARDED pairings 
     const prompt = `You are the CREATIVE DIRECTOR of an elite design studio working for "${brand.name}" — ${brand.description}
 
 ### CLIENT BRIEF ###
-${job.brief.trim() || '(no brief — OPEN EXPLORATION: propose what this brand should make next. Ground every direction in the soul and the concept library; surprise the owner with directions they would not have briefed but will recognize as their own.)'}
+${job.brief.trim() || '(no brief — OPEN EXPLORATION: propose what this brand should make next. Ground every direction in the soul and the inspiration pool; surprise the owner with directions they would not have briefed but will recognize as their own.)'}
 ${directivesBlock(job)}
 ### BRAND SOUL (locked fields are red-lines) ###
 ${(soul?.fields ?? []).filter(f => f.value.trim()).map(f => `${f.key}${f.locked ? ' [LOCKED]' : ''} (w${f.weight}): ${f.value}`).join('\n') || '(no soul yet — derive from brand description)'}
 ${complaints}${fusionMemory}
-### CONCEPT LIBRARY (abstract ideas decomposed from brand references — recombine them) ###
-${elements.map(e => `- id=${e.id} [${e.type}] "${e.concept}" — ${e.description.slice(0, 120)}`).join('\n') || '(empty — invent concepts from scratch)'}
+### INSPIRATION POOL (attached images, numbered in order) ###
+${selectedRefs.length > 0
+        ? selectedRefs.map((r, i) => `${i + 1}. "${r.name}"${r.source === 'synthesized' ? ' (kept fusion result)' : ''} weight=${r.weight}`).join('\n')
+        : '(none selected — invent from brand soul and brief)'}
+
+Use these attached images as HIGH-WEIGHT VISUAL MEMORY, not as subjects to copy. Read their light, palette, framing, material mood, spatial grammar, and emotional stance. Do not copy objects, layouts, logos, people, or products from inspiration unless they are also selected as Assets.
+
+### EXTRACTED INGREDIENTS FROM THE HIGH-WEIGHT INSPIRATION ###
+${selectedElements.length > 0
+        ? selectedElements.map(e => `- id=${e.id} [${e.type}] from "${refName.get(e.sourceRefId) ?? 'Inspiration'}" w${e.weight}: "${e.concept}" — ${e.description.slice(0, 150)}${e.principle ? ` Principle: ${e.principle}` : ''}${e.worldview ? ` Worldview: ${e.worldview}` : ''}`).join('\n')
+        : '(none extracted yet)'}
+
+### CROSS-POLLINATION INGREDIENTS FROM OTHER INSPIRATION ###
+${crossPollinationElements.length > 0
+        ? crossPollinationElements.map(e => `- id=${e.id} [${e.type}] from "${refName.get(e.sourceRefId) ?? 'Inspiration'}" w${e.weight}: "${e.concept}" — ${e.description.slice(0, 130)}`).join('\n')
+        : '(none available)'}
+
+Design more openly than a literal mood match. Each direction should fuse:
+1. one dominant visual memory from the high-weight inspiration,
+2. one or two extracted ingredients from either the same image or another inspiration image,
+3. a fresh production idea that is not already visible in any single reference.
+The result should feel like a new studio concept born from the library, not a collage or a copy.
 
 ### CONTEXT MODES (the brand's environment grammars) ###
 ${brand.contextModes.map(m => `- id=${m.id} [${m.realism}] ${m.label}: ${m.directive}`).join('\n') || '(none — propose your own realism per concept)'}
@@ -94,25 +133,41 @@ Propose exactly 3 DISTINCT creative directions for this brief. Each must serve t
 - title: 3-6 words
 - rationale: 2-3 sentences — why this direction serves the brief AND the brand
 - nsiSummary: one compact line per axis (narrative / sensation / viewing) describing this direction's specialization
-- elementIds: 0-4 element ids from the library to recombine (only if they truly fit)
+- refNumbers: 0-3 inspiration image numbers that influenced this direction
+- elementIds: 1-5 extracted ingredient ids actually recombined; prefer at least one high-weight ingredient and one cross-pollination ingredient when useful
 - contextModeId: one of the context mode ids, or null
 - realism: ${REALISMS.join(' | ')}
 
-Output JSON: { "concepts": [ { "title", "rationale", "nsiSummary", "elementIds": [], "contextModeId": string|null, "realism" } ] }`;
+Output JSON: { "concepts": [ { "title", "rationale", "nsiSummary", "refNumbers": [], "elementIds": [], "contextModeId": string|null, "realism" } ] }`;
 
-    const parsed = await generateJson<{ concepts: Array<Record<string, unknown>> }>(prompt);
+    const parsed = await generateJson<{ concepts: Array<Record<string, unknown>> }>(
+        prompt,
+        selectedRefs.map(r => r.image.value)
+    );
     const validElement = new Set(elements.map(e => e.id));
     const validMode = new Set(brand.contextModes.map(m => m.id));
 
-    const concepts: ConceptProposal[] = (parsed?.concepts ?? []).slice(0, 3).map(c => ({
-        id: crypto.randomUUID(),
-        title: String(c.title ?? 'Untitled direction'),
-        rationale: String(c.rationale ?? ''),
-        nsiSummary: String(c.nsiSummary ?? ''),
-        elementIds: (Array.isArray(c.elementIds) ? c.elementIds : []).filter((id: unknown) => validElement.has(String(id))).map(String),
-        contextModeId: validMode.has(String(c.contextModeId)) ? String(c.contextModeId) : undefined,
-        realism: REALISMS.includes(c.realism as Realism) ? c.realism as Realism : 'photographic',
-    }));
+    const concepts: ConceptProposal[] = (parsed?.concepts ?? []).slice(0, 3).map(c => {
+        const elementIds = (Array.isArray(c.elementIds) ? c.elementIds : [])
+            .filter((id: unknown) => validElement.has(String(id)))
+            .map(String);
+        const refsFromNumbers = (Array.isArray(c.refNumbers) ? c.refNumbers : [])
+            .map((n: unknown) => selectedRefs[Number(n) - 1]?.id)
+            .filter((id: string | undefined): id is string => !!id);
+        const refsFromElements = elementIds
+            .map(id => elements.find(e => e.id === id)?.sourceRefId)
+            .filter((id: string | undefined): id is string => !!id);
+        return {
+            id: crypto.randomUUID(),
+            title: String(c.title ?? 'Untitled direction'),
+            rationale: String(c.rationale ?? ''),
+            nsiSummary: String(c.nsiSummary ?? ''),
+            elementIds,
+            sourceRefIds: Array.from(new Set([...refsFromNumbers, ...refsFromElements])),
+            contextModeId: validMode.has(String(c.contextModeId)) ? String(c.contextModeId) : undefined,
+            realism: REALISMS.includes(c.realism as Realism) ? c.realism as Realism : 'photographic',
+        };
+    });
 
     const next: PraxisJob = { ...job, concepts, stage: 'concepts', updatedAt: Date.now() };
     await storage.upsertJob(next);

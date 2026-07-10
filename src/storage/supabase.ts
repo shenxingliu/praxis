@@ -157,6 +157,7 @@ export class SupabaseProvider implements StorageProvider {
         return this.brandRows<PraxisJob>(TABLE.jobs, `&order=updated_at.desc&limit=${limit}`);
     }
     upsertJob(job: PraxisJob) { return this.upsert(TABLE.jobs, [{ id: job.id, data: job }]); }
+    deleteJob(id: string) { return this.remove(TABLE.jobs, id); }
 
     // ---- kv ----
     async kvGet<T>(key: string): Promise<T | null> {

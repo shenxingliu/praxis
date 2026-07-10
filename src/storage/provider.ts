@@ -52,6 +52,7 @@ export interface StorageProvider {
     // Jobs (studio workflow)
     listJobs(limit?: number): Promise<PraxisJob[]>;
     upsertJob(job: PraxisJob): Promise<void>;
+    deleteJob(id: string): Promise<void>;
 
     // Budget (global — one wallet across brands)
     getBudget(): Promise<BudgetConfig>;
