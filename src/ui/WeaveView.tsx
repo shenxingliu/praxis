@@ -885,6 +885,29 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
         setNotice('Saved to Gallery.');
     };
 
+    /** Save a canvas image into the Gallery as an adopted output. Uses the
+     *  tracked generation recipe when we have it; otherwise a minimal one. */
+    const saveToGallery = async (nn: WeaveNode) => {
+        if (!nn.image) return;
+        const tracked = nn.resultId ? resultsRef.current.get(nn.resultId) : undefined;
+        const result: GenerationResult = tracked ?? {
+            id: crypto.randomUUID(),
+            brandId: getCurrentBrandId(),
+            params: { outputType: 'scene', ratio: '1:1', modelTier: 'flash', note: nn.text ?? 'Canvas image' } as GenerationParams,
+            assetIds: [],
+            referenceIds: [],
+            appliedRuleIds: [],
+            fullPrompt: nn.text ?? '(canvas image without tracked recipe)',
+            model: 'canvas',
+            image: { kind: 'data', value: nn.image },
+            estimatedCostUsd: 0,
+            createdAt: Date.now(),
+            adopted: false,
+        };
+        await recordSignal(result, 'save'); // persists it adopted + feeds learning
+        setNotice('Saved to Gallery.');
+    };
+
     const download = (nn: WeaveNode) => {
         if (!nn.image) return;
         const a = document.createElement('a');
@@ -1513,7 +1536,8 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
                                                     <button style={miniBtn} disabled={!!busy} onClick={() => decomposeNode(nn)}>Extract</button>
                                                     <button style={miniBtn} disabled={!!busy} onClick={() => imageToPrompt(nn)}>Prompt</button>
                                                     <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>View</button>
-                                                    <button style={miniBtn} onClick={() => download(nn)}>Save</button>
+                                                    <button style={miniBtn} disabled={!!busy} onClick={() => saveToGallery(nn)} title="Save to Gallery (adopted output)">Save</button>
+                                                    <button style={miniBtn} onClick={() => download(nn)} title="Download the file">↓</button>
                                                     <span style={{ flexBasis: '100%', display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap', marginTop: 2 }}>
                                                         <span style={{ fontSize: 9, fontWeight: 800, color: '#71717a' }}>→ ASSET:</span>
                                                         {SUBJECT_TYPES.map(t => (
@@ -1545,7 +1569,8 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
                                                     title="Extract: split this image into light / palette / composition / material / texture / mood / space — then borrow ONLY the dimensions you pick">Extract</button>
                                                 <button style={miniBtn} disabled={!!busy} onClick={() => imageToPrompt(nn)}>Prompt</button>
                                                 <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>View</button>
-                                                <button style={miniBtn} onClick={() => download(nn)}>Save</button>
+                                                <button style={miniBtn} disabled={!!busy} onClick={() => saveToGallery(nn)} title="Save to Gallery (adopted output)">Save</button>
+                                                    <button style={miniBtn} onClick={() => download(nn)} title="Download the file">↓</button>
                                                 <span style={{ flexBasis: '100%', display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap', marginTop: 2 }}>
                                                     <span style={{ fontSize: 9, fontWeight: 800, color: '#71717a' }}>→ ASSET:</span>
                                                     {SUBJECT_TYPES.map(t => (
@@ -1564,7 +1589,8 @@ const WeaveView = React.forwardRef<WeaveViewHandle>(function WeaveView(_, ref) {
                                                 <button style={miniBtn} disabled={!!busy} onClick={() => run360(nn)} title="8 views at 45° steps (flash) — laid out on the board">360°</button>
                                                 <button style={miniBtn} disabled={!!busy || (nn.images?.length ?? 0) < 2} onClick={() => exportSpinGif(nn)} title="Encode the turntable views into a looping spin GIF (client-side, free)">GIF</button>
                                                 {nn.image && <>
-                                                    <button style={miniBtn} onClick={() => download(nn)}>Save</button>
+                                                    <button style={miniBtn} disabled={!!busy} onClick={() => saveToGallery(nn)} title="Save to Gallery (adopted output)">Save</button>
+                                                    <button style={miniBtn} onClick={() => download(nn)} title="Download the file">↓</button>
                                                     <button style={miniBtn} disabled={!!busy} onClick={() => saveResult(nn)}>Gallery</button>
                                                     <button style={miniBtn} onClick={() => openLightbox(nn.image!)}>View</button>
                                                 </>}
