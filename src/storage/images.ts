@@ -20,23 +20,21 @@ const enabled = () => !!supabaseUrl && !!supabaseKey;
 
 const headers = () => ({ apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` });
 
-let bucketReady = false;
+// NOTE: anon policies usually allow object reads/writes but NOT bucket
+// metadata reads — so never gate on "does the bucket exist"; just upload,
+// and only try to create the bucket after a 404.
+let bucketCreateTried = false;
 
-async function ensureBucket(): Promise<boolean> {
-    if (bucketReady) return true;
+async function tryCreateBucket(): Promise<void> {
+    if (bucketCreateTried) return;
+    bucketCreateTried = true;
     try {
-        const probe = await fetch(`${supabaseUrl}/storage/v1/bucket/${BUCKET}`, { headers: headers() });
-        if (probe.ok) { bucketReady = true; return true; }
-        const create = await fetch(`${supabaseUrl}/storage/v1/bucket`, {
+        await fetch(`${supabaseUrl}/storage/v1/bucket`, {
             method: 'POST',
             headers: { ...headers(), 'content-type': 'application/json' },
             body: JSON.stringify({ id: BUCKET, name: BUCKET, public: true }),
         });
-        bucketReady = create.ok;
-        return bucketReady;
-    } catch {
-        return false;
-    }
+    } catch { /* best-effort */ }
 }
 
 const dataUrlToBlob = (dataUrl: string): Blob | null => {
@@ -56,15 +54,19 @@ const dataUrlToBlob = (dataUrl: string): Blob | null => {
  *  (caller keeps the data URL — nothing is ever lost). */
 export async function uploadImage(dataUrl: string, path: string): Promise<string | null> {
     if (!enabled() || !dataUrl.startsWith('data:')) return null;
-    if (!(await ensureBucket())) return null;
     const blob = dataUrlToBlob(dataUrl);
     if (!blob) return null;
+    const attempt = () => fetch(`${supabaseUrl}/storage/v1/object/${BUCKET}/${path}`, {
+        method: 'POST',
+        headers: { ...headers(), 'content-type': blob.type, 'x-upsert': 'true' },
+        body: blob,
+    });
     try {
-        const resp = await fetch(`${supabaseUrl}/storage/v1/object/${BUCKET}/${path}`, {
-            method: 'POST',
-            headers: { ...headers(), 'content-type': blob.type, 'x-upsert': 'true' },
-            body: blob,
-        });
+        let resp = await attempt();
+        if (resp.status === 404) { // bucket missing — create once, retry
+            await tryCreateBucket();
+            resp = await attempt();
+        }
         if (!resp.ok) return null;
         return `${supabaseUrl}/storage/v1/object/public/${BUCKET}/${path}`;
     } catch {
