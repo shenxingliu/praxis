@@ -1,82 +1,108 @@
-# Praxis — AI-agent design studio
+# Praxis
 
-会越用越懂品牌的视觉生产系统。Praxis 现在作为独立项目运行，线上地址：https://praxis-dun-one.vercel.app/。
+**The open-source AI design studio that learns your brand.**
 
-## 产品定位
+Most AI creative tools are stateless — every generation starts from zero, and your taste walks out the door when the tab closes. Praxis is built around the opposite bet: **every verdict you give becomes brand memory**. Likes, critiques, saved images, corrections — all of it distills into rules, calibrates the in-house critic, and feeds the next generation. Use it for a month and the gap isn't features; it's a month of your brand's taste data.
 
-单用户（暂无账号体系）· 多品牌工作区 · 预算可输入（月度上限 + 每次生成计成本 + 超限拦截）· LoRA 留门（好评图连同完整生成元数据存档，可导出为训练集）。
+Live demo: https://praxis-dun-one.vercel.app · License: MIT · 中文说明[在文末](#中文快览)
 
-## 架构
+---
 
-```
-src/domain/types.ts      核心实体：Brand / Asset(hero truth) / Reference / Element / Knowledge / Job
-src/storage/provider.ts  存储抽象接口
-src/storage/local.ts     IndexedDB 本地实现；配置 Supabase env 后自动切换云端存储
-src/storage/supabase.ts  praxis_* 独立表，和旧项目数据隔离
-src/engine/gemini.ts     Gemini 客户端与 Praxis /api/generate 代理
-src/engine/engine.ts     统一生成管道：上下文解析 -> prompt -> 预算闸 -> 生成 -> 记账
-src/engine/recipes.ts    scene / silo / detail / fabric 配方
-src/learning/learning.ts 学习闭环：信号采集 -> 蒸馏规则 -> 好评图晋升参考图
-api/generate.ts          Vercel Gemini generateContent 代理
-api/fetch-site.ts        品牌网站抓取代理
-```
+## What's inside
 
-学习闭环的应用发生在 engine 里：规则按 scope 匹配注入 prompt；被点赞的成果图作为参考图直接喂给模型。北极星指标 = 采纳率（保存/导出 ÷ 生成总数）。
+**🎬 Studio — an agent production line, not a prompt box.**
+Chat-first workflow: brief → three creative directions → production plan → shoot → design crit. The plan gets a **pre-flight check** against your brand soul *before* any image spend; batch runs pass a **quality gate** (weak shots are re-shot with the critic's fixes before you ever see them); the final crit's suggestions are one click away from a targeted reshoot. Interject at any moment — your notes become standing directives every later step obeys.
 
-## 开发
+**🎨 Canvas — a node board with a resident critic.**
+Wire assets, prompts, extracted style facets and outputs on an infinite glass canvas. Any output can be **Crit**-ed on the spot (scored against brand soul on narrative / sensation / viewing), and the art director can **fold the critique back into the prompt automatically** — rewrite, re-run, compare. Multi-angle products, rotate-view generation with angle awareness, turntable GIF export, 12-dimension style extraction from any image.
+
+**📦 Assets — source-of-truth fidelity.**
+Product photos are treated as pixels-of-record: differential compression keeps construction and texture detail sharp into the model, subject profiles (product / person / food / apparel / space) drive fidelity and staging rules, multi-angle photo sets feed the nearest-angle reference automatically.
+
+**🧠 Brand memory — the moat.**
+Brand soul with locked red-lines, knowledge rules distilled from your feedback, a critic that **calibrates to your taste** (keep a set it scored low — it learns it was too strict), and a **Growth dashboard** that makes the learning visible: taste-alignment trend, rules accumulated, what you push back on most.
+
+**💰 Honest costs.**
+BYOK: your Gemini key, in your browser, ~$0.04 per Flash image — with a monthly budget cap, per-generation accounting and overrun blocking built in. Or deploy with a server-side proxy key and never expose it.
+
+**🎓 LoRA door.**
+Every saved image is archived with its exact prompt and full recipe — export the curated set as training pairs whenever you're ready to fine-tune.
+
+## Quickstart (2 minutes, zero config)
 
 ```bash
+git clone https://github.com/shenxingliu/praxis
+cd praxis
 npm install
 npm run dev        # http://localhost:5200
-npm run build      # TypeScript + Vite production build
 ```
 
-本地开发默认把 /api 请求代理到 Praxis 线上 Vercel app。生产部署需要在 Vercel 配置 GEMINI_API_KEY；如启用访问令牌，还需要 APP_ACCESS_TOKEN，并在前端环境配置 VITE_APP_ACCESS_TOKEN。
+Open **System → paste your Gemini API key** (get one free at [Google AI Studio](https://aistudio.google.com/apikey)). The key lives in your browser's localStorage only. Data persists in IndexedDB — fully offline, nothing to set up.
 
-## 数据
+## Cloud sync (optional)
 
-- 默认：IndexedDB 本地存储，适合离线开发。
-- 云端：配置 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY 后使用 Supabase 的 praxis_* 表。
-- Legacy import：scripts/migrate-v1.mjs 和 System 页的 legacy 按钮仅用于一次性导入旧数据，正常运行不依赖旧项目。
+Want your brands, assets and results synced across devices? Create a free [Supabase](https://supabase.com) project, run [`praxis-tables.sql`](praxis-tables.sql) in its SQL editor (tables + image storage bucket in one paste), then add to `.env.local`:
 
-## 路线图
+```bash
+VITE_SUPABASE_URL=https://<your-project>.supabase.co
+VITE_SUPABASE_ANON_KEY=<your-anon-key>
+```
 
-- **M1** 独立项目、域模型、存储抽象、生成引擎、学习闭环 ✅
-- **M2** Studio / Weave / Heroes / Library / Brain 工作流打磨
-- **M3** Board 节点画布模式、批量队列、生成前自检、成本看板
+Images are stored in a Supabase Storage bucket; database rows stay lean (URLs + metadata only). If you have older rows with inline images, **System → Migrate images to Storage** backfills them.
 
-## 部署与 API Key 安全
+> Current policies are single-user (open). Before sharing a deployment with others, lock down RLS.
 
-发布/部署遵循一个原则：**Gemini key 永远不进仓库、不进前端包**。
+## Deploying to Vercel (proxy mode — key never leaves the server)
 
-### 推荐：代理模式（部署到 Vercel）
-
-1. Fork / clone 本仓库，导入 Vercel。
-2. Vercel 项目 → Settings → Environment Variables 配置：
-   - `GEMINI_API_KEY` — 你的 Gemini key（只存在于服务端函数）
-   - `APP_ACCESS_TOKEN` — 自定义口令，防止陌生人烧你的额度
-3. 构建环境变量（同一处配置，带 `VITE_` 前缀的会打进前端包）：
+1. Fork this repo, import into Vercel.
+2. Project → Settings → Environment Variables:
+   - `GEMINI_API_KEY` — server-side only, never bundled
+   - `APP_ACCESS_TOKEN` — a passphrase so strangers can't burn your quota
    - `VITE_USE_PROXY=1`
-   - `VITE_APP_ACCESS_TOKEN` — 与上面口令相同
-4. 浏览器只跟 `/api/gemini` 通信；key 不出服务端。
+   - `VITE_APP_ACCESS_TOKEN` — same passphrase (this one is bundled; it gates the proxy, it is not a secret key)
+3. The browser only ever talks to `/api/generate`; the Gemini key stays server-side.
 
-### 自带 Key 模式（BYOK，本地/单机用）
+**Key hygiene** (Google AI Studio): restrict the key to the Generative Language API, set a daily quota + billing alert, rotate on any suspicion. Never set `VITE_GEMINI_API_KEY` on a public deployment — `VITE_` variables are compiled into public JS.
 
-不配代理时，可在应用 System 页填入自己的 Gemini key，存于浏览器
-localStorage。key 是用户自己的、只在用户自己的浏览器里 —— 适合本地
-使用；不要在公网部署上依赖这种方式（XSS 即可读走）。
+## Architecture
 
-### Key 本身的加固（Google AI Studio）
+```
+src/domain/types.ts      Core entities: Brand / Asset / Reference / Element / KnowledgeRule / PraxisJob
+src/storage/provider.ts  Storage abstraction — IndexedDB by default, Supabase when configured
+src/storage/images.ts    Image offloading: pixels → storage bucket, rows keep URLs
+src/engine/gemini.ts     Gemini client (BYOK or proxy), budget-aware, image preparation
+src/engine/engine.ts     Unified generation pipeline: context → prompt → budget gate → generate → account
+src/engine/weave.ts      Canvas generation: role manifests, angle awareness, facet extraction
+src/studio/agents.ts     The agent crew: concepts, planner, pre-flight critic, quality gate,
+                         design critic (owner-calibrated), art director (prompt rewrite)
+src/learning/learning.ts Learning loop: signals → distilled rules → promoted references
+src/brain/soul.ts        Brand soul: axes, weights, locked red-lines, feedback attribution
+src/ui/GrowthView.tsx    The dashboard that makes the learning visible
+api/generate.ts          Vercel serverless Gemini proxy
+```
 
-- API restrictions：限定该 key 只能调用 Generative Language API
-- 设置每日配额上限 + 账单告警，泄露时损失有上界
-- 怀疑泄露立即 Rotate
+## Roadmap
 
-### 发布检查清单
+- ✅ Agent workflow (brief → concepts → plan → shoot → review) with conversational steering
+- ✅ Critic loop: pre-flight, quality gate, calibration, crit-to-reshoot, crit-to-prompt-rewrite
+- ✅ Growth dashboard · image storage offloading · task history
+- ⏳ Batch catalog production (N products → PDP sets, gate-checked, zipped)
+- ⏳ Motion node (product turntable / cinemagraph via video models)
+- ⏳ Multi-model adapters (FLUX / SD via fal.ai, BYOK)
+- ⏳ Multi-user RLS + team spaces
 
-- `.env*` 已 gitignore（模板见 `.env.example`），`dist/` 不入库
-- 千万不要为公网部署设置 `VITE_GEMINI_API_KEY` —— `VITE_` 变量会被
-  打包进公开的 JS
-- GitHub 仓库 Settings → Code security 打开 Secret scanning 和
-  Push protection
-- Supabase 多人使用前必须配 RLS（当前为单用户开放策略）
+## 中文快览
+
+**Praxis 是一个会越用越懂你品牌的开源 AI 设计工作室。** 大多数 AI 创意工具是无状态的 —— 每次生成都从零开始；Praxis 押相反的注：你的每一次评判（点赞、批评、保存、修正）都会沉淀为品牌记忆 —— 蒸馏成规则、校准内置评委、喂给下一次生成。
+
+- **Studio**：对话式 agent 生产线 —— brief → 三个创意方向 → 排产计划（生成前预检品牌冲突）→ 拍摄（批量质检门自动返工废片）→ 设计评审（建议一键重拍）。随时插话，你的话变成后续每一步都服从的指令。
+- **Canvas**：节点画布 + 驻场评委 —— 任何产出图一键 Crit 评分，美术指导自动把批评意见改写回 prompt，重跑对比。多角度产品、旋转视图、转台 GIF、12 维风格提取。
+- **资产保真**：产品照片按"真值像素"对待，差异化压缩保细节，主体档案驱动保真规则。
+- **成长面板**：品味对齐率曲线、规则积累、高频批评 —— 学习过程可视化。
+- **成本诚实**：BYOK 自带 Gemini key（约 $0.04/张 Flash），月度预算上限 + 超限拦截；或 Vercel 代理模式，key 永不出服务端。
+
+快速开始：`npm install && npm run dev`，打开 System 页粘贴 [Google AI Studio](https://aistudio.google.com/apikey) 的免费 key 即可，数据默认存本地 IndexedDB。云端同步与部署见上文英文说明。
+
+## License
+
+[MIT](LICENSE) © Jim Liu

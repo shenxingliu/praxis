@@ -16,3 +16,16 @@ create table if not exists praxis_kv (key text primary key, value jsonb, updated
 alter table praxis_kv enable row level security;
 drop policy if exists "open_all" on praxis_kv;
 create policy "open_all" on praxis_kv for all using (true) with check (true);
+
+-- Image storage: pixels live in a public bucket, rows keep only URLs.
+-- (Inline base64 in jsonb rows eventually hits statement timeouts.)
+insert into storage.buckets (id, name, public)
+values ('praxis-images', 'praxis-images', true)
+on conflict (id) do nothing;
+
+drop policy if exists "praxis images read"   on storage.objects;
+drop policy if exists "praxis images write"  on storage.objects;
+drop policy if exists "praxis images update" on storage.objects;
+create policy "praxis images read"   on storage.objects for select using (bucket_id = 'praxis-images');
+create policy "praxis images write"  on storage.objects for insert with check (bucket_id = 'praxis-images');
+create policy "praxis images update" on storage.objects for update using (bucket_id = 'praxis-images');
